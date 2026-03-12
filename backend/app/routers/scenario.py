@@ -1,10 +1,12 @@
 """Scenario management API routes."""
 
 import base64
+import json
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from ..dependencies import adb_service as adb_svc
@@ -542,6 +544,66 @@ async def list_scenarios():
     """List all saved scenarios."""
     names = await recording_svc.list_scenarios()
     return {"scenarios": names}
+
+
+# ------------------------------------------------------------------
+# Export / Import
+# ------------------------------------------------------------------
+
+class ExportRequest(BaseModel):
+    scenarios: list[str] = []
+    groups: list[str] = []
+    include_all: bool = False
+
+
+@router.post("/export")
+async def export_scenarios(req: ExportRequest):
+    """Export selected scenarios and groups as a ZIP file."""
+    scenario_names = req.scenarios
+    group_names = req.groups
+
+    if req.include_all:
+        scenario_names = await recording_svc.list_scenarios()
+        group_names = list(recording_svc.get_groups().keys())
+
+    if not scenario_names and not group_names:
+        raise HTTPException(status_code=400, detail="Nothing to export")
+
+    zip_bytes = await recording_svc.export_zip(scenario_names, group_names)
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="recording_export_{ts}.zip"'},
+    )
+
+
+@router.post("/import/preview")
+async def import_preview(file: UploadFile = File(...)):
+    """Preview a ZIP import and check for conflicts."""
+    zip_data = await file.read()
+    try:
+        result = await recording_svc.import_preview(zip_data)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/import/apply")
+async def import_apply(file: UploadFile = File(...), resolutions: str = Form("{}")):
+    """Apply a ZIP import with conflict resolutions."""
+    zip_data = await file.read()
+    try:
+        res_dict = json.loads(resolutions)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid resolutions JSON")
+
+    try:
+        result = await recording_svc.import_apply(zip_data, res_dict)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{name}")

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Card, Col, Collapse, Descriptions, Divider, Image, Input, InputNumber, List, Modal, Row, Select, Space, Table, Tag, Tooltip, message } from 'antd';
+import { Button, Card, Checkbox, Col, Collapse, Descriptions, Divider, Image, Input, InputNumber, List, Modal, Radio, Row, Select, Space, Table, Tag, Tooltip, Upload, message } from 'antd';
 import {
   PlayCircleOutlined, DeleteOutlined, DownloadOutlined, EyeOutlined,
   ReloadOutlined, StopOutlined, CopyOutlined, MergeCellsOutlined,
   FolderOutlined, FolderAddOutlined, MinusOutlined,
   ArrowUpOutlined, ArrowDownOutlined, EditOutlined, BranchesOutlined,
-  DownOutlined, RightOutlined, ClearOutlined,
+  DownOutlined, RightOutlined, ClearOutlined, UploadOutlined,
+  ExportOutlined, ImportOutlined, CheckCircleOutlined, WarningOutlined,
 } from '@ant-design/icons';
 import { scenarioApi, resultsApi } from '../services/api';
 import { useWebcam } from '../hooks/useWebcam';
@@ -173,6 +174,19 @@ export default function ScenarioPage() {
   // Compare modal
   const [compareStep, setCompareStep] = useState<StepResultData | null>(null);
 
+  // Export / Import
+  const [exportModalVisible, setExportModalVisible] = useState(false);
+  const [exportSelectedScenarios, setExportSelectedScenarios] = useState<string[]>([]);
+  const [exportSelectedGroups, setExportSelectedGroups] = useState<string[]>([]);
+  const [exportAll, setExportAll] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+
+  const [importModalVisible, setImportModalVisible] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importPreviewData, setImportPreviewData] = useState<{ scenarios: { name: string; conflict: boolean }[]; groups: { name: string; conflict: boolean }[] } | null>(null);
+  const [importResolutions, setImportResolutions] = useState<Record<string, { action: string; new_name?: string }>>({});
+  const [importLoading, setImportLoading] = useState(false);
+
   // Results
   const [results, setResults] = useState<ResultSummary[]>([]);
   const [resultsLoading, setResultsLoading] = useState(false);
@@ -330,6 +344,76 @@ export default function ScenarioPage() {
       setMergeModalVisible(false);
       fetchScenarios();
     } catch { message.error('합치기 실패'); }
+  };
+
+  // --- Export / Import ---
+  const doExport = async () => {
+    setExportLoading(true);
+    try {
+      const res = await scenarioApi.exportZip(
+        exportAll ? [] : exportSelectedScenarios,
+        exportAll ? [] : exportSelectedGroups,
+        exportAll,
+      );
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      const disposition = res.headers['content-disposition'] || '';
+      const match = disposition.match(/filename="?(.+?)"?$/);
+      a.download = match ? match[1] : 'recording_export.zip';
+      a.click();
+      window.URL.revokeObjectURL(url);
+      setExportModalVisible(false);
+      message.success('내보내기 완료');
+    } catch { message.error('내보내기 실패'); }
+    setExportLoading(false);
+  };
+
+  const handleImportFile = async (file: File) => {
+    setImportFile(file);
+    setImportResolutions({});
+    setImportPreviewData(null);
+    setImportLoading(true);
+    try {
+      const res = await scenarioApi.importPreview(file);
+      setImportPreviewData(res.data);
+      // Set default resolutions
+      const defaults: Record<string, { action: string; new_name?: string }> = {};
+      for (const s of res.data.scenarios) {
+        defaults[`s:${s.name}`] = { action: s.conflict ? 'skip' : 'import' };
+      }
+      for (const g of res.data.groups) {
+        defaults[`g:${g.name}`] = { action: g.conflict ? 'skip' : 'import' };
+      }
+      setImportResolutions(defaults);
+    } catch { message.error('ZIP 파일 분석 실패'); }
+    setImportLoading(false);
+  };
+
+  const doImport = async () => {
+    if (!importFile || !importPreviewData) return;
+    setImportLoading(true);
+    try {
+      const scenarioRes: Record<string, any> = {};
+      const groupRes: Record<string, any> = {};
+      for (const s of importPreviewData.scenarios) {
+        const r = importResolutions[`s:${s.name}`] || { action: 'import' };
+        scenarioRes[s.name] = r;
+      }
+      for (const g of importPreviewData.groups) {
+        const r = importResolutions[`g:${g.name}`] || { action: 'import' };
+        groupRes[g.name] = r;
+      }
+      const res = await scenarioApi.importApply(importFile, { scenarios: scenarioRes, groups: groupRes });
+      const d = res.data;
+      message.success(`가져오기 완료: 시나리오 ${d.imported_scenarios?.length || 0}개, 그룹 ${d.imported_groups?.length || 0}개`);
+      setImportModalVisible(false);
+      setImportFile(null);
+      setImportPreviewData(null);
+      fetchScenarios();
+      fetchGroups();
+    } catch { message.error('가져오기 실패'); }
+    setImportLoading(false);
   };
 
   // --- Group actions ---
@@ -626,6 +710,8 @@ export default function ScenarioPage() {
               if (allNames.length > 0) fetchScenarioStepsCache(allNames);
             }}>그룹 관리</Button>
             <Button icon={<MergeCellsOutlined />} size="small" onClick={openMergeModal}>합치기</Button>
+            <Button icon={<ExportOutlined />} size="small" onClick={() => { setExportSelectedScenarios([]); setExportSelectedGroups([]); setExportAll(false); setExportModalVisible(true); }}>내보내기</Button>
+            <Button icon={<ImportOutlined />} size="small" onClick={() => { setImportFile(null); setImportPreviewData(null); setImportModalVisible(true); }}>가져오기</Button>
             <Button onClick={() => { fetchScenarios(); fetchGroups(); }} size="small">새로고침</Button>
           </Space>
         }
@@ -1094,6 +1180,191 @@ export default function ScenarioPage() {
               <div style={{ marginTop: 12 }}>
                 <Card size="small"><span style={{ color: '#888' }}>제외 영역이 적용된 SSIM 비교 결과입니다. 빨간 박스 영역은 비교에서 제외되었습니다.</span></Card>
               </div>
+            )}
+          </>
+        )}
+      </Modal>
+
+      {/* ===== 내보내기 모달 ===== */}
+      <Modal
+        title="시나리오 내보내기"
+        open={exportModalVisible}
+        onCancel={() => setExportModalVisible(false)}
+        onOk={doExport}
+        okText="다운로드"
+        confirmLoading={exportLoading}
+        okButtonProps={{ disabled: !exportAll && exportSelectedScenarios.length === 0 && exportSelectedGroups.length === 0 }}
+        width={500}
+      >
+        <Checkbox
+          checked={exportAll}
+          onChange={(e) => {
+            setExportAll(e.target.checked);
+            if (e.target.checked) {
+              setExportSelectedScenarios([...scenarios]);
+              setExportSelectedGroups(Object.keys(groups));
+            } else {
+              setExportSelectedScenarios([]);
+              setExportSelectedGroups([]);
+            }
+          }}
+          style={{ marginBottom: 12 }}
+        >
+          <strong>전체 선택</strong>
+        </Checkbox>
+
+        {Object.keys(groups).length > 0 && (
+          <>
+            <Divider style={{ margin: '8px 0' }}>그룹</Divider>
+            <Checkbox.Group
+              value={exportSelectedGroups}
+              onChange={(vals) => {
+                setExportSelectedGroups(vals as string[]);
+                // Auto-select member scenarios
+                const memberNames = new Set(exportSelectedScenarios);
+                (vals as string[]).forEach((gn) => {
+                  (groups[gn] || []).forEach((m) => memberNames.add(m.name));
+                });
+                setExportSelectedScenarios([...memberNames]);
+              }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+            >
+              {Object.entries(groups).map(([gn, members]) => (
+                <Checkbox key={gn} value={gn}>
+                  <FolderOutlined /> {gn} ({members.length}개 시나리오)
+                </Checkbox>
+              ))}
+            </Checkbox.Group>
+          </>
+        )}
+
+        <Divider style={{ margin: '8px 0' }}>시나리오</Divider>
+        <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+          <Checkbox.Group
+            value={exportSelectedScenarios}
+            onChange={(vals) => setExportSelectedScenarios(vals as string[])}
+            style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+          >
+            {scenarios.map((sn) => (
+              <Checkbox key={sn} value={sn}>{sn}</Checkbox>
+            ))}
+          </Checkbox.Group>
+        </div>
+      </Modal>
+
+      {/* ===== 가져오기 모달 ===== */}
+      <Modal
+        title="시나리오 가져오기"
+        open={importModalVisible}
+        onCancel={() => { setImportModalVisible(false); setImportFile(null); setImportPreviewData(null); }}
+        onOk={doImport}
+        okText="가져오기"
+        confirmLoading={importLoading}
+        okButtonProps={{ disabled: !importPreviewData }}
+        width={650}
+      >
+        {!importPreviewData ? (
+          <Upload.Dragger
+            accept=".zip"
+            maxCount={1}
+            beforeUpload={(file) => { handleImportFile(file); return false; }}
+            showUploadList={false}
+          >
+            <p style={{ fontSize: 40, color: '#999' }}><UploadOutlined /></p>
+            <p>ZIP 파일을 드래그하거나 클릭하여 선택하세요</p>
+          </Upload.Dragger>
+        ) : (
+          <>
+            <div style={{ marginBottom: 12 }}>
+              <Tag color="blue">{importFile?.name}</Tag>
+              <Button size="small" type="link" onClick={() => { setImportFile(null); setImportPreviewData(null); }}>다른 파일 선택</Button>
+            </div>
+
+            {importPreviewData.scenarios.length > 0 && (
+              <>
+                <Divider style={{ margin: '8px 0' }}>시나리오 ({importPreviewData.scenarios.length}개)</Divider>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {importPreviewData.scenarios.map((s) => {
+                    const key = `s:${s.name}`;
+                    const res = importResolutions[key] || { action: 'import' };
+                    return (
+                      <div key={key} style={{ padding: '6px 8px', background: s.conflict ? 'rgba(255,77,79,0.06)' : 'rgba(82,196,26,0.06)', borderRadius: 6, border: `1px solid ${s.conflict ? '#ff4d4f33' : '#52c41a33'}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: s.conflict ? 4 : 0 }}>
+                          {s.conflict ? <WarningOutlined style={{ color: '#faad14' }} /> : <CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                          <strong>{s.name}</strong>
+                          {s.conflict && <Tag color="warning" style={{ marginLeft: 'auto' }}>이름 충돌</Tag>}
+                        </div>
+                        {s.conflict && (
+                          <div style={{ marginLeft: 22 }}>
+                            <Radio.Group
+                              value={res.action}
+                              onChange={(e) => setImportResolutions((prev) => ({ ...prev, [key]: { ...prev[key], action: e.target.value } }))}
+                              size="small"
+                            >
+                              <Radio value="skip">건너뛰기</Radio>
+                              <Radio value="overwrite">덮어쓰기</Radio>
+                              <Radio value="rename">이름 변경</Radio>
+                            </Radio.Group>
+                            {res.action === 'rename' && (
+                              <Input
+                                size="small"
+                                placeholder="새 이름"
+                                value={res.new_name || ''}
+                                onChange={(e) => setImportResolutions((prev) => ({ ...prev, [key]: { ...prev[key], new_name: e.target.value } }))}
+                                style={{ width: 200, marginTop: 4 }}
+                              />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {importPreviewData.groups.length > 0 && (
+              <>
+                <Divider style={{ margin: '8px 0' }}>그룹 ({importPreviewData.groups.length}개)</Divider>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {importPreviewData.groups.map((g) => {
+                    const key = `g:${g.name}`;
+                    const res = importResolutions[key] || { action: 'import' };
+                    return (
+                      <div key={key} style={{ padding: '6px 8px', background: g.conflict ? 'rgba(255,77,79,0.06)' : 'rgba(82,196,26,0.06)', borderRadius: 6, border: `1px solid ${g.conflict ? '#ff4d4f33' : '#52c41a33'}` }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: g.conflict ? 4 : 0 }}>
+                          {g.conflict ? <WarningOutlined style={{ color: '#faad14' }} /> : <CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                          <FolderOutlined /> <strong>{g.name}</strong>
+                          {g.conflict && <Tag color="warning" style={{ marginLeft: 'auto' }}>이름 충돌</Tag>}
+                        </div>
+                        {g.conflict && (
+                          <div style={{ marginLeft: 22 }}>
+                            <Radio.Group
+                              value={res.action}
+                              onChange={(e) => setImportResolutions((prev) => ({ ...prev, [key]: { ...prev[key], action: e.target.value } }))}
+                              size="small"
+                            >
+                              <Radio value="skip">건너뛰기</Radio>
+                              <Radio value="overwrite">덮어쓰기</Radio>
+                              <Radio value="merge">합치기</Radio>
+                              <Radio value="rename">이름 변경</Radio>
+                            </Radio.Group>
+                            {res.action === 'rename' && (
+                              <Input
+                                size="small"
+                                placeholder="새 이름"
+                                value={res.new_name || ''}
+                                onChange={(e) => setImportResolutions((prev) => ({ ...prev, [key]: { ...prev[key], new_name: e.target.value } }))}
+                                style={{ width: 200, marginTop: 4 }}
+                              />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </>
         )}

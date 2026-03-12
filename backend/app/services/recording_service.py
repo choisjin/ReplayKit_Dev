@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import shutil
 import time
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -377,6 +379,208 @@ class RecordingService:
         )
         await self.save_scenario(merged)
         return merged
+
+    # ------------------------------------------------------------------
+    # Export / Import
+    # ------------------------------------------------------------------
+
+    async def export_zip(self, scenario_names: list[str], group_names: list[str]) -> bytes:
+        """Export selected scenarios and groups as a ZIP archive."""
+        groups = self._load_groups()
+
+        # Resolve: add scenarios referenced by selected groups
+        all_scenario_names = set(scenario_names)
+        selected_groups: dict[str, list[dict]] = {}
+        for gn in group_names:
+            if gn in groups:
+                selected_groups[gn] = groups[gn]
+                for m in groups[gn]:
+                    all_scenario_names.add(m["name"])
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            manifest = {
+                "version": 1,
+                "exported_at": datetime.now(timezone.utc).isoformat(),
+                "scenarios": sorted(all_scenario_names),
+                "groups": sorted(selected_groups.keys()),
+            }
+            zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+
+            # Scenario JSONs
+            for name in sorted(all_scenario_names):
+                spath = SCENARIOS_DIR / f"{name}.json"
+                if spath.exists():
+                    zf.write(spath, f"scenarios/{name}.json")
+
+            # Screenshots
+            for name in sorted(all_scenario_names):
+                ss_dir = SCREENSHOTS_DIR / name
+                if ss_dir.is_dir():
+                    for fpath in ss_dir.rglob("*"):
+                        if fpath.is_file() and "actual" not in fpath.parts:
+                            arcname = f"screenshots/{name}/{fpath.relative_to(ss_dir).as_posix()}"
+                            zf.write(fpath, arcname)
+
+            # Groups
+            if selected_groups:
+                zf.writestr("groups.json", json.dumps(selected_groups, ensure_ascii=False, indent=2))
+
+        return buf.getvalue()
+
+    async def import_preview(self, zip_data: bytes) -> dict:
+        """Analyze a ZIP for conflicts before importing."""
+        existing_scenarios = set(await self.list_scenarios())
+        existing_groups = set(self._load_groups().keys())
+
+        with zipfile.ZipFile(io.BytesIO(zip_data), "r") as zf:
+            manifest = {}
+            if "manifest.json" in zf.namelist():
+                manifest = json.loads(zf.read("manifest.json"))
+
+            scenario_names = manifest.get("scenarios", [])
+            group_names = manifest.get("groups", [])
+
+            # Fallback: scan for scenario files if no manifest
+            if not scenario_names:
+                for n in zf.namelist():
+                    if n.startswith("scenarios/") and n.endswith(".json"):
+                        scenario_names.append(Path(n).stem)
+
+            if not group_names and "groups.json" in zf.namelist():
+                gdata = json.loads(zf.read("groups.json"))
+                group_names = list(gdata.keys())
+
+            scenarios_info = []
+            for sn in scenario_names:
+                scenarios_info.append({"name": sn, "conflict": sn in existing_scenarios})
+
+            groups_info = []
+            for gn in group_names:
+                groups_info.append({"name": gn, "conflict": gn in existing_groups})
+
+        return {"scenarios": scenarios_info, "groups": groups_info}
+
+    async def import_apply(self, zip_data: bytes, resolutions: dict) -> dict:
+        """Apply import from ZIP with conflict resolutions.
+
+        resolutions = {
+            "scenarios": {"name": {"action": "overwrite|rename|skip", "new_name": "..."}},
+            "groups": {"name": {"action": "overwrite|rename|skip|merge", "new_name": "..."}},
+        }
+        """
+        SCENARIOS_DIR.mkdir(parents=True, exist_ok=True)
+        scenario_res = resolutions.get("scenarios", {})
+        group_res = resolutions.get("groups", {})
+        imported_scenarios: list[str] = []
+        imported_groups: list[str] = []
+        skipped: list[str] = []
+
+        with zipfile.ZipFile(io.BytesIO(zip_data), "r") as zf:
+            manifest = {}
+            if "manifest.json" in zf.namelist():
+                manifest = json.loads(zf.read("manifest.json"))
+
+            # --- Import scenarios ---
+            scenario_names = manifest.get("scenarios", [])
+            if not scenario_names:
+                for n in zf.namelist():
+                    if n.startswith("scenarios/") and n.endswith(".json"):
+                        scenario_names.append(Path(n).stem)
+
+            name_map: dict[str, str] = {}  # original -> final name
+
+            for orig_name in scenario_names:
+                res = scenario_res.get(orig_name, {"action": "import"})
+                action = res.get("action", "import")
+                if action == "skip":
+                    skipped.append(orig_name)
+                    continue
+
+                final_name = orig_name
+                if action == "rename":
+                    final_name = res.get("new_name", orig_name)
+
+                name_map[orig_name] = final_name
+
+                # Read scenario JSON
+                json_path = f"scenarios/{orig_name}.json"
+                if json_path in zf.namelist():
+                    sdata = json.loads(zf.read(json_path))
+                    sdata["name"] = final_name
+                    # Remap expected_image filenames if renamed
+                    if final_name != orig_name:
+                        for step in sdata.get("steps", []):
+                            if step.get("expected_image"):
+                                step["expected_image"] = step["expected_image"].replace(orig_name, final_name, 1)
+                            new_imgs = []
+                            for ci in step.get("expected_images", []):
+                                if ci.get("image"):
+                                    ci["image"] = ci["image"].replace(orig_name, final_name, 1)
+                                new_imgs.append(ci)
+                            step["expected_images"] = new_imgs
+
+                    out_path = SCENARIOS_DIR / f"{final_name}.json"
+                    out_path.write_text(json.dumps(sdata, ensure_ascii=False, indent=2), encoding="utf-8")
+
+                # Extract screenshots
+                ss_prefix = f"screenshots/{orig_name}/"
+                tgt_dir = SCREENSHOTS_DIR / final_name
+                tgt_dir.mkdir(parents=True, exist_ok=True)
+                for entry in zf.namelist():
+                    if entry.startswith(ss_prefix) and not entry.endswith("/"):
+                        rel = entry[len(ss_prefix):]
+                        if final_name != orig_name:
+                            rel = rel.replace(orig_name, final_name, 1)
+                        out_file = tgt_dir / rel
+                        out_file.parent.mkdir(parents=True, exist_ok=True)
+                        out_file.write_bytes(zf.read(entry))
+
+                imported_scenarios.append(final_name)
+
+            # --- Import groups ---
+            if "groups.json" in zf.namelist():
+                imported_groups_data = json.loads(zf.read("groups.json"))
+                existing_groups = self._load_groups()
+
+                for gname, members in imported_groups_data.items():
+                    res = group_res.get(gname, {"action": "import"})
+                    action = res.get("action", "import")
+                    if action == "skip":
+                        skipped.append(f"group:{gname}")
+                        continue
+
+                    final_gname = gname
+                    if action == "rename":
+                        final_gname = res.get("new_name", gname)
+
+                    # Remap member scenario names
+                    remapped = []
+                    for m in members:
+                        orig_sname = m["name"]
+                        mapped = name_map.get(orig_sname, orig_sname)
+                        if mapped not in skipped:
+                            m["name"] = mapped
+                            remapped.append(m)
+
+                    if action == "merge" and gname in existing_groups:
+                        existing_names = {m["name"] for m in existing_groups[gname]}
+                        for m in remapped:
+                            if m["name"] not in existing_names:
+                                existing_groups[gname].append(m)
+                        existing_groups[final_gname] = existing_groups.pop(gname, existing_groups.get(final_gname, []))
+                    else:
+                        existing_groups[final_gname] = remapped
+
+                    imported_groups.append(final_gname)
+
+                self._save_groups(existing_groups)
+
+        return {
+            "imported_scenarios": imported_scenarios,
+            "imported_groups": imported_groups,
+            "skipped": skipped,
+        }
 
     # ------------------------------------------------------------------
     # Internal

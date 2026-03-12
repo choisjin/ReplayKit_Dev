@@ -71,6 +71,20 @@ export const scenarioApi = {
     api.post(`/scenario/copy/${name}`, { target_name: targetName }),
   merge: (names: string[], targetName: string) =>
     api.post('/scenario/merge', { names, target_name: targetName }),
+  // Export / Import
+  exportZip: (scenarios: string[], groups: string[], includeAll: boolean = false) =>
+    api.post('/scenario/export', { scenarios, groups, include_all: includeAll }, { responseType: 'blob' }),
+  importPreview: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post('/scenario/import/preview', form);
+  },
+  importApply: (file: File, resolutions: object) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('resolutions', JSON.stringify(resolutions));
+    return api.post('/scenario/import/apply', form);
+  },
 };
 
 // Results APIs
