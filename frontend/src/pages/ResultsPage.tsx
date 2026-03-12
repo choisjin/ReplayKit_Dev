@@ -40,6 +40,7 @@ interface StepResultDetail {
   status: string;
   similarity_score: number | null;
   expected_image: string | null;
+  expected_annotated_image: string | null;
   actual_image: string | null;
   actual_annotated_image: string | null;
   diff_image: string | null;
@@ -510,12 +511,12 @@ export default function ResultsPage() {
                   {compareStep.expected_image ? (
                     <div style={{ position: 'relative' }}>
                       <Image
-                        src={`${imageUrl(compareStep.expected_image)!}?t=${Date.now()}`}
+                        src={`${imageUrl(compareStep.expected_annotated_image || compareStep.expected_image)!}?t=${Date.now()}`}
                         alt="Expected"
                         style={{ width: '100%' }}
                       />
-                      {/* Overlay annotations for full_exclude / multi_crop */}
-                      {compareStep.compare_mode === 'multi_crop' && compareStep.sub_results?.length > 0 && (
+                      {/* Overlay annotations for multi_crop when no pre-rendered annotated image */}
+                      {!compareStep.expected_annotated_image && compareStep.compare_mode === 'multi_crop' && compareStep.sub_results?.length > 0 && (
                         <AnnotatedOverlay subResults={compareStep.sub_results} expectedImage={imageUrl(compareStep.expected_image)!} />
                       )}
                     </div>

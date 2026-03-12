@@ -2257,7 +2257,7 @@ export default function RecordPage() {
                 <Col span={testResult.actual_image ? 12 : 24}>
                   <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>기대 이미지</div>
                   <Image
-                    src={`/screenshots/${testResult.expected_image}?t=${Date.now()}`}
+                    src={`/screenshots/${testResult.expected_annotated_image || testResult.expected_image}?t=${Date.now()}`}
                     style={{ width: '100%', borderRadius: 4, border: '1px solid #333' }}
                   />
                 </Col>

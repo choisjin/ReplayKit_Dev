@@ -120,6 +120,7 @@ class StepResult(BaseModel):
     status: str  # "pass", "fail", "warning", "error"
     similarity_score: Optional[float] = None
     expected_image: Optional[str] = None
+    expected_annotated_image: Optional[str] = None  # expected with regions drawn
     actual_image: Optional[str] = None
     actual_annotated_image: Optional[str] = None  # actual with match box drawn
     diff_image: Optional[str] = None

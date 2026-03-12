@@ -267,6 +267,24 @@ class PlaybackService:
                         except Exception as e:
                             logger.warning("Failed to generate multi-crop annotated image: %s", e)
 
+                        # Generate annotated expected image: only crop regions visible, rest darkened
+                        if expected_path:
+                            try:
+                                import cv2
+                                img_exp = cv2.imread(expected_path)
+                                if img_exp is not None:
+                                    dark = (img_exp * 0.2).astype("uint8")
+                                    for ci in step.expected_images:
+                                        if ci.roi:
+                                            r = ci.roi
+                                            dark[r.y:r.y + r.height, r.x:r.x + r.width] = img_exp[r.y:r.y + r.height, r.x:r.x + r.width]
+                                            cv2.rectangle(dark, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 255, 0), 2)
+                                    exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
+                                    cv2.imwrite(exp_ann_path, dark)
+                                    step_result.expected_annotated_image = f"{scenario_name}/actual/{file_prefix}_expected_annotated.png"
+                            except Exception as e:
+                                logger.warning("Failed to generate multi-crop expected annotated: %s", e)
+
                         # Build message from individual results
                         parts = [f"{sr.label or f'#{i+1}'}:{sr.status}({sr.score:.2f})" for i, sr in enumerate(step_result.sub_results)]
                         step_result.message = f"Multi-crop: {', '.join(parts)}"
@@ -313,6 +331,24 @@ class PlaybackService:
                                 step_result.diff_image = diff_rel
                             except Exception as e:
                                 logger.warning("Failed to generate diff: %s", e)
+
+                        # Generate annotated expected image: gray out excluded regions
+                        if expected_path:
+                            try:
+                                import cv2
+                                img_exp = cv2.imread(expected_path)
+                                if img_exp is not None:
+                                    overlay = img_exp.copy()
+                                    for r in step.exclude_rois:
+                                        cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (128, 128, 128), -1)
+                                    cv2.addWeighted(overlay, 0.5, img_exp, 0.5, 0, overlay)
+                                    for r in step.exclude_rois:
+                                        cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 2)
+                                    exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
+                                    cv2.imwrite(exp_ann_path, overlay)
+                                    step_result.expected_annotated_image = f"{scenario_name}/actual/{file_prefix}_expected_annotated.png"
+                            except Exception as e:
+                                logger.warning("Failed to generate exclude expected annotated: %s", e)
 
                         step_result.message = f"Exclude {len(step.exclude_rois)} regions: {judgement['score']:.4f}"
 
