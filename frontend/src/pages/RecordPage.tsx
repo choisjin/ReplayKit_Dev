@@ -84,29 +84,57 @@ const AnnotatedThumbnail = React.memo(({ src, regions, color, height = 48 }: {
   height?: number;
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const drawAnnotations = useCallback((canvas: HTMLCanvasElement, img: HTMLImageElement, w: number, h: number) => {
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0, w, h);
+    const sx = w / img.width;
+    const sy = h / img.height;
+    regions.forEach((r) => {
+      ctx.fillStyle = color === 'red' ? 'rgba(255,77,79,0.3)' : 'rgba(82,196,26,0.3)';
+      ctx.fillRect(r.x * sx, r.y * sy, r.width * sx, r.height * sy);
+      ctx.strokeStyle = color === 'red' ? '#ff4d4f' : '#52c41a';
+      ctx.lineWidth = Math.max(1.5, 2 * sx);
+      ctx.strokeRect(r.x * sx, r.y * sy, r.width * sx, r.height * sy);
+    });
+  }, [regions, color]);
+
   useEffect(() => {
     const img = new window.Image();
     img.onload = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const aspect = img.width / img.height;
-      canvas.height = height;
-      canvas.width = Math.round(height * aspect);
-      const ctx = canvas.getContext('2d')!;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const sx = canvas.width / img.width;
-      const sy = canvas.height / img.height;
-      regions.forEach((r) => {
-        ctx.fillStyle = color === 'red' ? 'rgba(255,77,79,0.3)' : 'rgba(82,196,26,0.3)';
-        ctx.fillRect(r.x * sx, r.y * sy, r.width * sx, r.height * sy);
-        ctx.strokeStyle = color === 'red' ? '#ff4d4f' : '#52c41a';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(r.x * sx, r.y * sy, r.width * sx, r.height * sy);
-      });
+      drawAnnotations(canvas, img, Math.round(height * aspect), height);
     };
     img.src = src;
-  }, [src, regions, color, height]);
-  return <canvas ref={canvasRef} style={{ height, borderRadius: 2, cursor: 'pointer' }} />;
+  }, [src, regions, color, height, drawAnnotations]);
+
+  const handleClick = useCallback(() => {
+    const img = new window.Image();
+    img.onload = () => {
+      const offscreen = document.createElement('canvas');
+      drawAnnotations(offscreen, img, img.width, img.height);
+      setPreviewUrl(offscreen.toDataURL('image/png'));
+    };
+    img.src = src;
+  }, [src, drawAnnotations]);
+
+  return (
+    <>
+      <canvas ref={canvasRef} style={{ height, borderRadius: 2, cursor: 'pointer' }} onClick={handleClick} />
+      {previewUrl && (
+        <Image
+          src={previewUrl}
+          style={{ display: 'none' }}
+          preview={{ visible: true, onVisibleChange: (v) => { if (!v) setPreviewUrl(null); } }}
+        />
+      )}
+    </>
+  );
 });
 
 // Gesture detection thresholds
