@@ -42,6 +42,7 @@ class PlaybackService:
         self.dm = device_manager
         self._running = False
         self._should_stop = False
+        self._device_map: dict[str, str] = {}  # alias -> real device id for current playback
 
     @property
     def is_running(self) -> bool:
@@ -50,15 +51,68 @@ class PlaybackService:
     async def stop(self) -> None:
         self._should_stop = True
 
+    def _resolve_device_map(self, scenario: Scenario, override_map: Optional[dict[str, str]] = None) -> dict[str, str]:
+        """Build alias -> real device ID mapping.
+
+        If override_map is provided (from frontend), use it.
+        Otherwise fall back to scenario.device_map.
+        """
+        if override_map:
+            return override_map
+        return dict(scenario.device_map) if scenario.device_map else {}
+
+    def _resolve_alias(self, alias: Optional[str], device_map: dict[str, str]) -> Optional[str]:
+        """Resolve a device alias to real device ID. If not in map, return as-is (backward compat)."""
+        if not alias:
+            return alias
+        return device_map.get(alias, alias)
+
+    async def preflight_check(self, scenario: Scenario, device_map_override: Optional[dict[str, str]] = None) -> list[str]:
+        """Check that all devices referenced in scenario steps are connected.
+
+        Returns a list of error messages. Empty list means all good.
+        """
+        errors: list[str] = []
+        device_map = self._resolve_device_map(scenario, device_map_override)
+
+        # Collect unique device aliases/IDs from steps
+        aliases: set[str] = set()
+        for step in scenario.steps:
+            if step.device_id:
+                aliases.add(step.device_id)
+
+        if not aliases:
+            return errors
+
+        # Refresh device statuses
+        await self.dm.refresh_adb()
+        await self.dm.refresh_auxiliary()
+
+        for alias in sorted(aliases):
+            real_id = device_map.get(alias, alias)
+            dev = self.dm.get_device(real_id)
+            if not dev:
+                if alias != real_id:
+                    errors.append(f"'{alias}' → 디바이스 '{real_id}'을(를) 찾을 수 없습니다")
+                else:
+                    errors.append(f"디바이스 '{alias}'을(를) 찾을 수 없습니다 (매핑 없음)")
+            elif dev.status in ("offline", "disconnected"):
+                label = f"'{alias}' → " if alias != real_id else ""
+                errors.append(f"{label}디바이스 '{dev.name or real_id}'이(가) 연결되어 있지 않습니다 (상태: {dev.status})")
+
+        return errors
+
     async def execute_scenario(
         self,
         scenario: Scenario,
         verify: bool = True,
+        device_map_override: Optional[dict[str, str]] = None,
     ) -> ScenarioResult:
         """Execute all steps in a scenario and optionally verify each step."""
         if self._running:
             raise RuntimeError("Playback already in progress")
 
+        self._device_map = self._resolve_device_map(scenario, device_map_override)
         self._running = True
         self._should_stop = False
         started_at = datetime.now(timezone.utc).isoformat()
@@ -136,12 +190,14 @@ class PlaybackService:
         verify: bool = True,
         repeat_index: int = 1,
         start_step: int = 0,
+        device_map_override: Optional[dict[str, str]] = None,
     ) -> AsyncGenerator[StepResult, None]:
         """Execute scenario and yield step results one by one (for WebSocket streaming).
 
         Args:
             start_step: 0-based step index to start execution from (skip earlier steps).
         """
+        self._device_map = self._resolve_device_map(scenario, device_map_override)
         self._running = True
         self._should_stop = False
 
@@ -177,8 +233,9 @@ class PlaybackService:
         finally:
             self._running = False
 
-    async def execute_single_step(self, step: Step, scenario_name: str) -> StepResult:
+    async def execute_single_step(self, step: Step, scenario_name: str, device_map: Optional[dict[str, str]] = None) -> StepResult:
         """Execute a single step with verification (for testing individual steps)."""
+        self._device_map = device_map or {}
         return await self._execute_step(step, scenario_name, verify=True)
 
     # ------------------------------------------------------------------
@@ -452,6 +509,12 @@ class PlaybackService:
             return f"{p.get('module', '')}::{p.get('function', '')}()"
         return step.type.value
 
+    def _resolve_real_device_id(self, step: Step) -> Optional[str]:
+        """Resolve step's device_id alias to real device ID."""
+        if not step.device_id:
+            return None
+        return self._resolve_alias(step.device_id, self._device_map)
+
     def _resolve_adb_serial(self, step: Step) -> Optional[str]:
         """Resolve the ADB serial for a step. Returns None for non-ADB steps."""
         if step.type in (StepType.SERIAL_COMMAND, StepType.MODULE_COMMAND):
@@ -459,11 +522,12 @@ class PlaybackService:
         # Wait steps: only need ADB serial when expected_image is set
         if step.type == StepType.WAIT and not step.expected_image:
             return None
-        if step.device_id:
-            dev = self.dm.get_device(step.device_id)
+        real_id = self._resolve_real_device_id(step)
+        if real_id:
+            dev = self.dm.get_device(real_id)
             if dev and dev.type == "serial":
                 return None  # serial device, no screenshot
-            return step.device_id
+            return real_id
         # For wait steps without device_id, find the first available ADB device
         if step.type == StepType.WAIT:
             primary = self.dm.list_primary()
@@ -474,6 +538,7 @@ class PlaybackService:
     async def _run_action(self, step: Step) -> None:
         """Execute step action on the appropriate device."""
         params = step.params
+        real_id = self._resolve_real_device_id(step)
 
         if step.type == StepType.MODULE_COMMAND:
             module_name = params.get("module", "")
@@ -481,16 +546,16 @@ class PlaybackService:
             func_args = params.get("args", {})
             # Pass device connection info as constructor kwargs
             ctor_kwargs = None
-            if step.device_id:
-                dev = self.dm.get_device(step.device_id)
+            if real_id:
+                dev = self.dm.get_device(real_id)
                 if dev:
                     ctor_kwargs = _build_ctor_kwargs(dev)
             await execute_module_function(module_name, func_name, func_args, ctor_kwargs)
         elif step.type == StepType.SERIAL_COMMAND:
-            if not step.device_id:
+            if not real_id:
                 raise ValueError("serial_command requires device_id")
             await self.dm.send_serial_command(
-                step.device_id,
+                real_id,
                 params["data"],
                 params.get("read_timeout", 1.0),
             )
@@ -498,7 +563,7 @@ class PlaybackService:
             await asyncio.sleep(params.get("duration_ms", 1000) / 1000.0)
         else:
             # ADB actions
-            serial = step.device_id
+            serial = real_id
             if serial:
                 dev = self.dm.get_device(serial)
                 if dev and dev.type != "adb":

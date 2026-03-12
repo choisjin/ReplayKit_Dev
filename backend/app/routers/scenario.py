@@ -496,11 +496,18 @@ class TestStepRequest(BaseModel):
 @router.post("/test-step")
 async def test_step(req: TestStepRequest):
     """Execute a single step on the device and verify against expected image."""
+    device_map: dict = {}
     if req.step_data:
         # Use the step data sent from frontend (may differ from saved file)
         from ..models.scenario import Step
         step = Step(**req.step_data)
         scenario_name = req.scenario_name
+        # Load device_map from scenario for alias resolution
+        try:
+            scenario = await recording_svc.load_scenario(req.scenario_name)
+            device_map = dict(scenario.device_map) if scenario.device_map else {}
+        except FileNotFoundError:
+            pass
     else:
         # Fallback: load from saved scenario file
         try:
@@ -513,8 +520,9 @@ async def test_step(req: TestStepRequest):
 
         step = scenario.steps[req.step_index]
         scenario_name = scenario.name
+        device_map = dict(scenario.device_map) if scenario.device_map else {}
 
-    result = await playback_svc.execute_single_step(step, scenario_name)
+    result = await playback_svc.execute_single_step(step, scenario_name, device_map=device_map)
     return result.model_dump()
 
 
@@ -655,6 +663,11 @@ async def play_scenario(name: str, req: PlaybackRequest):
         scenario = await recording_svc.load_scenario(name)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Scenario '{name}' not found")
+
+    # Preflight device check
+    errors = await playback_svc.preflight_check(scenario)
+    if errors:
+        raise HTTPException(status_code=400, detail="디바이스 연결 확인 실패:\n" + "\n".join(errors))
 
     try:
         result = await playback_svc.execute_scenario(scenario, verify=req.verify)

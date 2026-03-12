@@ -144,19 +144,32 @@ export function useWebcam() {
     await startWebcam(webcamIndex, res);
   }, [webcamIndex, startWebcam]);
 
+  // Optional uploader: set by the consuming component to upload to server
+  const uploadFnRef = useRef<((blob: Blob, filename: string) => Promise<string>) | null>(null);
+
+  const setUploadFn = useCallback((fn: ((blob: Blob, filename: string) => Promise<string>) | null) => {
+    uploadFnRef.current = fn;
+  }, []);
+
   const startWebcamRecording = useCallback(async () => {
     if (!webcamStreamRef.current) {
       message.error('웹캠이 활성화되지 않았습니다');
       return;
     }
-    try {
-      const fileHandle = await (window as any).showSaveFilePicker({
-        suggestedName: `webcam_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`,
-        types: [{ description: 'WebM Video', accept: { 'video/webm': ['.webm'] } }],
-      });
-      webcamFileHandleRef.current = fileHandle;
-    } catch {
-      return;
+
+    const useServerUpload = !!uploadFnRef.current;
+
+    // If no server upload configured, use file picker as fallback
+    if (!useServerUpload) {
+      try {
+        const fileHandle = await (window as any).showSaveFilePicker({
+          suggestedName: `webcam_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`,
+          types: [{ description: 'WebM Video', accept: { 'video/webm': ['.webm'] } }],
+        });
+        webcamFileHandleRef.current = fileHandle;
+      } catch {
+        return;
+      }
     }
 
     webcamChunksRef.current = [];
@@ -171,12 +184,18 @@ export function useWebcam() {
       const blob = new Blob(webcamChunksRef.current, { type: mimeType });
       webcamChunksRef.current = [];
       try {
-        const handle = webcamFileHandleRef.current;
-        if (handle) {
-          const writable = await (handle as any).createWritable();
-          await writable.write(blob);
-          await writable.close();
-          message.success('웹캠 녹화 저장 완료');
+        if (uploadFnRef.current) {
+          const filename = `webcam_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+          const path = await uploadFnRef.current(blob, filename);
+          message.success(`웹캠 녹화 저장 완료: ${path}`);
+        } else {
+          const handle = webcamFileHandleRef.current;
+          if (handle) {
+            const writable = await (handle as any).createWritable();
+            await writable.write(blob);
+            await writable.close();
+            message.success('웹캠 녹화 저장 완료');
+          }
         }
       } catch (e: any) {
         message.error('파일 저장 실패: ' + (e.message || e));
@@ -251,5 +270,6 @@ export function useWebcam() {
     loadWebcamCapabilities,
     applyWebcamSetting,
     stopWebcam,
+    setUploadFn,
   };
 }

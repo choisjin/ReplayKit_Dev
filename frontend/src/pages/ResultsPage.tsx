@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button, Card, Col, Descriptions, Image, Modal, Row, Space, Table, Tag, Tooltip, message } from 'antd';
 import { DeleteOutlined, DownloadOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import { resultsApi } from '../services/api';
+import { useSettings } from '../context/SettingsContext';
 
 interface ResultSummary {
   filename: string;
@@ -135,6 +136,7 @@ const AnnotatedOverlay = React.memo(({ subResults, expectedImage }: {
 });
 
 export default function ResultsPage() {
+  const { settings, saveExcelToDir } = useSettings();
   const [results, setResults] = useState<ResultSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<ResultDetail | null>(null);
@@ -189,18 +191,23 @@ export default function ResultsPage() {
 
   const exportExcel = async (filename: string) => {
     try {
-      const res = await resultsApi.exportExcel(filename);
-      const blob = new Blob([res.data], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename.replace('.json', '.xlsx');
-      a.click();
-      window.URL.revokeObjectURL(url);
-    } catch {
-      message.error('Excel 내보내기 실패');
+      if (settings.excel_export_dir) {
+        const path = await saveExcelToDir(filename);
+        message.success(`Excel 저장 완료: ${path}`);
+      } else {
+        const res = await resultsApi.exportExcel(filename);
+        const blob = new Blob([res.data], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename.replace('.json', '.xlsx');
+        a.click();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || 'Excel 내보내기 실패');
     }
   };
 

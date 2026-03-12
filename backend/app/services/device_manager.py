@@ -6,6 +6,7 @@ import asyncio
 import functools
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -106,9 +107,9 @@ class DeviceManager:
                 dev = ManagedDevice(
                     id=d["id"],
                     type=d["type"],
-                    category=d.get("category", "auxiliary"),
+                    category=d.get("category", "primary" if d["type"] == "adb" else "auxiliary"),
                     address=d["address"],
-                    status="connected",
+                    status="unknown",
                     name=d.get("name", d["id"]),
                     info=d.get("info", {}),
                 )
@@ -117,69 +118,130 @@ class DeviceManager:
         except Exception as e:
             logger.warning("Failed to load auxiliary devices: %s", e)
 
+    def _generate_device_id(self, dev_type: str, module_name: str = "") -> str:
+        """Auto-generate a device ID like Android_1, Serial_1, POWER_1, etc."""
+        if dev_type == "adb":
+            prefix = "Android"
+        elif dev_type == "serial":
+            prefix = "Serial"
+        elif dev_type == "module" and module_name:
+            prefix = module_name
+        else:
+            prefix = "Device"
+        # Find the highest existing number for this prefix
+        pattern = re.compile(rf"^{re.escape(prefix)}_(\d+)$", re.IGNORECASE)
+        max_num = 0
+        for existing_id in self._devices:
+            m = pattern.match(existing_id)
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+        return f"{prefix}_{max_num + 1}"
+
     def _save_auxiliary_devices(self) -> None:
-        """Persist auxiliary devices to disk."""
-        aux = [d.to_dict() for d in self._devices.values() if d.category == "auxiliary"]
+        """Persist all manually registered devices (auxiliary + ADB with custom IDs) to disk."""
+        aux = [d.to_dict() for d in self._devices.values() if d.category == "auxiliary" or d.type == "adb"]
         try:
             _AUX_DEVICES_FILE.write_text(json.dumps(aux, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as e:
             logger.warning("Failed to save auxiliary devices: %s", e)
 
     async def refresh_adb(self) -> None:
-        """Sync ADB device statuses — registered devices are preserved, status updated."""
+        """Sync ADB device statuses — only update already-registered ADB devices."""
         adb_devices = await self.adb.list_devices()
         adb_status_map = {d.serial: d for d in adb_devices}
 
-        # Update existing ADB devices and add newly detected ones
-        updated: dict[str, ManagedDevice] = {}
         for k, v in self._devices.items():
             if v.type != "adb":
-                updated[k] = v
                 continue
-            # Existing registered ADB device — update status
-            if k in adb_status_map:
-                d = adb_status_map.pop(k)
+            # Check by address (actual ADB serial) instead of device id (may be alias)
+            adb_serial = v.address
+            if adb_serial in adb_status_map:
+                d = adb_status_map[adb_serial]
                 v.status = d.status
-                # Refresh info if device is online
                 if d.status == "device":
                     try:
                         info = await self.adb.get_device_info(d.serial)
-                        v.name = info.get("model", v.name)
+                        if not v.name or v.name == v.address:
+                            v.name = info.get("model", v.name)
                         v.info = info
                     except Exception:
                         pass
             else:
-                # Not reported by ADB — mark as offline
                 v.status = "offline"
-            updated[k] = v
 
-        # Add newly detected ADB devices not previously registered
-        for _serial, d in adb_status_map.items():
-            dev = ManagedDevice(
-                id=d.serial,
-                type="adb",
-                category="primary",
-                address=d.serial,
-                status=d.status,
-                name=d.model or d.serial,
-            )
-            if d.status == "device":
-                try:
-                    info = await self.adb.get_device_info(d.serial)
-                    dev.name = info.get("model", d.serial)
-                    dev.info = info
-                except Exception:
-                    pass
-            updated[d.serial] = dev
+    async def add_adb_device(self, serial: str, device_id: str = "", name: str = "") -> ManagedDevice:
+        """Manually register an ADB device with a custom device ID."""
+        final_id = device_id or self._generate_device_id("adb")
+        display_name = name or serial
 
-        self._devices = updated
+        # Try to get device info
+        info = {}
+        try:
+            adb_devices = await self.adb.list_devices()
+            found = next((d for d in adb_devices if d.serial == serial), None)
+            if found and found.status == "device":
+                info = await self.adb.get_device_info(serial)
+                if not name:
+                    display_name = info.get("model", serial)
+        except Exception:
+            pass
+
+        dev = ManagedDevice(
+            id=final_id,
+            type="adb",
+            category="primary",
+            address=serial,
+            status="connected",
+            name=display_name,
+            info=info,
+        )
+        self._devices[final_id] = dev
+        self._save_auxiliary_devices()  # persist all non-adb + adb with custom IDs
+        return dev
+
+    async def refresh_auxiliary(self) -> None:
+        """Check connectivity of auxiliary devices and update their status."""
+        loop = asyncio.get_event_loop()
+        available_ports = {p["port"] for p in await loop.run_in_executor(None, _scan_serial_ports)}
+
+        for dev in self._devices.values():
+            if dev.category != "auxiliary":
+                continue
+            ct = dev.info.get("connect_type", "serial" if dev.type == "serial" else "none")
+            if dev.type == "serial" or ct == "serial":
+                # Check if COM port exists in system
+                port = dev.address
+                dev.status = "connected" if port in available_ports else "disconnected"
+            elif ct == "socket":
+                # Quick TCP connection check
+                import socket
+                host = dev.address
+                port_num = dev.info.get("port", 0)
+                if host and port_num:
+                    try:
+                        def _check_socket():
+                            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            s.settimeout(1)
+                            try:
+                                s.connect((host, int(port_num)))
+                                s.close()
+                                return True
+                            except Exception:
+                                s.close()
+                                return False
+                        ok = await loop.run_in_executor(None, _check_socket)
+                        dev.status = "connected" if ok else "disconnected"
+                    except Exception:
+                        dev.status = "disconnected"
+                # If no port info, leave status as-is
+            # For 'none', 'can', etc. — we can't check, leave status as-is
 
     async def scan_serial(self) -> list[dict]:
         """Scan available serial ports."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, _scan_serial_ports)
 
-    async def add_serial_device(self, port: str, baudrate: int = 115200, name: str = "", category: str = "auxiliary") -> ManagedDevice:
+    async def add_serial_device(self, port: str, baudrate: int = 115200, name: str = "", category: str = "auxiliary", device_id: str = "") -> ManagedDevice:
         """Add a serial device to the managed list."""
         loop = asyncio.get_event_loop()
         try:
@@ -187,29 +249,30 @@ class DeviceManager:
         except Exception as e:
             raise RuntimeError(f"Cannot open {port}: {e}")
 
+        final_id = device_id or self._generate_device_id("serial")
         dev = ManagedDevice(
-            id=port,
+            id=final_id,
             type="serial",
             category=category,
             address=port,
             status="connected",
-            name=name or port,
+            name=name or final_id,
             info={"baudrate": baudrate},
         )
-        self._devices[port] = dev
+        self._devices[final_id] = dev
         self._save_auxiliary_devices()
         return dev
 
     async def add_module_device(self, address: str, module: str, connect_type: str = "none",
-                               name: str = "", extra_fields: dict | None = None) -> ManagedDevice:
+                               name: str = "", extra_fields: dict | None = None, device_id: str = "") -> ManagedDevice:
         """Add a module-only device (socket, CAN, no-connection, etc.)."""
-        device_id = f"{module}@{address}" if address else module
+        final_id = device_id or self._generate_device_id("module", module)
         display_name = name or (f"{module} ({address})" if address else module)
         info: dict = {"module": module, "connect_type": connect_type}
         if extra_fields:
             info.update(extra_fields)
         dev = ManagedDevice(
-            id=device_id,
+            id=final_id,
             type="module",
             category="auxiliary",
             address=address,
@@ -217,7 +280,7 @@ class DeviceManager:
             name=display_name,
             info=info,
         )
-        self._devices[device_id] = dev
+        self._devices[final_id] = dev
         self._save_auxiliary_devices()
         return dev
 
@@ -242,16 +305,16 @@ class DeviceManager:
 
     async def remove_device(self, device_id: str) -> str:
         """Remove a device from managed list."""
-        dev = self._devices.get(device_id)
+        dev = self.get_device(device_id)
         if not dev:
             return f"Device {device_id} not found"
 
         if dev.type == "adb" and ":" in dev.address:
             result = await self.adb.disconnect_device(dev.address)
         else:
-            result = f"Removed {device_id}"
+            result = f"Removed {dev.id}"
 
-        self._devices.pop(device_id, None)
+        self._devices.pop(dev.id, None)
         self._save_auxiliary_devices()
         return result
 
@@ -268,11 +331,19 @@ class DeviceManager:
         return [d for d in self._devices.values() if d.category == "auxiliary"]
 
     def get_device(self, device_id: str) -> Optional[ManagedDevice]:
-        return self._devices.get(device_id)
+        """Look up device by id first, then by address as fallback."""
+        dev = self._devices.get(device_id)
+        if dev:
+            return dev
+        # Fallback: search by address (real serial/port)
+        for d in self._devices.values():
+            if d.address == device_id:
+                return d
+        return None
 
     async def send_serial_command(self, device_id: str, data: str, read_timeout: float = 1.0) -> str:
         """Send a command to a serial device and return the response."""
-        dev = self._devices.get(device_id)
+        dev = self.get_device(device_id)
         if not dev or dev.type != "serial":
             raise ValueError(f"Serial device {device_id} not found")
         baudrate = dev.info.get("baudrate", 115200)

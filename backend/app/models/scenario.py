@@ -97,6 +97,7 @@ class Scenario(BaseModel):
     device_serial: Optional[str] = None
     resolution: Optional[dict[str, int]] = None  # {"width": 1080, "height": 1920}
     steps: list[Step] = Field(default_factory=list)
+    device_map: dict[str, str] = Field(default_factory=dict)  # alias -> real device id (e.g. "Android_1" -> "RXCT30...")
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 

@@ -48,28 +48,17 @@ def _resolve_image_path(rel_path: str | None) -> Path | None:
     return full if full.exists() else None
 
 
-@router.get("/export/{filename}")
-async def export_result_excel(filename: str):
-    """Export a test result as Excel (.xlsx)."""
-    filepath = RESULTS_DIR / filename
-    if not filepath.exists():
-        raise HTTPException(status_code=404, detail="Result not found")
-
-    data = json.loads(filepath.read_text(encoding="utf-8"))
-
-    try:
-        import openpyxl
-        from openpyxl.drawing.image import Image as XlImage
-        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-        from openpyxl.utils import get_column_letter
-    except ImportError:
-        raise HTTPException(status_code=500, detail="openpyxl not installed")
+def _build_excel_workbook(data: dict, filepath: Path = None):
+    """Build an openpyxl Workbook from result data. Reusable by settings router."""
+    import openpyxl
+    from openpyxl.drawing.image import Image as XlImage
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Test Report"
 
-    # --- Styles ---
     header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF", size=10)
     desc_fill = PatternFill(start_color="D9E2F3", end_color="D9E2F3", fill_type="solid")
@@ -84,7 +73,6 @@ async def export_result_excel(filename: str):
     )
     center = Alignment(horizontal="center", vertical="center")
 
-    # --- Column definitions (A~L) ---
     col_headers = [
         "Time Stamp", "TOTAL TC REPEAT", "CURRENT TC REPEAT",
         "STEP INDEX", "Device", "Command", "Remark", "Status", "DELAY", "DURATION",
@@ -97,11 +85,9 @@ async def export_result_excel(filename: str):
     ]
     col_widths = [22, 16, 18, 12, 16, 30, 30, 12, 12, 14, 30, 30]
 
-    # Set column widths
     for ci, w in enumerate(col_widths, start=1):
         ws.column_dimensions[get_column_letter(ci)].width = w
 
-    # Row 1: English headers
     for ci, h in enumerate(col_headers, start=1):
         cell = ws.cell(row=1, column=ci, value=h)
         cell.font = header_font
@@ -109,7 +95,6 @@ async def export_result_excel(filename: str):
         cell.alignment = center
         cell.border = thin_border
 
-    # Row 2: Korean descriptions
     for ci, d in enumerate(col_descs, start=1):
         cell = ws.cell(row=2, column=ci, value=d)
         cell.font = desc_font
@@ -117,9 +102,8 @@ async def export_result_excel(filename: str):
         cell.alignment = center
         cell.border = thin_border
 
-    # --- Data rows ---
     total_repeat = data.get("total_repeat", 1)
-    img_row_height = 120  # points for image rows
+    img_row_height = 120
 
     for ri, sr in enumerate(data.get("step_results", []), start=3):
         status = sr.get("status", "")
@@ -128,7 +112,6 @@ async def export_result_excel(filename: str):
         delay_ms = sr.get("delay_ms", 0)
         duration_ms = sr.get("execution_time_ms", 0)
 
-        # Format timestamp
         try:
             from datetime import datetime as _dt
             ts = _dt.fromisoformat(timestamp.replace("Z", "+00:00"))
@@ -136,32 +119,19 @@ async def export_result_excel(filename: str):
         except Exception:
             ts_str = timestamp or ""
 
-        # Format duration
-        if duration_ms < 1000:
-            dur_str = f"{duration_ms}ms"
-        else:
-            dur_str = f"{duration_ms / 1000:.1f}s"
-
+        dur_str = f"{duration_ms}ms" if duration_ms < 1000 else f"{duration_ms / 1000:.1f}s"
         delay_str = f"{delay_ms}ms" if delay_ms < 1000 else f"{delay_ms / 1000:.1f}s"
 
-        # A: Time Stamp
         ws.cell(row=ri, column=1, value=ts_str).border = thin_border
-        # B: TOTAL TC REPEAT
         ws.cell(row=ri, column=2, value=total_repeat).border = thin_border
         ws.cell(row=ri, column=2).alignment = center
-        # C: CURRENT TC REPEAT (per step)
         ws.cell(row=ri, column=3, value=sr.get("repeat_index", 1)).border = thin_border
         ws.cell(row=ri, column=3).alignment = center
-        # D: STEP INDEX
         ws.cell(row=ri, column=4, value=sr.get("step_id", "")).border = thin_border
         ws.cell(row=ri, column=4).alignment = center
-        # E: Device
         ws.cell(row=ri, column=5, value=sr.get("device_id", "")).border = thin_border
-        # F: Command
         ws.cell(row=ri, column=6, value=command).border = thin_border
-        # G: Remark
         ws.cell(row=ri, column=7, value=sr.get("description", "")).border = thin_border
-        # H: Status
         status_cell = ws.cell(row=ri, column=8, value=status.upper())
         status_cell.border = thin_border
         status_cell.alignment = center
@@ -173,14 +143,11 @@ async def export_result_excel(filename: str):
             status_cell.fill = warn_fill
         elif status == "error":
             status_cell.fill = error_fill
-        # I: DELAY
         ws.cell(row=ri, column=9, value=delay_str).border = thin_border
         ws.cell(row=ri, column=9).alignment = center
-        # J: DURATION
         ws.cell(row=ri, column=10, value=dur_str).border = thin_border
         ws.cell(row=ri, column=10).alignment = center
 
-        # K: Expected Image
         exp_path = _resolve_image_path(sr.get("expected_image"))
         ws.cell(row=ri, column=11).border = thin_border
         if exp_path:
@@ -193,7 +160,6 @@ async def export_result_excel(filename: str):
             except Exception:
                 ws.cell(row=ri, column=11, value=str(sr.get("expected_image", "")))
 
-        # L: Actual Image (prefer annotated)
         act_img_path = sr.get("actual_annotated_image") or sr.get("actual_image")
         act_path = _resolve_image_path(act_img_path)
         ws.cell(row=ri, column=12).border = thin_border
@@ -207,6 +173,23 @@ async def export_result_excel(filename: str):
                     ws.row_dimensions[ri].height = img_row_height
             except Exception:
                 ws.cell(row=ri, column=12, value=str(act_img_path or ""))
+
+    return wb
+
+
+@router.get("/export/{filename}")
+async def export_result_excel(filename: str):
+    """Export a test result as Excel (.xlsx) — download to browser."""
+    filepath = RESULTS_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Result not found")
+
+    data = json.loads(filepath.read_text(encoding="utf-8"))
+
+    try:
+        wb = _build_excel_workbook(data, filepath)
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
 
     buf = io.BytesIO()
     wb.save(buf)

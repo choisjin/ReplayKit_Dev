@@ -10,8 +10,8 @@ export const deviceApi = {
   getInfo: (deviceId: string) => api.get(`/device/info/${deviceId}`),
   screenshot: (deviceId: string) => api.get(`/device/screenshot/${deviceId}`, { params: { fmt: 'jpeg' } }),
   scan: () => api.get('/device/scan'),
-  connect: (type: string, address: string, baudrate?: number, name?: string, category?: string, module?: string, connect_type?: string, extra_fields?: Record<string, any>) =>
-    api.post('/device/connect', { type, address, baudrate, name, category, module, connect_type, extra_fields }),
+  connect: (type: string, address: string, baudrate?: number, name?: string, category?: string, module?: string, connect_type?: string, extra_fields?: Record<string, any>, device_id?: string) =>
+    api.post('/device/connect', { type, address, baudrate, name, category, module, connect_type, extra_fields, device_id }),
   disconnect: (deviceId: string) => api.post('/device/disconnect', { address: deviceId }),
   updateDevice: (device_id: string, updates: Record<string, any>) =>
     api.post('/device/update', { device_id, ...updates }),

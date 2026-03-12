@@ -170,7 +170,7 @@ export default function DevicePage() {
   const handleAddAdb = async (serial: string) => {
     setConnecting(true);
     try {
-      const result = await connectDevice('adb', serial, undefined, '', 'primary');
+      const result = await connectDevice('adb', serial);
       message.success(result);
       setModalOpen(false);
     } catch (e: any) {
@@ -242,9 +242,16 @@ export default function DevicePage() {
     return <Tag>USB</Tag>;
   };
 
-  const renderDeviceList = (devices: ManagedDevice[]) => (
+  const allDevices = [...primaryDevices, ...auxiliaryDevices];
+
+  const getCategoryTag = (category: string) => {
+    if (category === 'primary') return <Tag color="blue">주</Tag>;
+    return <Tag color="orange">보조</Tag>;
+  };
+
+  const renderDeviceList = () => (
     <List
-      dataSource={devices}
+      dataSource={allDevices}
       renderItem={(d) => (
         <List.Item
           actions={[
@@ -277,12 +284,13 @@ export default function DevicePage() {
         >
           <List.Item.Meta
             avatar={getDeviceIcon(d.type)}
-            title={d.name || d.id}
+            title={<>{d.name || d.id} <Tag color="default" style={{ fontSize: 11, fontWeight: 'normal' }}>{d.id}</Tag></>}
             description={
               <>
                 <Tag color={d.status === 'device' || d.status === 'connected' ? 'green' : d.status === 'offline' ? 'red' : 'orange'}>
                   {d.status}
                 </Tag>
+                {getCategoryTag(d.category)}
                 {getTypeTag(d)}
                 <span style={{ color: '#888' }}>{d.address}</span>
                 {d.info?.baudrate && (
@@ -366,31 +374,17 @@ export default function DevicePage() {
         <Button icon={<ReloadOutlined />} onClick={fetchDevices} loading={loading}>새로고침</Button>
       </Space>
 
-      <Row gutter={8}>
-        <Col span={12}>
-          <Card
-            title="주 디바이스"
-            extra={<Button icon={<PlusOutlined />} type="primary" size="small" onClick={() => openAddModal('primary')}>추가</Button>}
-          >
-            <div style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>
-              화면 조작 가능 (ADB, Linux 등) — 녹화 시 화면 캡처 및 터치/스와이프
-            </div>
-            {renderDeviceList(primaryDevices)}
-          </Card>
-        </Col>
-
-        <Col span={12}>
-          <Card
-            title="보조 디바이스"
-            extra={<Button icon={<PlusOutlined />} size="small" onClick={() => openAddModal('auxiliary')}>추가</Button>}
-          >
-            <div style={{ color: '#888', fontSize: 12, marginBottom: 8 }}>
-              커맨드 전송 전용 (Serial, USB 등) — 녹화 시 데이터 송수신
-            </div>
-            {renderDeviceList(auxiliaryDevices)}
-          </Card>
-        </Col>
-      </Row>
+      <Card
+        title={`디바이스 (${allDevices.length})`}
+        extra={
+          <Space>
+            <Button icon={<PlusOutlined />} type="primary" size="small" onClick={() => openAddModal('primary')}>주 디바이스 추가</Button>
+            <Button icon={<PlusOutlined />} size="small" onClick={() => openAddModal('auxiliary')}>보조 디바이스 추가</Button>
+          </Space>
+        }
+      >
+        {renderDeviceList()}
+      </Card>
 
       {/* 장치 추가 모달 */}
       <Modal

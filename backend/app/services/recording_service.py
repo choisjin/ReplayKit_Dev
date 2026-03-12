@@ -80,6 +80,25 @@ class RecordingService:
         logger.info("Recording resumed: %s (from step %d)", scenario_name, self._step_counter)
         return self._current_scenario
 
+    def _ensure_device_mapped(self, device_id: str) -> str:
+        """Ensure the device_id is recorded in device_map (id → real address).
+
+        Since device IDs are now human-readable aliases (Android_1, Serial_1, etc.),
+        we store them directly and map to their real address for portability.
+        """
+        if not device_id or self._current_scenario is None:
+            return device_id
+
+        dmap = self._current_scenario.device_map
+        if device_id not in dmap:
+            # Store mapping: device_id → real address
+            dev = self.dm.get_device(device_id)
+            if dev:
+                dmap[device_id] = dev.address
+            else:
+                dmap[device_id] = device_id
+        return device_id
+
     async def add_step(
         self,
         step_type: StepType,
@@ -105,10 +124,13 @@ class RecordingService:
         if not skip_execute:
             await self._execute_step_action(step_type, params, device_id)
 
+        # Ensure device_id is recorded in device_map (maps to real address)
+        mapped_id = self._ensure_device_mapped(device_id) if device_id else None
+
         step = Step(
             id=step_id,
             type=step_type,
-            device_id=device_id or None,
+            device_id=mapped_id,
             params=params,
             delay_after_ms=delay_after_ms,
             expected_image=None,

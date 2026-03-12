@@ -16,7 +16,7 @@ interface DeviceContextType {
   auxiliaryDevices: ManagedDevice[];
   loading: boolean;
   fetchDevices: () => Promise<void>;
-  connectDevice: (type: string, address: string, baudrate?: number, name?: string, category?: string, module?: string, connect_type?: string, extra_fields?: Record<string, any>) => Promise<string>;
+  connectDevice: (type: string, address: string, baudrate?: number, name?: string, category?: string, module?: string, connect_type?: string, extra_fields?: Record<string, any>, device_id?: string) => Promise<string>;
   disconnectDevice: (deviceId: string) => Promise<string>;
   // Screenshot for a specific primary device
   screenshotDeviceId: string;
@@ -60,8 +60,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   };
 
-  const connectDevice = async (type: string, address: string, baudrate?: number, name?: string, category?: string, module?: string, connect_type?: string, extra_fields?: Record<string, any>): Promise<string> => {
-    const res = await deviceApi.connect(type, address, baudrate, name, category, module, connect_type, extra_fields);
+  const connectDevice = async (type: string, address: string, baudrate?: number, name?: string, category?: string, module?: string, connect_type?: string, extra_fields?: Record<string, any>, device_id?: string): Promise<string> => {
+    const res = await deviceApi.connect(type, address, baudrate, name, category, module, connect_type, extra_fields, device_id);
     updateDeviceLists(res.data);
     return res.data.result;
   };

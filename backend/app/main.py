@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
-from .routers import device, results, scenario
+from .routers import device, results, scenario, settings
 from .dependencies import adb_service, playback_service, recording_service
 from .models.scenario import ScenarioResult
 
@@ -38,6 +38,7 @@ app.add_middleware(
 app.include_router(device.router)
 app.include_router(scenario.router)
 app.include_router(results.router)
+app.include_router(settings.router)
 
 # Serve screenshots statically
 screenshots_dir = Path(__file__).resolve().parent.parent / "screenshots"
@@ -95,8 +96,18 @@ async def websocket_playback(websocket: WebSocket):
                 scenario_name = data.get("scenario")
                 verify = data.get("verify", True)
                 repeat = data.get("repeat", 1)
+                device_map_override = data.get("device_map")  # optional override from frontend
                 try:
                     scen = await recording_service.load_scenario(scenario_name)
+
+                    # Preflight device check
+                    preflight_errors = await playback_service.preflight_check(scen, device_map_override)
+                    if preflight_errors:
+                        await websocket.send_json({
+                            "type": "preflight_error",
+                            "errors": preflight_errors,
+                        })
+                        continue
 
                     # Single result for ALL cycles
                     result = ScenarioResult(
@@ -116,7 +127,7 @@ async def websocket_playback(websocket: WebSocket):
                                 "total": repeat,
                             })
 
-                        async for step_result in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration):
+                        async for step_result in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, device_map_override=device_map_override):
                             result.step_results.append(step_result)
                             if step_result.status == "pass":
                                 result.passed_steps += 1
@@ -154,6 +165,7 @@ async def websocket_playback(websocket: WebSocket):
                 group_members = data.get("scenarios", [])  # list[str] or list[dict]
                 verify = data.get("verify", True)
                 repeat = data.get("repeat", 1)
+                device_map_override = data.get("device_map")
 
                 # Normalize to list[dict] for jump support
                 entries: list[dict] = []
@@ -164,6 +176,25 @@ async def websocket_playback(websocket: WebSocket):
                         entries.append(m)
 
                 try:
+                    # Preflight: check all scenarios in the group
+                    all_preflight_errors: list[str] = []
+                    for entry in entries:
+                        try:
+                            scen = await recording_service.load_scenario(entry["name"])
+                            errs = await playback_service.preflight_check(scen)
+                            for e in errs:
+                                msg = f"[{entry['name']}] {e}"
+                                if msg not in all_preflight_errors:
+                                    all_preflight_errors.append(msg)
+                        except FileNotFoundError:
+                            all_preflight_errors.append(f"시나리오 '{entry['name']}'을(를) 찾을 수 없습니다")
+                    if all_preflight_errors:
+                        await websocket.send_json({
+                            "type": "preflight_error",
+                            "errors": all_preflight_errors,
+                        })
+                        continue
+
                     sc_idx = 0
                     start_step = 0  # step index to start from within current scenario
                     while sc_idx < len(entries):
@@ -199,7 +230,7 @@ async def websocket_playback(websocket: WebSocket):
                                     "iteration": iteration,
                                     "total": repeat,
                                 })
-                            async for step_result in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, start_step=start_step):
+                            async for step_result in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, start_step=start_step, device_map_override=device_map_override):
                                 result.step_results.append(step_result)
                                 if step_result.status == "pass":
                                     result.passed_steps += 1

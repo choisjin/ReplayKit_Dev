@@ -8,7 +8,8 @@ import {
   DownOutlined, RightOutlined, ClearOutlined, UploadOutlined,
   ExportOutlined, ImportOutlined, CheckCircleOutlined, WarningOutlined,
 } from '@ant-design/icons';
-import { scenarioApi, resultsApi } from '../services/api';
+import { scenarioApi, resultsApi, deviceApi } from '../services/api';
+import { useSettings } from '../context/SettingsContext';
 import { useWebcam } from '../hooks/useWebcam';
 import WebcamPanel from '../components/WebcamPanel';
 
@@ -18,6 +19,7 @@ interface ScenarioDetail {
   device_serial: string;
   resolution: { width: number; height: number } | null;
   steps: any[];
+  device_map: Record<string, string>;
   created_at: string;
 }
 
@@ -127,6 +129,7 @@ const formatTime = (iso: string) => {
 };
 
 export default function ScenarioPage() {
+  const { settings, uploadWebcamRecording, saveExcelToDir } = useSettings();
   const webcam = useWebcam();
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<ScenarioDetail | null>(null);
@@ -173,6 +176,12 @@ export default function ScenarioPage() {
 
   // Compare modal
   const [compareStep, setCompareStep] = useState<StepResultData | null>(null);
+
+  // Device mapping
+  const [deviceMapModalVisible, setDeviceMapModalVisible] = useState(false);
+  const [deviceMapEditing, setDeviceMapEditing] = useState<Record<string, string>>({});
+  const [deviceMapScenarioName, setDeviceMapScenarioName] = useState('');
+  const [connectedDevices, setConnectedDevices] = useState<{ id: string; name: string; type: string; status: string }[]>([]);
 
   // Export / Import
   const [exportModalVisible, setExportModalVisible] = useState(false);
@@ -254,11 +263,27 @@ export default function ScenarioPage() {
     return `#${idx + 1} ${type} ${detail}${desc}`;
   };
 
+  // Wire up webcam upload when save dir is configured
+  useEffect(() => {
+    if (settings.webcam_save_dir) {
+      webcam.setUploadFn(uploadWebcamRecording);
+    } else {
+      webcam.setUploadFn(null);
+    }
+  }, [settings.webcam_save_dir, webcam.setUploadFn, uploadWebcamRecording]);
+
   useEffect(() => {
     fetchScenarios();
     fetchGroups();
     fetchResults();
-    return () => { if (wsRef.current) wsRef.current.close(); };
+    const onTabChange = (e: Event) => {
+      if ((e as CustomEvent).detail === '/scenarios') {
+        fetchScenarios();
+        fetchGroups();
+      }
+    };
+    window.addEventListener('tab-change', onTabChange);
+    return () => { if (wsRef.current) wsRef.current.close(); window.removeEventListener('tab-change', onTabChange); };
   }, []);
 
   // --- Scenario CRUD ---
@@ -484,12 +509,34 @@ export default function ScenarioPage() {
 
   // --- Playback ---
   const playScenario = async (name: string) => {
-    const repeat = getRepeatCount(name);
+    let scenarioData: ScenarioDetail;
     try {
       const res = await scenarioApi.get(name);
-      setPlaybackScenario(res.data);
+      scenarioData = res.data;
+      setPlaybackScenario(scenarioData);
     } catch { message.error('시나리오 로드 실패'); return; }
 
+    // If scenario has device_map, show mapping modal for confirmation
+    const dmap = scenarioData.device_map || {};
+    if (Object.keys(dmap).length > 0) {
+      try {
+        const devRes = await deviceApi.list();
+        setConnectedDevices([
+          ...(devRes.data.primary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
+          ...(devRes.data.auxiliary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
+        ]);
+      } catch { /* ignore */ }
+      setDeviceMapEditing({ ...dmap });
+      setDeviceMapScenarioName(name);
+      setDeviceMapModalVisible(true);
+      return;
+    }
+
+    startPlayback(name, {});
+  };
+
+  const startPlayback = (name: string, deviceMap: Record<string, string>) => {
+    const repeat = getRepeatCount(name);
     setPlaying(true);
     setPlayingName(name);
     setStepResults([]);
@@ -501,9 +548,10 @@ export default function ScenarioPage() {
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws/playback`);
     wsRef.current = ws;
 
+    const hasMap = Object.keys(deviceMap).length > 0;
     ws.onopen = () => {
       setCurrentStepId(1);
-      ws.send(JSON.stringify({ action: 'play', scenario: name, verify: true, repeat }));
+      ws.send(JSON.stringify({ action: 'play', scenario: name, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}) }));
     };
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -517,6 +565,19 @@ export default function ScenarioPage() {
         setPlaying(false); setCurrentStepId(null);
         message.success(repeat > 1 ? `재생 완료 (${repeat}회)` : '재생 완료');
         ws.close(); fetchResults();
+      } else if (msg.type === 'preflight_error') {
+        setPlaying(false); setCurrentStepId(null);
+        Modal.error({
+          title: '디바이스 연결 확인 실패',
+          content: (
+            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+              {(msg.errors || []).map((e: string, i: number) => (
+                <div key={i} style={{ padding: '4px 0', color: '#ff4d4f' }}>• {e}</div>
+              ))}
+            </div>
+          ),
+        });
+        ws.close();
       } else if (msg.type === 'error') {
         setPlaying(false); setCurrentStepId(null);
         message.error(msg.message); ws.close(); fetchResults();
@@ -530,15 +591,45 @@ export default function ScenarioPage() {
   };
 
   // --- Group playback ---
-  const playGroup = (gName: string) => {
+  const playGroup = async (gName: string) => {
     const members = groups[gName] || [];
     if (members.length === 0) { message.warning('그룹에 시나리오가 없습니다'); return; }
+
+    // Collect device_maps from all member scenarios
+    const mergedMap: Record<string, string> = {};
+    for (const m of members) {
+      try {
+        const res = await scenarioApi.get(m.name);
+        const dmap = res.data.device_map || {};
+        Object.assign(mergedMap, dmap);
+      } catch { /* ignore */ }
+    }
+
+    if (Object.keys(mergedMap).length > 0) {
+      try {
+        const devRes = await deviceApi.list();
+        setConnectedDevices([
+          ...(devRes.data.primary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
+          ...(devRes.data.auxiliary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
+        ]);
+      } catch { /* ignore */ }
+      setDeviceMapEditing({ ...mergedMap });
+      setDeviceMapScenarioName(`group:${gName}`);
+      setDeviceMapModalVisible(true);
+      return;
+    }
+
+    startGroupPlayback(gName, {});
+  };
+
+  const startGroupPlayback = (gName: string, deviceMap: Record<string, string>) => {
+    const members = groups[gName] || [];
     const repeat = getRepeatCount(gName);
 
     setPlaying(true);
     setPlayingGroupName(gName);
     setPlayingName(members[0].name);
-    setPlaybackScenario({ name: gName, description: '', device_serial: '', resolution: null, steps: [], created_at: '' });
+    setPlaybackScenario({ name: gName, description: '', device_serial: '', resolution: null, steps: [], device_map: {}, created_at: '' });
     setStepResults([]);
     setCurrentStepId(null);
     setCurrentIteration(1);
@@ -551,8 +642,9 @@ export default function ScenarioPage() {
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws/playback`);
     wsRef.current = ws;
 
+    const hasMap = Object.keys(deviceMap).length > 0;
     ws.onopen = () => {
-      ws.send(JSON.stringify({ action: 'play_group', scenarios: members, verify: true, repeat }));
+      ws.send(JSON.stringify({ action: 'play_group', scenarios: members, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}) }));
     };
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -570,6 +662,19 @@ export default function ScenarioPage() {
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         message.success(`그룹 "${gName}" 재생 완료`);
         ws.close(); fetchResults();
+      } else if (msg.type === 'preflight_error') {
+        setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
+        Modal.error({
+          title: '디바이스 연결 확인 실패',
+          content: (
+            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+              {(msg.errors || []).map((e: string, i: number) => (
+                <div key={i} style={{ padding: '4px 0', color: '#ff4d4f' }}>• {e}</div>
+              ))}
+            </div>
+          ),
+        });
+        ws.close();
       } else if (msg.type === 'error') {
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         message.error(msg.message); ws.close(); fetchResults();
@@ -616,13 +721,18 @@ export default function ScenarioPage() {
 
   const exportExcel = async (filename: string) => {
     try {
-      const res = await resultsApi.exportExcel(filename);
-      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename.replace('.json', '.xlsx'); a.click();
-      window.URL.revokeObjectURL(url);
-    } catch { message.error('Excel 내보내기 실패'); }
+      if (settings.excel_export_dir) {
+        const path = await saveExcelToDir(filename);
+        message.success(`Excel 저장 완료: ${path}`);
+      } else {
+        const res = await resultsApi.exportExcel(filename);
+        const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename.replace('.json', '.xlsx'); a.click();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (e: any) { message.error(e.response?.data?.detail || 'Excel 내보내기 실패'); }
   };
 
   // --- Columns ---
@@ -635,7 +745,7 @@ export default function ScenarioPage() {
     { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
     { title: 'Remark', dataIndex: 'description', key: 'description', ellipsis: true },
     { title: '유형', dataIndex: 'type', key: 'type', render: (t: string) => <Tag>{t}</Tag> },
-    { title: '디바이스', dataIndex: 'device_id', key: 'device_id', width: 100, render: (v: string) => v || '-' },
+    { title: '디바이스', dataIndex: 'device_id', key: 'device_id', width: 120, render: (v: string) => v ? <Tag color={v.startsWith('Android') ? 'green' : v.startsWith('Serial') ? 'purple' : 'geekblue'}>{v}</Tag> : '-' },
     {
       title: '기대이미지', dataIndex: 'expected_image', key: 'expected_image', width: 90,
       render: (v: string | null) => {
@@ -657,7 +767,7 @@ export default function ScenarioPage() {
     { title: <div>Time Stamp<br /><span style={{ fontSize: 11, color: '#888' }}>실행 시각</span></div>, dataIndex: 'timestamp', key: 'timestamp', width: 150, render: (v: string | null) => v ? formatTime(v) : '-' },
     { title: <div>Repeat<br /><span style={{ fontSize: 11, color: '#888' }}>현재/총</span></div>, dataIndex: 'repeat_index', key: 'repeat', width: 75, align: 'center' as const, render: (v: number) => `${v}/${totalRepeat}` },
     { title: <div>Step<br /><span style={{ fontSize: 11, color: '#888' }}>순서</span></div>, dataIndex: 'step_id', key: 'step_id', width: 55, align: 'center' as const },
-    { title: <div>Device<br /><span style={{ fontSize: 11, color: '#888' }}>장치</span></div>, dataIndex: 'device_id', key: 'device_id', width: 120, ellipsis: true, render: (v: string) => v || '-' },
+    { title: <div>Device<br /><span style={{ fontSize: 11, color: '#888' }}>장치</span></div>, dataIndex: 'device_id', key: 'device_id', width: 120, render: (v: string) => v ? <Tag color={v.startsWith('Android') ? 'green' : v.startsWith('Serial') ? 'purple' : 'geekblue'}>{v}</Tag> : '-' },
     { title: <div>Command<br /><span style={{ fontSize: 11, color: '#888' }}>action</span></div>, dataIndex: 'command', key: 'command', ellipsis: true, render: (v: string, r: StepResultData) => v || r.message || '-' },
     { title: <div>Remark<br /><span style={{ fontSize: 11, color: '#888' }}>설명</span></div>, dataIndex: 'description', key: 'description', width: 150, ellipsis: true, render: (v: string) => v || '-' },
     { title: <div>Status<br /><span style={{ fontSize: 11, color: '#888' }}>결과</span></div>, dataIndex: 'status', key: 'status', width: 90, align: 'center' as const, render: (s: string) => <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
@@ -1083,7 +1193,15 @@ export default function ScenarioPage() {
           <>
             <Descriptions column={2} size="small" style={{ marginBottom: 8 }}>
               <Descriptions.Item label="설명">{selectedScenario.description || '-'}</Descriptions.Item>
-              <Descriptions.Item label="디바이스">{selectedScenario.device_serial || '-'}</Descriptions.Item>
+              <Descriptions.Item label="디바이스 매핑">
+                {Object.keys(selectedScenario.device_map || {}).length > 0
+                  ? Object.entries(selectedScenario.device_map).map(([alias, real]) => (
+                    <Tag key={alias} color={alias.startsWith('Android') ? 'green' : alias.startsWith('Serial') ? 'purple' : 'geekblue'}>
+                      {alias} → {real}
+                    </Tag>
+                  ))
+                  : selectedScenario.device_serial || '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="해상도">{selectedScenario.resolution ? `${selectedScenario.resolution.width}×${selectedScenario.resolution.height}` : '-'}</Descriptions.Item>
               <Descriptions.Item label="스텝 수">{selectedScenario.steps.length}</Descriptions.Item>
             </Descriptions>
@@ -1183,6 +1301,55 @@ export default function ScenarioPage() {
             )}
           </>
         )}
+      </Modal>
+
+      {/* ===== 디바이스 매핑 모달 ===== */}
+      <Modal
+        title="디바이스 매핑 확인"
+        open={deviceMapModalVisible}
+        onCancel={() => setDeviceMapModalVisible(false)}
+        onOk={() => {
+          setDeviceMapModalVisible(false);
+          const name = deviceMapScenarioName;
+          if (name.startsWith('group:')) {
+            startGroupPlayback(name.slice(6), deviceMapEditing);
+          } else {
+            startPlayback(name, deviceMapEditing);
+          }
+        }}
+        okText="재생"
+        width={600}
+      >
+        <p style={{ marginBottom: 12, color: '#888' }}>시나리오에 사용된 디바이스와 현재 연결된 디바이스를 매핑합니다.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {Object.entries(deviceMapEditing).map(([alias, realId]) => {
+            const connected = connectedDevices.find(d => d.id === realId);
+            const isOk = connected && connected.status !== 'offline' && connected.status !== 'disconnected';
+            return (
+              <div key={alias} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: isOk ? 'rgba(82,196,26,0.06)' : 'rgba(255,77,79,0.06)', borderRadius: 6, border: `1px solid ${isOk ? '#52c41a33' : '#ff4d4f33'}` }}>
+                <Tag color="blue" style={{ minWidth: 90, textAlign: 'center' }}>{alias}</Tag>
+                <span style={{ color: '#888' }}>→</span>
+                <Select
+                  value={realId}
+                  onChange={(val) => setDeviceMapEditing(prev => ({ ...prev, [alias]: val }))}
+                  style={{ flex: 1 }}
+                  size="small"
+                >
+                  {connectedDevices.map(d => (
+                    <Select.Option key={d.id} value={d.id}>
+                      <Space size={4}>
+                        <Tag color={d.status === 'device' || d.status === 'connected' ? 'green' : d.status === 'offline' || d.status === 'disconnected' ? 'red' : 'default'} style={{ marginRight: 0 }}>{d.type}</Tag>
+                        {d.name}
+                        {d.status === 'offline' || d.status === 'disconnected' ? <span style={{ color: '#ff4d4f' }}>(연결 끊김)</span> : null}
+                      </Space>
+                    </Select.Option>
+                  ))}
+                </Select>
+                {isOk ? <CheckCircleOutlined style={{ color: '#52c41a' }} /> : <WarningOutlined style={{ color: '#faad14' }} />}
+              </div>
+            );
+          })}
+        </div>
       </Modal>
 
       {/* ===== 내보내기 모달 ===== */}

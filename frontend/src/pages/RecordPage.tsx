@@ -3,6 +3,7 @@ import { Button, Card, Col, Image, Input, Modal, Row, Select, Space, InputNumber
 import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined } from '@ant-design/icons';
 import { deviceApi, scenarioApi } from '../services/api';
 import { useDevice } from '../context/DeviceContext';
+import { useSettings } from '../context/SettingsContext';
 import { useWebcam } from '../hooks/useWebcam';
 import WebcamPanel from '../components/WebcamPanel';
 
@@ -165,6 +166,9 @@ export default function RecordPage() {
   // Detected gesture display
   const [lastGesture, setLastGesture] = useState('');
 
+  // Settings
+  const { settings, uploadWebcamRecording } = useSettings();
+
   // Webcam (shared hook)
   const webcam = useWebcam();
   const {
@@ -173,8 +177,17 @@ export default function RecordPage() {
     webcamResolution, webcamResolutions,
     handleWebcamToggle, handleWebcamChange, handleWebcamResolutionChange,
     startWebcamRecording, stopWebcamRecording, loadWebcamCapabilities, applyWebcamSetting,
-    stopWebcam,
+    stopWebcam, setUploadFn,
   } = webcam;
+
+  // Wire up webcam upload when save dir is configured
+  useEffect(() => {
+    if (settings.webcam_save_dir) {
+      setUploadFn(uploadWebcamRecording);
+    } else {
+      setUploadFn(null);
+    }
+  }, [settings.webcam_save_dir, setUploadFn, uploadWebcamRecording]);
 
   // Wait step insertion
   const [waitDurationMs, setWaitDurationMs] = useState(1000);
@@ -1040,6 +1053,25 @@ export default function RecordPage() {
     fetchSavedScenarios();
   }, []);
 
+  // Refresh loaded scenario & device list when record tab becomes active
+  useEffect(() => {
+    const onTabChange = (e: Event) => {
+      if ((e as CustomEvent).detail === '/record') {
+        fetchDevices();
+        // Reload scenario if one is loaded (to pick up device name changes etc.)
+        if (editingExisting && scenarioName) {
+          scenarioApi.get(scenarioName).then(res => {
+            setSteps(res.data.steps || []);
+            setDescription(res.data.description || '');
+          }).catch(() => {});
+        }
+        fetchSavedScenarios();
+      }
+    };
+    window.addEventListener('tab-change', onTabChange);
+    return () => window.removeEventListener('tab-change', onTabChange);
+  }, [editingExisting, scenarioName]);
+
   // Load existing scenario for editing
   const loadScenario = async (name: string) => {
     if (recording) {
@@ -1327,9 +1359,9 @@ export default function RecordPage() {
   const getDeviceTag = (deviceId: string | null) => {
     if (!deviceId) return <Tag>-</Tag>;
     const dev = allDevices.find(d => d.id === deviceId);
-    if (!dev) return <Tag>{deviceId}</Tag>;
+    if (!dev) return <Tag color="orange">{deviceId}</Tag>;
     const color = dev.category === 'primary' ? 'green' : 'purple';
-    return <Tag color={color}>{dev.name || dev.id}</Tag>;
+    return <Tag color={color}>{dev.id}{dev.name && dev.name !== dev.id ? ` (${dev.name})` : ''}</Tag>;
   };
 
   // Memoize the step list so screenshot polling doesn't re-render it

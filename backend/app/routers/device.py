@@ -33,6 +33,7 @@ class ConnectRequest(BaseModel):
     address: str = ""  # COM port for serial, IP for socket, etc.
     baudrate: Optional[int] = 115200
     name: Optional[str] = ""
+    device_id: Optional[str] = ""  # custom device ID/alias (e.g. "Android_1", "Serial_1")
     module: Optional[str] = None  # lge.auto module name (e.g. "POWER", "CAN")
     connect_type: Optional[str] = None  # "serial" | "socket" | "can" | "none"
     extra_fields: Optional[dict] = None  # Additional module-specific fields
@@ -46,6 +47,7 @@ class DisconnectRequest(BaseModel):
 async def list_devices():
     """List all managed devices, split by category."""
     await dm.refresh_adb()
+    await dm.refresh_auxiliary()
     return {
         "primary": [d.to_dict() for d in dm.list_primary()],
         "auxiliary": [d.to_dict() for d in dm.list_auxiliary()],
@@ -66,29 +68,33 @@ async def scan_ports():
 @router.post("/connect")
 async def connect_device(req: ConnectRequest):
     """Connect to a device."""
+    custom_id = req.device_id or ""
     if req.type == "adb":
-        dev = await dm.add_adb_wifi(req.address)
+        if ":" in req.address:
+            # WiFi ADB — connect first
+            await dm.adb.connect_device(req.address)
+        dev = await dm.add_adb_device(req.address, device_id=custom_id, name=req.name or "")
         return {
-            "result": f"Connected: {dev.name}",
+            "result": f"Connected: {dev.name} (ID: {dev.id})",
             "primary": [d.to_dict() for d in dm.list_primary()],
             "auxiliary": [d.to_dict() for d in dm.list_auxiliary()],
         }
     elif req.type == "serial":
         category = req.category or "auxiliary"
         try:
-            dev = await dm.add_serial_device(req.address, req.baudrate or 115200, req.name or "", category)
+            dev = await dm.add_serial_device(req.address, req.baudrate or 115200, req.name or "", category, device_id=custom_id)
             if req.module:
                 dev.info["module"] = req.module
                 dev.info["connect_type"] = req.connect_type or "serial"
+                dm._save_auxiliary_devices()
             return {
-                "result": f"Serial {req.address} added ({req.baudrate} baud)",
+                "result": f"Serial {req.address} added (ID: {dev.id})",
                 "primary": [d.to_dict() for d in dm.list_primary()],
                 "auxiliary": [d.to_dict() for d in dm.list_auxiliary()],
             }
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
     elif req.type == "module":
-        # Module-only device (socket, CAN, or no-connection modules)
         category = req.category or "auxiliary"
         dev = await dm.add_module_device(
             address=req.address,
@@ -96,9 +102,10 @@ async def connect_device(req: ConnectRequest):
             connect_type=req.connect_type or "none",
             name=req.name or "",
             extra_fields=req.extra_fields,
+            device_id=custom_id,
         )
         return {
-            "result": f"Module device {req.module} added ({req.address or 'no address'})",
+            "result": f"Module device {req.module} added (ID: {dev.id})",
             "primary": [d.to_dict() for d in dm.list_primary()],
             "auxiliary": [d.to_dict() for d in dm.list_auxiliary()],
         }
@@ -125,7 +132,7 @@ async def get_device_info(device_id: str):
         raise HTTPException(status_code=404, detail=f"Device {device_id} not found")
     if dev.type == "adb":
         try:
-            return await adb.get_device_info(device_id)
+            return await adb.get_device_info(dev.address)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
     else:
@@ -167,19 +174,22 @@ async def device_input(req: InputRequest):
         if dev and dev.type != "adb":
             raise HTTPException(status_code=400, detail=f"Action '{req.action}' requires an ADB device")
 
+        # Resolve alias to real ADB serial address
+        adb_serial = dev.address if dev else req.device_id
+
         p = req.params
         if req.action == "tap":
-            await adb.tap(p["x"], p["y"], serial=req.device_id)
+            await adb.tap(p["x"], p["y"], serial=adb_serial)
         elif req.action == "long_press":
-            await adb.long_press(p["x"], p["y"], p.get("duration_ms", 1000), serial=req.device_id)
+            await adb.long_press(p["x"], p["y"], p.get("duration_ms", 1000), serial=adb_serial)
         elif req.action == "swipe":
-            await adb.swipe(p["x1"], p["y1"], p["x2"], p["y2"], p.get("duration_ms", 300), serial=req.device_id)
+            await adb.swipe(p["x1"], p["y1"], p["x2"], p["y2"], p.get("duration_ms", 300), serial=adb_serial)
         elif req.action == "input_text":
-            await adb.input_text(p["text"], serial=req.device_id)
+            await adb.input_text(p["text"], serial=adb_serial)
         elif req.action == "key_event":
-            await adb.key_event(p["keycode"], serial=req.device_id)
+            await adb.key_event(p["keycode"], serial=adb_serial)
         elif req.action == "adb_command":
-            await adb.run_shell_command(p["command"], serial=req.device_id)
+            await adb.run_shell_command(p["command"], serial=adb_serial)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
 
@@ -270,9 +280,11 @@ async def get_screenshot(device_id: str, fmt: str = "jpeg"):
     dev = dm.get_device(device_id)
     if dev and dev.type != "adb":
         raise HTTPException(status_code=400, detail="Screenshot only available for ADB devices")
+    # Resolve alias to real ADB serial address
+    adb_serial = dev.address if dev else device_id
     # Allow screenshot even if device is not yet in managed list (e.g. race with refresh)
     try:
-        img_bytes = await adb.screencap_bytes(serial=device_id, fmt=fmt)
+        img_bytes = await adb.screencap_bytes(serial=adb_serial, fmt=fmt)
         b64 = base64.b64encode(img_bytes).decode("ascii")
         return {"image": b64, "format": fmt}
     except Exception as e:
