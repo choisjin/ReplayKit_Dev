@@ -572,10 +572,10 @@ export default function ScenarioPage() {
   ];
 
   const resultsColumns = [
-    { title: '시나리오', dataIndex: 'scenario_name', key: 'name', sorter: (a: ResultSummary, b: ResultSummary) => a.scenario_name.localeCompare(b.scenario_name) },
+    { title: '시나리오', dataIndex: 'scenario_name', key: 'name', width: 200, ellipsis: true, sorter: (a: ResultSummary, b: ResultSummary) => a.scenario_name.localeCompare(b.scenario_name) },
     { title: '상태', dataIndex: 'status', key: 'status', width: 90, filters: [{ text: 'PASS', value: 'pass' }, { text: 'FAIL', value: 'fail' }, { text: 'WARNING', value: 'warning' }, { text: 'ERROR', value: 'error' }], onFilter: (value: any, record: ResultSummary) => record.status === value, render: (s: string) => <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
     { title: '결과', key: 'counts', width: 180, render: (_: any, r: ResultSummary) => (<Space size={4}><Tag color="green">{r.passed_steps}P</Tag><Tag color="red">{r.failed_steps}F</Tag>{r.warning_steps > 0 && <Tag color="orange">{r.warning_steps}W</Tag>}{r.error_steps > 0 && <Tag color="volcano">{r.error_steps}E</Tag>}<span style={{ color: '#888' }}>/ {r.total_steps}</span></Space>) },
-    { title: '실행 시간', key: 'time', width: 160, render: (_: any, r: ResultSummary) => formatTime(r.started_at), sorter: (a: ResultSummary, b: ResultSummary) => (a.started_at || '').localeCompare(b.started_at || ''), defaultSortOrder: 'descend' as const },
+    { title: '실행 시간', key: 'time', width: 200, render: (_: any, r: ResultSummary) => <span style={{ whiteSpace: 'nowrap' }}>{formatTime(r.started_at)}</span>, sorter: (a: ResultSummary, b: ResultSummary) => (a.started_at || '').localeCompare(b.started_at || ''), defaultSortOrder: 'descend' as const },
     { title: '작업', key: 'actions', width: 200, render: (_: any, record: ResultSummary) => (<Space size={4}><Tooltip title="상세보기"><Button size="small" icon={<EyeOutlined />} onClick={() => viewResultDetail(record.filename)}>상세</Button></Tooltip><Tooltip title="Excel"><Button size="small" icon={<DownloadOutlined />} onClick={() => exportExcel(record.filename)} /></Tooltip><Tooltip title="삭제"><Button size="small" danger icon={<DeleteOutlined />} onClick={() => deleteResult(record.filename)} /></Tooltip></Space>) },
   ];
 
