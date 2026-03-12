@@ -1,5 +1,6 @@
 """Settings API routes."""
 
+import asyncio
 import json
 import shutil
 from pathlib import Path
@@ -56,6 +57,37 @@ async def update_settings(req: UpdateSettingsRequest):
         current["excel_export_dir"] = req.excel_export_dir
     _save(current)
     return current
+
+
+class BrowseFolderRequest(BaseModel):
+    initial_dir: Optional[str] = None
+
+
+def _open_folder_dialog(initial_dir: str = "") -> str:
+    """Open a native folder picker dialog using tkinter (runs in main thread)."""
+    import tkinter as tk
+    from tkinter import filedialog
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+    kwargs = {}
+    if initial_dir and Path(initial_dir).is_dir():
+        kwargs["initialdir"] = initial_dir
+    folder = filedialog.askdirectory(**kwargs)
+    root.destroy()
+    return folder or ""
+
+
+@router.post("/browse-folder")
+async def browse_folder(req: BrowseFolderRequest):
+    """Open native folder picker dialog and return the selected path."""
+    loop = asyncio.get_event_loop()
+    try:
+        selected = await loop.run_in_executor(None, _open_folder_dialog, req.initial_dir or "")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"폴더 선택 실패: {e}")
+    return {"path": selected}
 
 
 @router.post("/upload-webcam")

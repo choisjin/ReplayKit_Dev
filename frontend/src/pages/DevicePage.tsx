@@ -106,7 +106,7 @@ export default function DevicePage() {
     setModalOpen(true);
     handleScan();
     if (category === 'auxiliary') {
-      deviceApi.listModules().then(res => setModules(res.data.modules || [])).catch(() => {});
+      deviceApi.listModules().then(res => setModules((res.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => a.label.localeCompare(b.label)))).catch(() => {});
     }
   };
 
@@ -198,7 +198,7 @@ export default function DevicePage() {
     setEditModalOpen(true);
     // Ensure modules are loaded
     if (modules.length === 0) {
-      deviceApi.listModules().then(res => setModules(res.data.modules || [])).catch(() => {});
+      deviceApi.listModules().then(res => setModules((res.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => a.label.localeCompare(b.label)))).catch(() => {});
     }
   };
 
@@ -284,7 +284,7 @@ export default function DevicePage() {
         >
           <List.Item.Meta
             avatar={getDeviceIcon(d.type)}
-            title={<>{d.name || d.id} <Tag color="default" style={{ fontSize: 11, fontWeight: 'normal' }}>{d.id}</Tag></>}
+            title={<>{d.info?.module || d.name || d.id} <Tag color="default" style={{ fontSize: 11, fontWeight: 'normal' }}>{d.id}</Tag></>}
             description={
               <>
                 <Tag color={d.status === 'device' || d.status === 'connected' ? 'green' : d.status === 'offline' ? 'red' : 'orange'}>

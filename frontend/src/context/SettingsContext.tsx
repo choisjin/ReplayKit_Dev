@@ -15,6 +15,7 @@ interface SettingsContextType {
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
   uploadWebcamRecording: (blob: Blob, filename: string) => Promise<string>;
   saveExcelToDir: (resultFilename: string) => Promise<string>;
+  browseFolder: (initialDir?: string) => Promise<string>;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -53,8 +54,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     return res.data.path;
   }, []);
 
+  const browseFolder = useCallback(async (initialDir?: string): Promise<string> => {
+    const res = await api.post('/settings/browse-folder', { initial_dir: initialDir || '' });
+    return res.data.path || '';
+  }, []);
+
   return (
-    <SettingsContext.Provider value={{ settings, loading, updateSettings, uploadWebcamRecording, saveExcelToDir }}>
+    <SettingsContext.Provider value={{ settings, loading, updateSettings, uploadWebcamRecording, saveExcelToDir, browseFolder }}>
       {children}
     </SettingsContext.Provider>
   );

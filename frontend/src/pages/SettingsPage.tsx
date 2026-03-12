@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Card, Input, Space, Switch, message, Typography } from 'antd';
+import { Button, Card, Input, Space, Switch, message, Typography } from 'antd';
+import { FolderOpenOutlined } from '@ant-design/icons';
 import { useSettings } from '../context/SettingsContext';
 
 const { Text } = Typography;
 
 export default function SettingsPage() {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, browseFolder } = useSettings();
   const [webcamDir, setWebcamDir] = useState(settings.webcam_save_dir);
   const [excelDir, setExcelDir] = useState(settings.excel_export_dir);
 
@@ -66,19 +67,16 @@ export default function SettingsPage() {
               onPressEnter={handleWebcamDirSave}
               style={{ flex: 1 }}
             />
-            <button
-              onClick={handleWebcamDirSave}
-              style={{
-                padding: '4px 15px',
-                cursor: 'pointer',
-                border: '1px solid #434343',
-                background: '#1668dc',
-                color: '#fff',
-                borderRadius: '0 6px 6px 0',
+            <Button
+              icon={<FolderOpenOutlined />}
+              onClick={async () => {
+                try {
+                  const path = await browseFolder(webcamDir);
+                  if (path) { setWebcamDir(path); await updateSettings({ webcam_save_dir: path }); message.success('웹캠 저장 경로 설정됨'); }
+                } catch { message.error('폴더 선택 실패'); }
               }}
-            >
-              저장
-            </button>
+            />
+            <Button type="primary" onClick={handleWebcamDirSave}>저장</Button>
           </Space.Compact>
           <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
             웹캠 녹화 파일이 자동으로 이 경로에 저장됩니다. 비어있으면 브라우저 다운로드를 사용합니다.
@@ -94,19 +92,16 @@ export default function SettingsPage() {
               onPressEnter={handleExcelDirSave}
               style={{ flex: 1 }}
             />
-            <button
-              onClick={handleExcelDirSave}
-              style={{
-                padding: '4px 15px',
-                cursor: 'pointer',
-                border: '1px solid #434343',
-                background: '#1668dc',
-                color: '#fff',
-                borderRadius: '0 6px 6px 0',
+            <Button
+              icon={<FolderOpenOutlined />}
+              onClick={async () => {
+                try {
+                  const path = await browseFolder(excelDir);
+                  if (path) { setExcelDir(path); await updateSettings({ excel_export_dir: path }); message.success('Excel 저장 경로 설정됨'); }
+                } catch { message.error('폴더 선택 실패'); }
               }}
-            >
-              저장
-            </button>
+            />
+            <Button type="primary" onClick={handleExcelDirSave}>저장</Button>
           </Space.Compact>
           <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
             Excel 내보내기 시 이 경로에 자동으로 저장됩니다. 비어있으면 브라우저 다운로드를 사용합니다.

@@ -28,11 +28,23 @@ function AppContent() {
 
   const menuItems = pages.map(({ key, icon, label }) => ({ key, icon, label }));
 
-  const themeAlgorithm = settings.theme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm;
-  const contentBg = settings.theme === 'dark' ? '#1f1f1f' : '#fff';
+  const isDark = settings.theme === 'dark';
+  const themeAlgorithm = isDark ? theme.darkAlgorithm : theme.defaultAlgorithm;
+  const contentBg = isDark ? '#1f1f1f' : '#e8e8e8';
+  const layoutBg = isDark ? undefined : '#d0d0d0';
 
   return (
-    <ConfigProvider theme={{ algorithm: themeAlgorithm }}>
+    <ConfigProvider theme={{
+      algorithm: themeAlgorithm,
+      ...(!isDark ? {
+        token: {
+          colorBgContainer: '#e8e8e8',
+          colorBgElevated: '#e0e0e0',
+          colorBgLayout: '#d0d0d0',
+          colorBgBase: '#dcdcdc',
+        },
+      } : {}),
+    }}>
       <Layout style={{ minHeight: '100vh' }}>
         <Sider collapsible>
           <div style={{ height: 40, margin: 16, color: '#fff', fontSize: 14, fontWeight: 'bold', textAlign: 'center', lineHeight: '40px' }}>
@@ -46,7 +58,7 @@ function AppContent() {
             onClick={({ key }) => { setActiveKey(key); window.dispatchEvent(new CustomEvent('tab-change', { detail: key })); }}
           />
         </Sider>
-        <Layout>
+        <Layout style={layoutBg ? { background: layoutBg } : undefined}>
           <Content style={{ margin: 8, padding: 12, background: contentBg, borderRadius: 8 }}>
             {pages.map(({ key, component }) => (
               <div key={key} style={{ display: activeKey === key ? 'block' : 'none' }}>
