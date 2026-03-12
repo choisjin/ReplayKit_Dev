@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
-import { message } from 'antd';
 import { deviceApi } from '../services/api';
 
 export interface ManagedDevice {
@@ -42,31 +41,14 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const screenshotDeviceIdRef = useRef('');
 
-  // ADB auto-recovery state (connecting status only)
-  const recoveryInProgressRef = useRef(false);
-  const recoveryAttemptRef = useRef(0);
-  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Keep ref in sync with state for use in refreshScreenshot
   useEffect(() => {
     screenshotDeviceIdRef.current = screenshotDeviceId;
   }, [screenshotDeviceId]);
 
-  const startRecoveryRef = useRef<() => Promise<void>>();
-
   const updateDeviceLists = (data: any) => {
     if (data.primary) setPrimaryDevices(data.primary);
     if (data.auxiliary) setAuxiliaryDevices(data.auxiliary);
-
-    // Check for 'connecting' status ADB devices → trigger auto-recovery
-    const allDevices = [...(data.primary || []), ...(data.auxiliary || [])];
-    const hasConnecting = allDevices.some(
-      (d: any) => d.type === 'adb' && d.status === 'connecting'
-    );
-    if (hasConnecting && !recoveryInProgressRef.current) {
-      message.warning('ADB 디바이스가 connecting 상태입니다. 자동 복구를 시작합니다.');
-      startRecoveryRef.current?.();
-    }
   };
 
   const fetchDevices = async () => {
@@ -115,69 +97,6 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     pollInFlightRef.current = false;
   }, []);
 
-  // ADB auto-recovery: triggered only by 'connecting' device status
-  const startRecovery = useCallback(async () => {
-    if (recoveryInProgressRef.current) return;
-    recoveryInProgressRef.current = true;
-
-    // Stop polling during recovery
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    const attempt = recoveryAttemptRef.current + 1;
-    recoveryAttemptRef.current = attempt;
-    message.warning(`ADB 서버 재시작 중... (${attempt}/2)`);
-
-    try {
-      await deviceApi.adbRestart();
-      // Wait for ADB to stabilize
-      await new Promise(r => setTimeout(r, 3000));
-      // Refresh device list to check status
-      const listRes = await deviceApi.list();
-      if (listRes.data.primary) setPrimaryDevices(listRes.data.primary);
-      if (listRes.data.auxiliary) setAuxiliaryDevices(listRes.data.auxiliary);
-      const allDevs = [...(listRes.data.primary || []), ...(listRes.data.auxiliary || [])];
-      const stillConnecting = allDevs.some((d: any) => d.type === 'adb' && d.status === 'connecting');
-      if (stillConnecting) throw new Error('still connecting');
-
-      // Try screenshot if a device is selected
-      const deviceId = screenshotDeviceIdRef.current;
-      if (deviceId) {
-        const res = await deviceApi.screenshot(deviceId);
-        setScreenshot(`data:image/png;base64,${res.data.image}`);
-        intervalRef.current = setInterval(pollFn, pollInterval);
-      }
-      // Success
-      message.success('ADB 복구 성공');
-      recoveryAttemptRef.current = 0;
-      recoveryInProgressRef.current = false;
-      return;
-    } catch {
-      // Still failing
-    }
-
-    recoveryInProgressRef.current = false;
-
-    if (attempt < 2) {
-      message.warning('복구 실패, 3분 후 재시도합니다...');
-      recoveryTimerRef.current = setTimeout(() => {
-        startRecoveryRef.current?.();
-      }, 3 * 60 * 1000);
-    } else {
-      message.error('ADB 복구 실패 (2회 시도), 미러링을 중단합니다.');
-      recoveryAttemptRef.current = 0;
-      setScreenshotDeviceId('');
-      setScreenshot('');
-    }
-  }, [pollInterval, pollFn]);
-
-  // Keep ref in sync
-  useEffect(() => {
-    startRecoveryRef.current = startRecovery;
-  }, [startRecovery]);
-
   const refreshScreenshot = useCallback(async () => {
     const deviceId = screenshotDeviceIdRef.current;
     if (!deviceId) return;
@@ -195,13 +114,6 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
-    if (recoveryTimerRef.current) {
-      clearTimeout(recoveryTimerRef.current);
-      recoveryTimerRef.current = null;
-    }
-    recoveryAttemptRef.current = 0;
-    recoveryInProgressRef.current = false;
-
     if (!screenshotDeviceId) {
       setScreenshot('');
       return;
@@ -213,11 +125,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      if (recoveryTimerRef.current) {
-        clearTimeout(recoveryTimerRef.current);
-        recoveryTimerRef.current = null;
-      }
-    };
+};
   }, [screenshotDeviceId, pollInterval, pollFn]);
 
   return (

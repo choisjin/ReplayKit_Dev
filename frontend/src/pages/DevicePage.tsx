@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Card, Col, Input, InputNumber, List, Modal, Row, Select, Space, Table, Tabs, Tag, message } from 'antd';
-import { ReloadOutlined, MobileOutlined, PlusOutlined, DisconnectOutlined, UsbOutlined, WifiOutlined, SearchOutlined, EditOutlined } from '@ant-design/icons';
+import { ReloadOutlined, MobileOutlined, PlusOutlined, DisconnectOutlined, UsbOutlined, WifiOutlined, SearchOutlined, EditOutlined, SyncOutlined } from '@ant-design/icons';
 import { useDevice, ManagedDevice } from '../context/DeviceContext';
 import { deviceApi } from '../services/api';
 
@@ -32,6 +32,21 @@ interface SerialPort {
 
 export default function DevicePage() {
   const { primaryDevices, auxiliaryDevices, loading, fetchDevices, connectDevice, disconnectDevice } = useDevice();
+
+  // ADB reconnect state
+  const [reconnecting, setReconnecting] = useState(false);
+
+  const handleAdbReconnect = async () => {
+    setReconnecting(true);
+    try {
+      await deviceApi.adbRestart();
+      message.success('ADB 서버 재시작 완료');
+      await fetchDevices();
+    } catch {
+      message.error('ADB 서버 재시작 실패');
+    }
+    setReconnecting(false);
+  };
 
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -233,6 +248,16 @@ export default function DevicePage() {
       renderItem={(d) => (
         <List.Item
           actions={[
+            ...(d.type === 'adb' ? [
+              <Button
+                size="small"
+                icon={<SyncOutlined spin={reconnecting} />}
+                onClick={handleAdbReconnect}
+                loading={reconnecting}
+              >
+                재연결
+              </Button>,
+            ] : []),
             <Button
               size="small"
               icon={<EditOutlined />}
