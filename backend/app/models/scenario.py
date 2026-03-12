@@ -88,7 +88,6 @@ class Step(BaseModel):
     compare_mode: CompareMode = CompareMode.FULL
     exclude_rois: list[ROI] = Field(default_factory=list)  # regions to exclude (full_exclude mode)
     expected_images: list[CropItem] = Field(default_factory=list)  # multi_crop mode
-    multi_crop_strategy: str = "min"  # "min" or "average"
 
 
 class Scenario(BaseModel):

@@ -168,18 +168,16 @@ class ImageCompareService:
         crop_items: list[dict],
         threshold_pass: float = 0.95,
         threshold_warning: float = 0.85,
-        strategy: str = "min",
     ) -> dict:
         """Compare multiple cropped expected images against a single actual screenshot.
 
-        Returns aggregate score and per-crop sub-results.
+        Returns per-crop sub-results. Overall status is fail if any crop fails.
         """
         img_act = cv2.imread(actual_path)
         if img_act is None:
-            return {"score": 0.0, "error": "Could not read actual image", "sub_results": []}
+            return {"error": "Could not read actual image", "sub_results": []}
 
         sub_results = []
-        scores = []
 
         for item in crop_items:
             img_exp = cv2.imread(item["image"])
@@ -191,12 +189,10 @@ class ImageCompareService:
                     "status": "error",
                     "match_location": None,
                 })
-                scores.append(0.0)
                 continue
 
             result = self._compare_cropped(img_exp, img_act)
             score = result["score"]
-            scores.append(score)
 
             if score >= threshold_pass:
                 status = "pass"
@@ -213,23 +209,13 @@ class ImageCompareService:
                 "match_location": result.get("match_location"),
             })
 
-        # Aggregate
-        if not scores:
-            agg_score = 0.0
-        elif strategy == "average":
-            agg_score = round(float(np.mean(scores)), 4)
-        else:  # "min"
-            agg_score = round(float(np.min(scores)), 4)
-
         logger.info(
-            "Multi-crop comparison: %d crops, strategy=%s, aggregate=%.4f",
-            len(crop_items), strategy, agg_score,
+            "Multi-crop comparison: %d crops, results=%s",
+            len(crop_items),
+            [(sr["label"] or f"#{i}", sr["status"], sr["score"]) for i, sr in enumerate(sub_results)],
         )
 
-        return {
-            "score": agg_score,
-            "sub_results": sub_results,
-        }
+        return {"sub_results": sub_results}
 
     # ------------------------------------------------------------------
     # Level 2 — SSIM with status-bar masking
@@ -357,7 +343,6 @@ class ImageCompareService:
         compare_mode: str = "full",
         exclude_rois: Optional[list[dict]] = None,
         crop_items: Optional[list[dict]] = None,
-        strategy: str = "min",
     ) -> dict:
         """Return pass/fail/warning judgement with mode-aware dispatch."""
 
@@ -367,22 +352,22 @@ class ImageCompareService:
                 actual_path, crop_items,
                 threshold_pass=threshold_pass,
                 threshold_warning=threshold_warning,
-                strategy=strategy,
             )
             if "error" in mc_result:
                 return {"status": "error", "score": 0.0, "message": mc_result["error"], "sub_results": []}
 
-            score = mc_result["score"]
-            if score >= threshold_pass:
-                status = "pass"
-            elif score >= threshold_warning:
+            sub_results = mc_result["sub_results"]
+            # Overall: fail if any fail, warning if any warning, else pass
+            statuses = [sr["status"] for sr in sub_results]
+            if "fail" in statuses or "error" in statuses:
+                status = "fail"
+            elif "warning" in statuses:
                 status = "warning"
             else:
-                status = "fail"
+                status = "pass"
             return {
                 "status": status,
-                "score": score,
-                "sub_results": mc_result["sub_results"],
+                "sub_results": sub_results,
             }
 
         # --- Full-exclude mode ---

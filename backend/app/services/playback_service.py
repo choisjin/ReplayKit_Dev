@@ -253,10 +253,8 @@ class PlaybackService:
                             threshold_warning=step.similarity_threshold - 0.10,
                             compare_mode="multi_crop",
                             crop_items=crop_items,
-                            strategy=step.multi_crop_strategy,
                         )
                         step_result.status = judgement["status"]
-                        step_result.similarity_score = judgement["score"]
                         step_result.sub_results = [SubResult(**sr) for sr in judgement.get("sub_results", [])]
 
                         # Generate annotated image with all match boxes
@@ -269,7 +267,9 @@ class PlaybackService:
                         except Exception as e:
                             logger.warning("Failed to generate multi-crop annotated image: %s", e)
 
-                        step_result.message = f"Multi-crop ({step.multi_crop_strategy}): {judgement['score']:.4f}"
+                        # Build message from individual results
+                        parts = [f"{sr.label or f'#{i+1}'}:{sr.status}({sr.score:.2f})" for i, sr in enumerate(step_result.sub_results)]
+                        step_result.message = f"Multi-crop: {', '.join(parts)}"
 
                     elif mode == CompareMode.FULL_EXCLUDE:
                         # --- Full-exclude mode ---

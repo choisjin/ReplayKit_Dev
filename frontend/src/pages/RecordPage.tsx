@@ -74,7 +74,6 @@ interface Step {
   compare_mode?: 'full' | 'single_crop' | 'full_exclude' | 'multi_crop';
   exclude_rois?: ROI[];
   expected_images?: CropItem[];
-  multi_crop_strategy?: 'min' | 'average';
 }
 
 // Gesture detection thresholds
@@ -167,6 +166,10 @@ export default function RecordPage() {
   // Exclude ROI modal (for full_exclude mode)
   const [excludeRoiEditingIndex, setExcludeRoiEditingIndex] = useState<number | null>(null);
   const [excludeRoiModalOpen, setExcludeRoiModalOpen] = useState(false);
+  const [excludeRoiSelectedIdx, setExcludeRoiSelectedIdx] = useState<number | null>(null); // selected region to replace
+
+  // Multi-crop: which crop index to replace (null = append new)
+  const [replaceCropIdx, setReplaceCropIdx] = useState<number | null>(null);
   const excludeRoiCanvasRef = useRef<HTMLCanvasElement>(null);
   const excludeRoiScreenshotRef = useRef<string>('');
   const excludeRoiDragRef = useRef<{ startX: number; startY: number; curX: number; curY: number; active: boolean }>({
@@ -471,11 +474,24 @@ export default function RecordPage() {
           isMultiCrop ? 'multi_crop' : undefined,
         );
         if (isMultiCrop) {
-          setSteps(prev => prev.map((s, i) => {
-            if (i !== captureStepIndex) return s;
-            return { ...s, expected_images: [...(s.expected_images || []), { image: res.data.filename, label: '' }] };
-          }));
-          message.success(`스텝 #${captureStepIndex + 1} 멀티크롭 추가 완료 (${rw}×${rh})`);
+          if (replaceCropIdx != null) {
+            // Replace existing crop at index
+            setSteps(prev => prev.map((s, i) => {
+              if (i !== captureStepIndex) return s;
+              const imgs = [...(s.expected_images || [])];
+              imgs[replaceCropIdx] = { image: res.data.filename, label: imgs[replaceCropIdx]?.label || '' };
+              return { ...s, expected_images: imgs };
+            }));
+            message.success(`스텝 #${captureStepIndex + 1} 크롭 #${replaceCropIdx + 1} 수정 완료 (${rw}×${rh})`);
+            setReplaceCropIdx(null);
+          } else {
+            // Append new crop
+            setSteps(prev => prev.map((s, i) => {
+              if (i !== captureStepIndex) return s;
+              return { ...s, expected_images: [...(s.expected_images || []), { image: res.data.filename, label: '' }] };
+            }));
+            message.success(`스텝 #${captureStepIndex + 1} 멀티크롭 추가 완료 (${rw}×${rh})`);
+          }
         } else {
           setSteps(prev => prev.map((s, i) => i === captureStepIndex ? { ...s, expected_image: res.data.filename } : s));
           message.success(`스텝 #${captureStepIndex + 1} 크롭 기대이미지 저장 완료 (${rw}×${rh})`);
@@ -487,7 +503,7 @@ export default function RecordPage() {
         message.error(e.response?.data?.detail || '기대이미지 저장 실패');
       }
     }
-  }, [captureStepIndex, scenarioName, screenshotDeviceId, steps]);
+  }, [captureStepIndex, scenarioName, screenshotDeviceId, steps, replaceCropIdx]);
 
   useEffect(() => {
     if (captureModalOpen) setTimeout(() => drawCaptureCanvas(), 50);
@@ -576,13 +592,14 @@ export default function RecordPage() {
       if (stepIdx != null) {
         const existing = steps[stepIdx]?.exclude_rois || [];
         existing.forEach((r, ri) => {
-          ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+          const isSelected = ri === excludeRoiSelectedIdx;
+          ctx.fillStyle = isSelected ? 'rgba(24, 144, 255, 0.35)' : 'rgba(255, 0, 0, 0.3)';
           ctx.fillRect(r.x, r.y, r.width, r.height);
-          ctx.strokeStyle = '#ff4d4f';
-          ctx.lineWidth = 2;
+          ctx.strokeStyle = isSelected ? '#1890ff' : '#ff4d4f';
+          ctx.lineWidth = isSelected ? 3 : 2;
           ctx.strokeRect(r.x, r.y, r.width, r.height);
           ctx.fillStyle = '#fff';
-          ctx.font = '20px sans-serif';
+          ctx.font = isSelected ? 'bold 22px sans-serif' : '20px sans-serif';
           ctx.fillText(`#${ri + 1}`, r.x + 4, r.y + 22);
         });
       }
@@ -601,7 +618,7 @@ export default function RecordPage() {
       }
     };
     img.src = src;
-  }, [excludeRoiEditingIndex, steps]);
+  }, [excludeRoiEditingIndex, excludeRoiSelectedIdx, steps]);
 
   const openExcludeRoiModal = useCallback((index: number) => {
     excludeRoiScreenshotRef.current = screenshot || '';
@@ -648,15 +665,28 @@ export default function RecordPage() {
     const rh = Math.abs(curY - startY);
     if (rw > 10 && rh > 10 && excludeRoiEditingIndex != null) {
       const newRoi = { x: rx, y: ry, width: rw, height: rh };
-      setSteps(prev => prev.map((s, i) => {
-        if (i !== excludeRoiEditingIndex) return s;
-        return { ...s, exclude_rois: [...(s.exclude_rois || []), newRoi] };
-      }));
-      message.success(`제외 영역 추가: ${rw}×${rh} @ (${rx},${ry})`);
+      if (excludeRoiSelectedIdx != null) {
+        // Replace selected region
+        setSteps(prev => prev.map((s, i) => {
+          if (i !== excludeRoiEditingIndex) return s;
+          const rois = [...(s.exclude_rois || [])];
+          rois[excludeRoiSelectedIdx] = newRoi;
+          return { ...s, exclude_rois: rois };
+        }));
+        message.success(`제외 영역 #${excludeRoiSelectedIdx + 1} 수정: ${rw}×${rh} @ (${rx},${ry})`);
+        setExcludeRoiSelectedIdx(null);
+      } else {
+        // Append new region
+        setSteps(prev => prev.map((s, i) => {
+          if (i !== excludeRoiEditingIndex) return s;
+          return { ...s, exclude_rois: [...(s.exclude_rois || []), newRoi] };
+        }));
+        message.success(`제외 영역 추가: ${rw}×${rh} @ (${rx},${ry})`);
+      }
       // Redraw canvas with updated regions after state update
       setTimeout(() => drawExcludeRoiCanvas(), 50);
     }
-  }, [excludeRoiEditingIndex, drawExcludeRoiCanvas]);
+  }, [excludeRoiEditingIndex, excludeRoiSelectedIdx, drawExcludeRoiCanvas]);
 
   const removeExcludeRoi = useCallback((stepIdx: number, roiIdx: number) => {
     setSteps(prev => prev.map((s, i) => {
@@ -1159,13 +1189,29 @@ export default function RecordPage() {
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginRight: 4 }}>
                   {s.expected_images!.map((ci, ci_idx) => (
                     <span key={ci_idx} style={{ display: 'inline-flex', alignItems: 'center', position: 'relative' }}>
-                      <Tooltip title={ci.label || `크롭 #${ci_idx + 1}`}>
-                        <Image
-                          src={`/screenshots/${scenarioName}/${ci.image}`}
-                          alt={`crop-${ci_idx}`}
-                          style={{ height: 32, width: 18, objectFit: 'cover', borderRadius: 2, cursor: 'pointer' }}
-                          preview={{ mask: false }}
-                        />
+                      <Tooltip title={`${ci.label || `크롭 #${ci_idx + 1}`} — 클릭하여 다시 캡처`}>
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReplaceCropIdx(ci_idx);
+                            openMultiCropCapture(index);
+                          }}
+                          style={{
+                            display: 'inline-block',
+                            border: '2px solid transparent',
+                            borderRadius: 3,
+                            cursor: 'pointer',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#1890ff')}
+                          onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'transparent')}
+                        >
+                          <Image
+                            src={`/screenshots/${scenarioName}/${ci.image}`}
+                            alt={`crop-${ci_idx}`}
+                            style={{ height: 32, width: 18, objectFit: 'cover', borderRadius: 2 }}
+                            preview={{ mask: false }}
+                          />
+                        </span>
                       </Tooltip>
                       <CloseCircleOutlined
                         onClick={() => removeCropItem(index, ci_idx)}
@@ -1183,7 +1229,16 @@ export default function RecordPage() {
                   : JSON.stringify(s.params)}
               </span>
               {s.type !== 'wait' && (
-                <Tag color="orange" style={{ marginLeft: 8 }}>{s.delay_after_ms}ms</Tag>
+                <InputNumber
+                  size="small"
+                  min={0}
+                  max={30000}
+                  step={100}
+                  value={s.delay_after_ms}
+                  onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, delay_after_ms: v || 0 } : st))}
+                  addonAfter="ms"
+                  style={{ width: 110, marginLeft: 8 }}
+                />
               )}
               {s.roi && (
                 <Tag color="orange" style={{ marginLeft: 4 }}>
@@ -1195,7 +1250,7 @@ export default function RecordPage() {
               )}
               {s.compare_mode === 'multi_crop' && (
                 <Tag color="purple" style={{ marginLeft: 4 }}>
-                  크롭 {s.expected_images?.length || 0}개 ({s.multi_crop_strategy === 'average' ? '평균' : '최소'})
+                  크롭 {s.expected_images?.length || 0}개
                 </Tag>
               )}
               {s.on_pass_goto != null && (
@@ -1289,16 +1344,6 @@ export default function RecordPage() {
                       title="크롭 이미지 추가"
                       style={(s.expected_images?.length || 0) > 0 ? { color: '#52c41a' } : undefined}
                       onClick={() => openMultiCropCapture(index)}
-                    />
-                    <Select
-                      size="small"
-                      value={s.multi_crop_strategy || 'min'}
-                      onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, multi_crop_strategy: v } : st))}
-                      style={{ width: 80, fontSize: 11 }}
-                      options={[
-                        { value: 'min', label: '최소값' },
-                        { value: 'average', label: '평균값' },
-                      ]}
                     />
                   </>
                 )}
@@ -1657,13 +1702,13 @@ export default function RecordPage() {
 
       {/* Expected Image Crop Modal */}
       <Modal
-        title={`기대이미지 크롭 — 스텝 #${(captureStepIndex ?? 0) + 1} (저장할 영역을 드래그하세요)`}
+        title={`기대이미지 크롭 — 스텝 #${(captureStepIndex ?? 0) + 1}${replaceCropIdx != null ? ` [크롭 #${replaceCropIdx + 1} 수정]` : ''} (저장할 영역을 드래그하세요)`}
         open={captureModalOpen}
-        onCancel={() => { setCaptureModalOpen(false); setCaptureStepIndex(null); }}
+        onCancel={() => { setCaptureModalOpen(false); setCaptureStepIndex(null); setReplaceCropIdx(null); }}
         width="90vw"
         style={{ top: 20 }}
         footer={
-          <Button onClick={() => { setCaptureModalOpen(false); setCaptureStepIndex(null); }}>
+          <Button onClick={() => { setCaptureModalOpen(false); setCaptureStepIndex(null); setReplaceCropIdx(null); }}>
             취소
           </Button>
         }
@@ -1727,12 +1772,12 @@ export default function RecordPage() {
       <Modal
         title={`제외 영역 편집 — 스텝 #${(excludeRoiEditingIndex ?? 0) + 1} (드래그하여 제외할 영역 추가)`}
         open={excludeRoiModalOpen}
-        onCancel={() => { setExcludeRoiModalOpen(false); setExcludeRoiEditingIndex(null); }}
+        onCancel={() => { setExcludeRoiModalOpen(false); setExcludeRoiEditingIndex(null); setExcludeRoiSelectedIdx(null); }}
         width="90vw"
         style={{ top: 20 }}
         footer={
           <Space>
-            <Button onClick={() => { setExcludeRoiModalOpen(false); setExcludeRoiEditingIndex(null); }}>
+            <Button onClick={() => { setExcludeRoiModalOpen(false); setExcludeRoiEditingIndex(null); setExcludeRoiSelectedIdx(null); }}>
               닫기
             </Button>
             {excludeRoiEditingIndex != null && (steps[excludeRoiEditingIndex]?.exclude_rois?.length || 0) > 0 && (
@@ -1757,16 +1802,25 @@ export default function RecordPage() {
         </div>
         {excludeRoiEditingIndex != null && (steps[excludeRoiEditingIndex]?.exclude_rois?.length || 0) > 0 && (
           <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>제외 영역 목록 (클릭하여 삭제):</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>제외 영역 목록 (클릭하여 선택 후 드래그로 수정, X로 삭제):</div>
             <Space wrap>
               {steps[excludeRoiEditingIndex]?.exclude_rois?.map((r, ri) => (
                 <Tag
                   key={ri}
-                  color="red"
+                  color={excludeRoiSelectedIdx === ri ? 'blue' : 'red'}
                   closable
-                  onClose={() => removeExcludeRoi(excludeRoiEditingIndex!, ri)}
+                  onClose={() => {
+                    removeExcludeRoi(excludeRoiEditingIndex!, ri);
+                    if (excludeRoiSelectedIdx === ri) setExcludeRoiSelectedIdx(null);
+                    else if (excludeRoiSelectedIdx != null && excludeRoiSelectedIdx > ri) setExcludeRoiSelectedIdx(excludeRoiSelectedIdx - 1);
+                  }}
+                  style={{ cursor: 'pointer', border: excludeRoiSelectedIdx === ri ? '2px solid #1890ff' : undefined }}
+                  onClick={() => {
+                    setExcludeRoiSelectedIdx(prev => prev === ri ? null : ri);
+                    setTimeout(() => drawExcludeRoiCanvas(), 50);
+                  }}
                 >
-                  #{ri + 1} {r.width}×{r.height} @ ({r.x},{r.y})
+                  #{ri + 1} {r.width}×{r.height} @ ({r.x},{r.y}){excludeRoiSelectedIdx === ri ? ' ✎' : ''}
                 </Tag>
               ))}
             </Space>
