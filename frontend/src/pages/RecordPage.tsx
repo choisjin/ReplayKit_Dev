@@ -1271,8 +1271,10 @@ export default function RecordPage() {
                     <Select.OptGroup label="보조 디바이스">
                       {auxiliaryDevices.map(d => (
                         <Option key={d.id} value={d.id}>
-                          <Tag color="purple" style={{ marginRight: 4 }}>{d.info?.module || d.type.toUpperCase()}</Tag>
-                          {d.name || d.id}
+                          {d.info?.module
+                            ? <><Tag color="purple" style={{ marginRight: 4 }}>{d.info.module}</Tag>{d.address || d.name || d.id}</>
+                            : <><Tag color="purple" style={{ marginRight: 4 }}>{d.type.toUpperCase()}</Tag>{d.name || d.id}</>
+                          }
                         </Option>
                       ))}
                     </Select.OptGroup>
