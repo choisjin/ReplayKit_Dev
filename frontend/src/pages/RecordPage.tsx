@@ -1017,6 +1017,7 @@ export default function RecordPage() {
           stepType === 'serial_command' ? `Serial: ${serialData.substring(0, 30)}` : ''
         ),
         delay_after_ms: delayMs,
+        skip_execute: true,
       });
       setSteps((prev) => [...prev, res.data.step]);
       setStepDesc('');
