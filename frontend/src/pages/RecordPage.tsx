@@ -1049,11 +1049,8 @@ export default function RecordPage() {
           stepType === 'serial_command' ? `Serial: ${serialData.substring(0, 30)}` : ''
         ),
         delay_after_ms: delayMs,
-        skip_execute: stepType !== 'serial_command',
+        skip_execute: true,
       });
-      if (stepType === 'serial_command' && res.data.response) {
-        setSerialResponse(res.data.response);
-      }
       setSteps((prev) => [...prev, res.data.step]);
       setStepDesc('');
       setSerialData('');
