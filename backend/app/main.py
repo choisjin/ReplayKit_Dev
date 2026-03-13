@@ -60,14 +60,34 @@ screenshots_dir = Path(__file__).resolve().parent.parent / "screenshots"
 screenshots_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/screenshots", StaticFiles(directory=str(screenshots_dir)), name="screenshots")
 
+# Serve built frontend (production mode — no Node.js needed)
+_frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+if _frontend_dist.is_dir():
+    from fastapi.responses import FileResponse
 
-@app.get("/")
-async def root():
-    return {
-        "app": "Android System Auto Test Recording",
-        "version": "0.1.0",
-        "docs": "/docs",
-    }
+    @app.get("/")
+    async def root():
+        return FileResponse(str(_frontend_dist / "index.html"))
+
+    # SPA fallback: serve index.html for any unmatched route (client-side routing)
+    app.mount("/assets", StaticFiles(directory=str(_frontend_dist / "assets")), name="frontend-assets")
+
+    @app.api_route("/{path:path}", methods=["GET"], include_in_schema=False)
+    async def spa_fallback(path: str):
+        # Serve static file if it exists, otherwise index.html for SPA routing
+        file_path = _frontend_dist / path
+        if file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(_frontend_dist / "index.html"))
+else:
+    @app.get("/")
+    async def root():
+        return {
+            "app": "Android System Auto Test Recording",
+            "version": "0.1.0",
+            "docs": "/docs",
+            "note": "Frontend not built. Run 'npm run build' in frontend/ directory.",
+        }
 
 
 @app.websocket("/ws/screen")

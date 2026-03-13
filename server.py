@@ -154,9 +154,23 @@ class ServerManagerApp:
             "http://localhost:5173",
         )
 
+        # Check if frontend dist exists (built mode — no npm needed)
+        self._frontend_built = os.path.isdir(os.path.join(FRONTEND_DIR, "dist"))
+        # Check if npm is available
+        self._npm_available = self._check_npm(npm_cmd)
+
         self._build_ui()
         self._update_status()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    @staticmethod
+    def _check_npm(npm_cmd: str) -> bool:
+        try:
+            subprocess.run([npm_cmd, "--version"], capture_output=True, timeout=5,
+                           creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
+            return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
 
     # ── UI 구성 ──
 
@@ -175,7 +189,8 @@ class ServerManagerApp:
         cards_frame.columnconfigure(1, weight=1)
 
         self.be_card = self._build_server_card(cards_frame, "백엔드", "FastAPI · :8000", 0)
-        self.fe_card = self._build_server_card(cards_frame, "프론트엔드", "Vite · :5173", 1)
+        fe_subtitle = "Vite · :5173" if self._npm_available else "빌드 모드 · :8000" if self._frontend_built else "미설치"
+        self.fe_card = self._build_server_card(cards_frame, "프론트엔드", fe_subtitle, 1)
 
         # 전체 제어 버튼
         btn_frame = tk.Frame(self.root, bg=BG)
@@ -327,17 +342,33 @@ class ServerManagerApp:
     # ── 상태 업데이트 (주기적) ──
 
     def _update_status(self):
-        for server, card in [(self.backend, self.be_card), (self.frontend, self.fe_card)]:
-            if server.running:
-                card["indicator"].configure(fg=GREEN)
-                card["status_lbl"].configure(text="실행 중", fg=GREEN)
+        # Backend card
+        if self.backend.running:
+            self.be_card["indicator"].configure(fg=GREEN)
+            self.be_card["status_lbl"].configure(text="실행 중", fg=GREEN)
+        else:
+            self.be_card["indicator"].configure(fg=RED)
+            self.be_card["status_lbl"].configure(text="정지됨", fg=FG_DIM)
+
+        # Frontend card
+        if not self._npm_available and self._frontend_built:
+            # Built mode: frontend served by backend
+            if self.backend.running:
+                self.fe_card["indicator"].configure(fg=GREEN)
+                self.fe_card["status_lbl"].configure(text="백엔드 서빙", fg=BLUE)
             else:
-                card["indicator"].configure(fg=RED)
-                card["status_lbl"].configure(text="정지됨", fg=FG_DIM)
+                self.fe_card["indicator"].configure(fg=FG_DIM)
+                self.fe_card["status_lbl"].configure(text="대기", fg=FG_DIM)
+        elif self.frontend.running:
+            self.fe_card["indicator"].configure(fg=GREEN)
+            self.fe_card["status_lbl"].configure(text="실행 중", fg=GREEN)
+        else:
+            self.fe_card["indicator"].configure(fg=RED)
+            self.fe_card["status_lbl"].configure(text="정지됨", fg=FG_DIM)
 
         be_run = self.backend.running
         fe_run = self.frontend.running
-        if be_run and fe_run:
+        if be_run and (fe_run or (not self._npm_available and self._frontend_built)):
             self.statusbar.configure(text="백엔드 + 프론트엔드 실행 중")
         elif be_run:
             self.statusbar.configure(text="백엔드만 실행 중")
@@ -370,11 +401,19 @@ class ServerManagerApp:
     def _start_all(self):
         def _do():
             self.backend.start(self._log)
-            self.frontend.start(self._log)
+            if self._npm_available:
+                self.frontend.start(self._log)
+            elif self._frontend_built:
+                self._log("[프론트엔드] npm 없음 — 빌드된 프론트엔드를 백엔드(:8000)에서 서빙합니다")
+            else:
+                self._log("[프론트엔드] npm 없음, 빌드 파일 없음 — 'npm run build' 실행 필요")
         threading.Thread(target=_do, daemon=True).start()
 
     def _open_web(self):
-        webbrowser.open(self.frontend.url)
+        if self._npm_available and self.frontend.running:
+            webbrowser.open(self.frontend.url)
+        else:
+            webbrowser.open(self.backend.url)
 
     def _stop_all(self):
         def _do():
