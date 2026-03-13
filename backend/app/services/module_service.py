@@ -48,9 +48,11 @@ def _list_plugin_modules() -> list[dict]:
                 connect_type = "socket"
             else:
                 connect_type = "none"
+            # Use a cleaner label: strip "Plugin" suffix if present
+            label = module_name.replace("Plugin", "") if module_name.endswith("Plugin") else module_name
             plugins.append({
                 "name": module_name,
-                "label": module_name,
+                "label": label,
                 "connect_type": connect_type,
                 "connect_fields": [],
                 "_source": "plugin",
