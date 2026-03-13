@@ -190,15 +190,23 @@ export default function ResultsPage() {
   };
 
   const exportExcel = async (filename: string) => {
+    // Always try server-side save first
     try {
-      // Always try server-side save first; falls back to browser download if no dir configured
-      try {
-        const path = await saveExcelToDir(filename);
-        message.success(`Excel 저장 완료: ${path}`);
-        return;
-      } catch (serverErr: any) {
-        if (serverErr.response?.status !== 400) throw serverErr;
+      const path = await saveExcelToDir(filename);
+      message.success(`Excel 저장 완료: ${path}`);
+      return;
+    } catch (serverErr: any) {
+      const status = serverErr.response?.status;
+      const detail = serverErr.response?.data?.detail || '';
+      if (status !== 400 || !detail.includes('경로가 설정되지')) {
+        if (status) {
+          message.error(`Excel 저장 실패 (${status}): ${detail}`);
+          return;
+        }
       }
+    }
+    // Fallback: browser download
+    try {
       const res = await resultsApi.exportExcel(filename);
       const blob = new Blob([res.data], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

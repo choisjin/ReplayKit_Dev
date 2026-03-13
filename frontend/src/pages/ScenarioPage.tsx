@@ -129,7 +129,7 @@ const formatTime = (iso: string) => {
 };
 
 export default function ScenarioPage() {
-  const { settings, uploadWebcamRecording, saveExcelToDir } = useSettings();
+  const { settings, uploadWebcamRecording, saveExcelToDir, saveExportZipToDir } = useSettings();
   const webcam = useWebcam();
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<ScenarioDetail | null>(null);
@@ -375,6 +375,28 @@ export default function ScenarioPage() {
   const doExport = async () => {
     setExportLoading(true);
     try {
+      // Try server-side save first if path is configured
+      try {
+        const path = await saveExportZipToDir(
+          exportAll ? [] : exportSelectedScenarios,
+          exportAll ? [] : exportSelectedGroups,
+          exportAll,
+        );
+        setExportModalVisible(false);
+        message.success(`내보내기 저장 완료: ${path}`);
+        setExportLoading(false);
+        return;
+      } catch (serverErr: any) {
+        const status = serverErr.response?.status;
+        if (status !== 400) {
+          const detail = serverErr.response?.data?.detail || serverErr.message || String(serverErr);
+          message.error(`내보내기 저장 실패: ${detail}`);
+          setExportLoading(false);
+          return;
+        }
+        // 400 = path not configured, fallback to browser download
+      }
+
       const res = await scenarioApi.exportZip(
         exportAll ? [] : exportSelectedScenarios,
         exportAll ? [] : exportSelectedGroups,
@@ -720,16 +742,21 @@ export default function ScenarioPage() {
   };
 
   const exportExcel = async (filename: string) => {
+    // Always try server-side save first
     try {
-      // Always try server-side save first; falls back to browser download if no dir configured
-      try {
-        const path = await saveExcelToDir(filename);
-        message.success(`Excel 저장 완료: ${path}`);
-        return;
-      } catch (serverErr: any) {
-        // If server says no dir configured (400), fall back to browser download
-        if (serverErr.response?.status !== 400) throw serverErr;
-      }
+      console.log('[exportExcel] trying saveExcelToDir', filename);
+      const path = await saveExcelToDir(filename);
+      console.log('[exportExcel] success:', path);
+      message.success(`Excel 저장 완료: ${path}`);
+      return;
+    } catch (serverErr: any) {
+      console.error('[exportExcel] saveExcelToDir failed:', serverErr);
+      console.error('[exportExcel] response:', serverErr.response?.status, serverErr.response?.data);
+      const detail = serverErr.response?.data?.detail || serverErr.message || String(serverErr);
+      message.error(`Excel 서버 저장 실패: ${detail}`);
+    }
+    // Fallback: browser download
+    try {
       const res = await resultsApi.exportExcel(filename);
       const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = window.URL.createObjectURL(blob);

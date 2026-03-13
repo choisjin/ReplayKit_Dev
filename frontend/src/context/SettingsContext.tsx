@@ -7,6 +7,7 @@ export interface AppSettings {
   theme: 'light' | 'dark';
   webcam_save_dir: string;
   excel_export_dir: string;
+  scenario_export_dir: string;
 }
 
 interface SettingsContextType {
@@ -15,6 +16,7 @@ interface SettingsContextType {
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>;
   uploadWebcamRecording: (blob: Blob, filename: string) => Promise<string>;
   saveExcelToDir: (resultFilename: string) => Promise<string>;
+  saveExportZipToDir: (scenarios: string[], groups: string[], includeAll: boolean) => Promise<string>;
   browseFolder: (initialDir?: string) => Promise<string>;
 }
 
@@ -22,6 +24,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
   webcam_save_dir: '',
   excel_export_dir: '',
+  scenario_export_dir: '',
 };
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
@@ -50,7 +53,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const saveExcelToDir = useCallback(async (resultFilename: string): Promise<string> => {
-    const res = await api.post(`/settings/save-excel/${resultFilename}`);
+    const res = await api.post('/settings/save-excel', { result_filename: resultFilename });
+    return res.data.path;
+  }, []);
+
+  const saveExportZipToDir = useCallback(async (scenarios: string[], groups: string[], includeAll: boolean): Promise<string> => {
+    const res = await api.post('/settings/save-export-zip', { scenarios, groups, include_all: includeAll });
     return res.data.path;
   }, []);
 
@@ -60,7 +68,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <SettingsContext.Provider value={{ settings, loading, updateSettings, uploadWebcamRecording, saveExcelToDir, browseFolder }}>
+    <SettingsContext.Provider value={{ settings, loading, updateSettings, uploadWebcamRecording, saveExcelToDir, saveExportZipToDir, browseFolder }}>
       {children}
     </SettingsContext.Provider>
   );

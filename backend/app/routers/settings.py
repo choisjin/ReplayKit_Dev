@@ -18,6 +18,7 @@ _DEFAULTS = {
     "theme": "dark",
     "webcam_save_dir": "",
     "excel_export_dir": "",
+    "scenario_export_dir": "",
 }
 
 
@@ -44,6 +45,7 @@ class UpdateSettingsRequest(BaseModel):
     theme: Optional[str] = None
     webcam_save_dir: Optional[str] = None
     excel_export_dir: Optional[str] = None
+    scenario_export_dir: Optional[str] = None
 
 
 @router.post("")
@@ -55,6 +57,8 @@ async def update_settings(req: UpdateSettingsRequest):
         current["webcam_save_dir"] = req.webcam_save_dir
     if req.excel_export_dir is not None:
         current["excel_export_dir"] = req.excel_export_dir
+    if req.scenario_export_dir is not None:
+        current["scenario_export_dir"] = req.scenario_export_dir
     _save(current)
     return current
 
@@ -115,11 +119,18 @@ async def upload_webcam_recording(file: UploadFile = File(...), filename: str = 
         raise HTTPException(status_code=500, detail=f"파일 저장 실패: {e}")
 
 
-@router.post("/save-excel/{result_filename}")
-async def save_excel_to_dir(result_filename: str):
+class SaveExcelRequest(BaseModel):
+    result_filename: str
+
+
+@router.post("/save-excel")
+async def save_excel_to_dir(req: SaveExcelRequest):
     """Export Excel and save directly to the configured directory."""
+    result_filename = req.result_filename
+    print(f"[save-excel] result_filename={result_filename!r}, settings_file={_SETTINGS_FILE}")
     settings = _load()
     save_dir = settings.get("excel_export_dir", "")
+    print(f"[save-excel] excel_export_dir={save_dir!r}")
     if not save_dir:
         raise HTTPException(status_code=400, detail="Excel 저장 경로가 설정되지 않았습니다. 설정 탭에서 경로를 지정하세요.")
 
@@ -151,3 +162,48 @@ async def save_excel_to_dir(result_filename: str):
         return {"result": "ok", "path": str(dest)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Excel 저장 실패: {e}")
+
+
+class SaveExportZipRequest(BaseModel):
+    scenarios: list[str] = []
+    groups: list[str] = []
+    include_all: bool = False
+
+
+@router.post("/save-export-zip")
+async def save_export_zip(req: SaveExportZipRequest):
+    """Export scenarios/groups as ZIP and save to the configured directory."""
+    settings = _load()
+    save_dir = settings.get("scenario_export_dir", "")
+    if not save_dir:
+        raise HTTPException(status_code=400, detail="내보내기 저장 경로가 설정되지 않았습니다. 설정 탭에서 경로를 지정하세요.")
+
+    dirpath = Path(save_dir)
+    if not dirpath.exists():
+        try:
+            dirpath.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"디렉토리 생성 실패: {e}")
+
+    from .scenario import recording_svc
+    scenario_names = req.scenarios
+    group_names = req.groups
+
+    if req.include_all:
+        scenario_names = await recording_svc.list_scenarios()
+        group_names = list(recording_svc.get_groups().keys())
+
+    if not scenario_names and not group_names:
+        raise HTTPException(status_code=400, detail="내보낼 항목이 없습니다.")
+
+    zip_bytes = await recording_svc.export_zip(scenario_names, group_names)
+
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    zip_name = f"recording_export_{ts}.zip"
+    dest = dirpath / zip_name
+    try:
+        dest.write_bytes(zip_bytes)
+        return {"result": "ok", "path": str(dest)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ZIP 저장 실패: {e}")
