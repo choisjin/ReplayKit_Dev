@@ -1,0 +1,114 @@
+20260312_115705 Connect Success Port : 7
+20260312_115705 SetCANFDTickCount(1) Called
+20260312_115705 SetCANMonitor(1) Called
+20260312_115705 FlagCANDataList(1) Called
+20260312_115705 FlagCANDataList() Called, and return 1
+20260312_115705 FlagCANDataList() Called, and return 1
+20260312_115706 FlagCANDataList() Called, and return 1
+20260312_115706 FlagCANDataList() Called, and return 1
+20260312_115706 FlagCANDataList() Called, and return 1
+20260312_115706 FlagCANDataList() Called, and return 1
+20260312_115706 FlagCANDataList() Called, and return 1
+20260312_115706 FlagCANDataList() Called, and return 1
+20260312_115706 FlagCANDataList() Called, and return 1
+20260312_115706 FlagCANDataList() Called, and return 1
+20260312_115706 FlagCANDataList() Called, and return 1
+20260312_115707 FlagCANDataList() Called, and return 1
+20260312_115707 FlagCANDataList() Called, and return 1
+20260312_115707 FlagCANDataList() Called, and return 1
+20260312_115707 FlagCANDataList() Called, and return 1
+20260312_115707 FlagCANDataList() Called, and return 1
+20260312_115707 FlagCANDataList() Called, and return 1
+20260312_115707 FlagCANDataList() Called, and return 1
+20260312_115707 FlagCANDataList() Called, and return 1
+20260312_115707 FlagCANDataList() Called, and return 1
+20260312_115707 FlagCANDataList() Called, and return 1
+20260312_115708 FlagCANDataList() Called, and return 1
+20260312_115708 FlagCANDataList() Called, and return 1
+20260312_115708 FlagCANDataList() Called, and return 1
+20260312_115708 FlagCANDataList() Called, and return 1
+20260312_115708 FlagCANDataList() Called, and return 1
+20260312_115708 FlagCANDataList() Called, and return 1
+20260312_115708 FlagCANDataList() Called, and return 1
+20260312_115708 FlagCANDataList() Called, and return 1
+20260312_115708 FlagCANDataList() Called, and return 1
+20260312_115709 FlagCANDataList() Called, and return 1
+20260312_115709 FlagCANDataList() Called, and return 1
+20260312_115709 FlagCANDataList() Called, and return 1
+20260312_115709 FlagCANDataList() Called, and return 1
+20260312_115709 FlagCANDataList() Called, and return 1
+20260312_115709 FlagCANDataList() Called, and return 1
+20260312_115709 FlagCANDataList() Called, and return 1
+20260312_115709 FlagCANDataList() Called, and return 1
+20260312_115709 FlagCANDataList() Called, and return 1
+20260312_115710 FlagCANDataList() Called, and return 1
+20260312_115710 FlagCANDataList() Called, and return 1
+20260312_115710 FlagCANDataList() Called, and return 1
+20260312_115710 FlagCANDataList() Called, and return 1
+20260312_115710 FlagCANDataList() Called, and return 1
+20260312_115710 FlagCANDataList() Called, and return 1
+20260312_115710 FlagCANDataList() Called, and return 1
+20260312_115710 FlagCANDataList() Called, and return 1
+20260312_115710 FlagCANDataList() Called, and return 1
+20260312_115710 FlagCANDataList() Called, and return 1
+20260312_115711 FlagCANDataList() Called, and return 1
+20260312_115711 FlagCANDataList() Called, and return 1
+20260312_115711 ProcSend Start
+20260312_115711 COMSend Start : 61 61 00 00 00 05 10 01 D6 1D 6F   End (Success)
+20260312_115711 ProcSend End
+20260312_115711 ReqInitial() Called
+20260312_115711 SetCANMonitor(0) Called
+20260312_115711 FlagCANDataList(0) Called
+20260312_115711 ProcSend Start
+20260312_115711 COMSend Start : 61 61 00 00 00 05 10 04 3B 8C 6F   End (Success)
+20260312_115711 ProcSend End
+20260312_115711 GetBuadrate() Called
+20260312_115711 ProcSend Start
+20260312_115711 COMSend Start : 61 61 00 00 00 07 10 03 D0 30 78 1D 6F   End (Success)
+20260312_115711 ProcSend End
+20260312_115711 SetBaudrate(208, 48) Called
+20260312_115711 ProcSend Start
+20260312_115711 COMSend Start : 61 61 00 00 00 06 10 09 01 46 84 6F   End (Success)
+20260312_115711 ProcSend End
+20260312_115711 SetDeviceNumber(1) Called
+20260312_115711 DLL - Response Buadrate CANatTransportProc COM
+20260312_115711 ProcSend Start
+20260312_115711 COMSend Start : 61 61 00 00 00 07 10 03 00 00 43 33 6F   End (Success)
+20260312_115711 ProcSend End
+20260312_115711 SetBaudrate(0, 0) Called
+20260312_115845 ProcSend Start
+20260312_115845 COMSend Start : 61 61 00 00 00 05 10 01 D6 1D 6F   End (Success)
+20260312_115845 ProcSend End
+20260312_115848 ProcSend Start
+20260312_115848 COMSend Start : 61 61 00 00 00 05 10 01 D6 1D 6F   End (Success)
+20260312_115848 ProcSend End
+20260312_120032 ProcSend Start
+20260312_120032 COMSend Start : 61 61 00 00 00 18 10 00 00 00 01 01 00 64 04 79 FF FF 08 00 00 00 00 00 02 00 00 1F D9 6F   End (Success)
+20260312_120032 ProcSend End
+20260312_120055 ProcSend Start
+20260312_120055 COMSend Start : 61 61 00 00 00 18 10 00 00 00 01 01 00 64 04 77 FF FF 08 00 00 00 00 00 C0 00 00 2D A0 6F   End (Success)
+20260312_120055 ProcSend End
+20260312_120106 ProcSend Start
+20260312_120106 COMSend Start : 61 61 00 00 00 18 10 00 00 00 01 01 00 64 04 7A FF FF 08 00 00 50 00 00 00 00 00 09 06 6F   End (Success)
+20260312_120106 ProcSend End
+20260312_120116 ProcSend Start
+20260312_120116 COMSend Start : 61 61 00 00 00 18 10 00 00 00 02 01 00 64 03 4A FF FF 08 C0 00 00 00 00 00 00 00 D8 70 6F   End (Success)
+20260312_120116 ProcSend End
+20260312_120209 ProcSend Start
+20260312_120209 COMSend Start : 61 61 00 00 00 05 10 01 D6 1D 6F   End (Success)
+20260312_120209 ProcSend End
+20260312_120212 ProcSend Start
+20260312_120212 COMSend Start : 61 61 00 00 00 05 10 01 D6 1D 6F   End (Success)
+20260312_120212 ProcSend End
+20260312_120240 ProcSend Start
+20260312_120240 COMSend Start : 61 61 00 00 00 18 10 00 00 00 01 01 00 64 04 79 FF FF 08 00 00 00 00 00 02 00 00 1F D9 6F   End (Success)
+20260312_120240 ProcSend End
+20260312_120243 ProcSend Start
+20260312_120243 COMSend Start : 61 61 00 00 00 18 10 00 00 00 01 01 00 64 04 77 FF FF 08 00 00 00 00 00 C0 00 00 2D A0 6F   End (Success)
+20260312_120243 ProcSend End
+20260312_120246 ProcSend Start
+20260312_120246 COMSend Start : 61 61 00 00 00 18 10 00 00 00 01 01 00 64 04 7A FF FF 08 00 00 50 00 00 00 00 00 09 06 6F   End (Success)
+20260312_120246 ProcSend End
+20260312_120249 ProcSend Start
+20260312_120249 COMSend Start : 61 61 00 00 00 18 10 00 00 00 02 01 00 64 03 4A FF FF 08 C0 00 00 00 00 00 00 00 D8 70 6F   End (Success)
+20260312_120249 ProcSend End

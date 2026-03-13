@@ -1,5 +1,7 @@
 {
-  "theme": "light",
-  "webcam_save_dir": "E:/Project/insert_image_excel/2025_11_24_23_20_45_왕길동 원흥아파트",
-  "excel_export_dir": "E:\\새 폴더"
+  "theme": "dark",
+  "webcam_save_dir": "D:/Recording_test/Video",
+  "excel_export_dir": "D:/Recording_test/Report",
+  "scenario_export_dir": "D:/Recording_test/Scenario",
+  "language": "ko"
 }
