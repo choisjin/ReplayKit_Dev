@@ -6,15 +6,54 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import cv2
-import numpy as np
-from skimage.metrics import structural_similarity as ssim
+def _clean_path_for_cv2():
+    """Remove conflicting Python directories from PATH before loading cv2.
+
+    When multiple Python installations (especially 32-bit ones like Python27)
+    exist in PATH, Windows may load incompatible DLLs causing cv2 to fail with
+    'not a valid Win32 application' error.
+    """
+    import os
+    conflicting = ("python27", "python37", "python38")
+    original = os.environ.get("PATH", "")
+    cleaned = ";".join(
+        p for p in original.split(";")
+        if not any(c in p.lower() for c in conflicting)
+    )
+    os.environ["PATH"] = cleaned
+    return original
+
+
+try:
+    _original_path = _clean_path_for_cv2()
+    import cv2
+    import numpy as np
+    from skimage.metrics import structural_similarity as ssim
+    _CV2_AVAILABLE = True
+except (ImportError, OSError) as _cv2_err:
+    _CV2_AVAILABLE = False
+    cv2 = None  # type: ignore
+    np = None  # type: ignore
+    ssim = None  # type: ignore
+finally:
+    # Restore original PATH so other processes are not affected
+    import os as _os
+    if "_original_path" in dir():
+        _os.environ["PATH"] = _original_path  # type: ignore
 
 logger = logging.getLogger(__name__)
 
 
 class ImageCompareService:
     """Compare expected vs actual screenshots."""
+
+    @staticmethod
+    def _require_cv2():
+        if not _CV2_AVAILABLE:
+            raise RuntimeError(
+                "opencv-python is not installed or failed to load. "
+                "Install it with: pip install opencv-python-headless"
+            )
 
     # ------------------------------------------------------------------
     # Level 1 — Full-image SSIM
@@ -33,6 +72,7 @@ class ImageCompareService:
             actual_path: path to actual screenshot PNG
             roi: optional dict with x, y, width, height to crop before comparing
         """
+        self._require_cv2()
         img_exp = cv2.imread(expected_path)
         img_act = cv2.imread(actual_path)
         if img_exp is None or img_act is None:
@@ -115,6 +155,7 @@ class ImageCompareService:
         Computes per-pixel SSIM, masks out excluded regions, and averages
         only the unmasked pixels for the final score.
         """
+        self._require_cv2()
         img_exp = cv2.imread(expected_path)
         img_act = cv2.imread(actual_path)
         if img_exp is None or img_act is None:
@@ -173,6 +214,7 @@ class ImageCompareService:
 
         Returns per-crop sub-results. Overall status is fail if any crop fails.
         """
+        self._require_cv2()
         img_act = cv2.imread(actual_path)
         if img_act is None:
             return {"error": "Could not read actual image", "sub_results": []}
@@ -248,6 +290,7 @@ class ImageCompareService:
 
         Returns location and confidence score.
         """
+        self._require_cv2()
         img = cv2.imread(screenshot_path)
         tmpl = cv2.imread(template_path)
         if img is None or tmpl is None:

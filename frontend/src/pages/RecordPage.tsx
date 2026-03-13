@@ -455,7 +455,7 @@ export default function RecordPage() {
     try {
       const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId);
       setSteps(prev => prev.map((s, i) => i === stepIdx ? { ...s, expected_image: res.data.filename } : s));
-      message.success(`스텝 #${stepIdx + 1} 기대이미지 저장 완료`);
+      message.success(t('record.expectedSaved', { index: stepIdx + 1 }));
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('record.expectedImageSaveFailed'));
     }
@@ -559,7 +559,7 @@ export default function RecordPage() {
           scenarioName, captureStepIndex, screenshotDeviceId, crop,
         );
         setSteps(prev => prev.map((s, i) => i === captureStepIndex ? { ...s, expected_image: res.data.filename } : s));
-        message.success(`스텝 #${captureStepIndex + 1} 크롭 기대이미지 저장 완료 (${rw}×${rh})`);
+        message.success(t('record.cropExpectedSaved', { index: captureStepIndex + 1, size: `${rw}×${rh}` }));
         setCaptureModalOpen(false);
         setCaptureStepIndex(null);
       } catch (e: any) {
@@ -621,7 +621,7 @@ export default function RecordPage() {
     if (rw > 10 && rh > 10 && roiEditingIndex != null) {
       const roi = { x: rx, y: ry, width: rw, height: rh };
       setSteps((prev) => prev.map((s, i) => i === roiEditingIndex ? { ...s, roi } : s));
-      message.success(`ROI 설정: ${rw}×${rh} @ (${rx},${ry})`);
+      message.success(t('record.roiSet', { size: `${rw}×${rh}`, pos: `${rx},${ry}` }));
       setRoiModalOpen(false);
       setRoiEditingIndex(null);
     }
@@ -750,7 +750,7 @@ export default function RecordPage() {
           rois[excludeRoiSelectedIdx] = newRoi;
           return { ...s, exclude_rois: rois };
         }));
-        message.success(`제외 영역 #${excludeRoiSelectedIdx + 1} 수정: ${rw}×${rh} @ (${rx},${ry})`);
+        message.success(t('record.excludeModified', { index: excludeRoiSelectedIdx + 1, size: `${rw}×${rh}`, pos: `${rx},${ry}` }));
         setExcludeRoiSelectedIdx(null);
       } else {
         // Append new region
@@ -758,7 +758,7 @@ export default function RecordPage() {
           if (i !== excludeRoiEditingIndex) return s;
           return { ...s, exclude_rois: [...(s.exclude_rois || []), newRoi] };
         }));
-        message.success(`제외 영역 추가: ${rw}×${rh} @ (${rx},${ry})`);
+        message.success(t('record.excludeAdded', { size: `${rw}×${rh}`, pos: `${rx},${ry}` }));
       }
       // Redraw canvas with updated regions after state update
       setTimeout(() => drawExcludeRoiCanvas(), 50);
@@ -901,10 +901,10 @@ export default function RecordPage() {
           return { ...s, expected_images: imgs };
         }));
         if (multiCropSelectedIdx != null) {
-          message.success(`크롭 #${multiCropSelectedIdx + 1} 수정 완료 (${rw}×${rh})`);
+          message.success(t('record.cropModified', { index: multiCropSelectedIdx + 1, size: `${rw}×${rh}` }));
           setMultiCropSelectedIdx(null);
         } else {
-          message.success(`크롭 추가 완료 (${rw}×${rh})`);
+          message.success(t('record.cropAdded', { size: `${rw}×${rh}` }));
         }
         setTimeout(() => drawMultiCropCanvas(), 50);
       } catch (e: any) {
@@ -958,15 +958,15 @@ export default function RecordPage() {
       const durationMs = Math.max(200, Math.min(elapsed, 3000));
       const params = { x1: startX, y1: startY, x2: endX, y2: endY, duration_ms: durationMs };
       executeAction('swipe', params, `swipe (${startX},${startY})→(${endX},${endY}) ${durationMs}ms`);
-      setLastGesture(`스와이프 (${startX},${startY})→(${endX},${endY})`);
+      setLastGesture(`${t('record.gestureSwipe')} (${startX},${startY})→(${endX},${endY})`);
     } else if (elapsed >= LONG_PRESS_THRESHOLD_MS) {
       const params = { x: startX, y: startY, duration_ms: elapsed };
       executeAction('long_press', params, `long_press (${startX},${startY}) ${elapsed}ms`);
-      setLastGesture(`길게 누르기 (${startX},${startY}) ${elapsed}ms`);
+      setLastGesture(`${t('record.gestureLongPress')} (${startX},${startY}) ${elapsed}ms`);
     } else {
       const params = { x: startX, y: startY };
       executeAction('tap', params, `tap (${startX},${startY})`);
-      setLastGesture(`탭 (${startX},${startY})`);
+      setLastGesture(`${t('record.gestureTap')} (${startX},${startY})`);
     }
   }, [screenshotDeviceId, executeAction, deviceRes]);
 
@@ -999,7 +999,7 @@ export default function RecordPage() {
       setRecording(false);
       setEditingExisting(true);
       fetchSavedScenarios();
-      message.success(`녹화 완료: ${res.data.scenario.steps.length} 스텝 저장됨`);
+      message.success(t('record.recordComplete', { count: res.data.scenario.steps.length }));
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('record.stopFailed'));
     }
@@ -1054,7 +1054,7 @@ export default function RecordPage() {
       setSteps((prev) => [...prev, res.data.step]);
       setStepDesc('');
       setSerialData('');
-      message.success(`스텝 ${res.data.step.id} 추가`);
+      message.success(t('record.stepAdded', { id: res.data.step.id }));
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('record.stepAddFailed'));
     }
@@ -1104,7 +1104,7 @@ export default function RecordPage() {
       setDescription(res.data.description || '');
       setSteps(res.data.steps || []);
       setEditingExisting(true);
-      message.success(`"${name}" 불러옴 (${res.data.steps?.length || 0} 스텝)`);
+      message.success(t('record.scenarioLoaded', { name, count: res.data.steps?.length || 0 }));
     } catch {
       message.error(t('record.loadFailed'));
     }
@@ -1174,7 +1174,7 @@ export default function RecordPage() {
         on_fail_goto: remapGoto(s.on_fail_goto, mapping),
       }));
     });
-    message.success(`스텝 #${index + 1} 삭제됨`);
+    message.success(t('record.stepDeleted', { index: index + 1 }));
   };
 
   const moveStep = (index: number, direction: -1 | 1) => {
@@ -1226,7 +1226,7 @@ export default function RecordPage() {
         });
         setSteps((prev) => prev.map(s => s === waitStep ? res.data.step : s));
       } catch (e: any) {
-        message.error(e.response?.data?.detail || 'Wait 스텝 추가 실패');
+        message.error(e.response?.data?.detail || t('record.waitAddFailed'));
         setSteps((prev) => prev.filter(s => s !== waitStep));
       } finally {
         pendingStepsRef.current -= 1;
@@ -1307,21 +1307,21 @@ export default function RecordPage() {
       setEditStepParams(newParams);
       setSteps((prev) => prev.map((s, i) => i === editStepIndex ? { ...s, params: newParams } : s));
       setEditStepIndex(null);
-      message.success(`스텝 #${editStepIndex + 1} swipe 좌표 수정됨`);
+      message.success(t('record.stepSwipeUpdated', { index: editStepIndex + 1 }));
     } else if (step.type === 'long_press') {
       const dur = Math.max(500, elapsed);
       const newParams = { x: startX, y: startY, duration_ms: dur };
       setEditStepParams(newParams);
       setSteps((prev) => prev.map((s, i) => i === editStepIndex ? { ...s, params: newParams } : s));
       setEditStepIndex(null);
-      message.success(`스텝 #${editStepIndex + 1} long_press 좌표 수정됨`);
+      message.success(t('record.longPressUpdated', { index: editStepIndex + 1 }));
     } else {
       // tap — just use start coords
       const newParams = { x: startX, y: startY };
       setEditStepParams(newParams);
       setSteps((prev) => prev.map((s, i) => i === editStepIndex ? { ...s, params: newParams } : s));
       setEditStepIndex(null);
-      message.success(`스텝 #${editStepIndex + 1} tap 좌표 수정됨`);
+      message.success(t('record.tapUpdated', { index: editStepIndex + 1 }));
     }
   }, [editStepIndex, steps, editCanvasToDevice]);
 
@@ -1329,7 +1329,7 @@ export default function RecordPage() {
     if (editStepIndex == null) return;
     setSteps((prev) => prev.map((s, i) => i === editStepIndex ? { ...s, params: { ...editStepParams } } : s));
     setEditStepIndex(null);
-    message.success(`스텝 #${editStepIndex + 1} 수정됨`);
+    message.success(t('record.stepUpdated', { index: editStepIndex + 1 }));
   }, [editStepIndex, editStepParams]);
 
   const clearEditing = () => {
@@ -1360,7 +1360,7 @@ export default function RecordPage() {
         { value: 'wait', label: t('record.wait') },
       ];
       if (stepDeviceModule) {
-        types.unshift({ value: 'module_command', label: `모듈 (${stepDeviceModule})` });
+        types.unshift({ value: 'module_command', label: t('record.moduleLabel', { name: stepDeviceModule }) });
       }
       return types;
     }
@@ -1371,7 +1371,7 @@ export default function RecordPage() {
       { value: 'input_text', label: t('record.inputText') },
       { value: 'key_event', label: t('record.keyEvent') },
       { value: 'wait', label: t('record.wait') },
-      { value: 'adb_command', label: 'ADB 명령' },
+      { value: 'adb_command', label: t('record.adbCommand') },
     ];
   };
 
@@ -1446,7 +1446,7 @@ export default function RecordPage() {
               )}
               <span style={{ minWidth: 100, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {s.type === 'wait'
-                  ? `${s.params.duration_ms}ms 대기`
+                  ? t('record.waitDuration', { duration: s.params.duration_ms })
                   : s.type === 'module_command'
                   ? `${s.params.module}::${s.params.function}()`
                   : s.type === 'serial_command'
@@ -1471,11 +1471,11 @@ export default function RecordPage() {
                 </Tag>
               )}
               {s.compare_mode === 'full_exclude' && (s.exclude_rois?.length || 0) > 0 && (
-                <Tag color="red" style={{ marginLeft: 4 }}>제외 {s.exclude_rois!.length}개</Tag>
+                <Tag color="red" style={{ marginLeft: 4 }}>{t('record.excludeCount', { count: s.exclude_rois!.length })}</Tag>
               )}
               {s.compare_mode === 'multi_crop' && (
                 <Tag color="purple" style={{ marginLeft: 4 }}>
-                  크롭 {s.expected_images?.length || 0}개
+                  {t('record.cropCount', { count: s.expected_images?.length || 0 })}
                 </Tag>
               )}
               {s.on_pass_goto != null && (
@@ -1637,7 +1637,7 @@ export default function RecordPage() {
             title={
               <Space>
                 <SwapOutlined />
-                <span>디바이스 화면</span>
+                <span>{t('record.deviceScreen')}</span>
               </Space>
             }
             extra={
@@ -1691,7 +1691,7 @@ export default function RecordPage() {
                 <div style={{ marginTop: 4, color: '#888', fontSize: 11 }}>
                   {lastGesture
                     ? `${lastGesture} → ${recording ? t('record.gestureRecord') : t('record.directExec')}`
-                    : `탭 | 길게 | 스와이프 (${screenDevice?.name || screenshotDeviceId})`}
+                    : t('record.gestureHint', { device: screenDevice?.name || screenshotDeviceId || '' })}
                 </div>
               </>
             ) : (
@@ -1734,7 +1734,7 @@ export default function RecordPage() {
                   </Select>
                 )}
                 {!recording && editingExisting && (
-                  <Button onClick={clearEditing}>새로 만들기</Button>
+                  <Button onClick={clearEditing}>{t('record.createNew')}</Button>
                 )}
               </div>
               {/* Row 2: 설명 + 상태 + 녹화 버튼 */}
@@ -1760,7 +1760,7 @@ export default function RecordPage() {
                 )}
                 {!recording && steps.length > 0 && (
                   <Button icon={<SaveOutlined />} onClick={saveScenario}>
-                    저장
+                    {t('record.save')}
                   </Button>
                 )}
               </div>
@@ -1911,7 +1911,7 @@ export default function RecordPage() {
                     disabled={!stepDeviceId && stepType !== 'wait'}
                     block
                   >
-                    스텝 추가
+                    {t('record.addStep')}
                   </Button>
                 )}
               </Space>
@@ -1920,7 +1920,7 @@ export default function RecordPage() {
 
           <Card
             size="small"
-            title={`기록된 스텝 (${steps.length})`}
+            title={t('record.recordedSteps', { count: steps.length })}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 8px' } }}
             extra={
@@ -1936,7 +1936,7 @@ export default function RecordPage() {
                   style={{ width: 120 }}
                 />
                 <Button size="small" icon={<PlusOutlined />} onClick={() => addWaitStep()}>
-                  Wait 추가
+                  {t('record.addWait')}
                 </Button>
               </Space>
             }
@@ -1948,14 +1948,14 @@ export default function RecordPage() {
 
       {/* Expected Image Crop Modal */}
       <Modal
-        title={`기대이미지 크롭 — 스텝 #${(captureStepIndex ?? 0) + 1} (저장할 영역을 드래그하세요)`}
+        title={t('record.cropModalTitle', { index: (captureStepIndex ?? 0) + 1 })}
         open={captureModalOpen}
         onCancel={() => { setCaptureModalOpen(false); setCaptureStepIndex(null); }}
         width="90vw"
         style={{ top: 20 }}
         footer={
           <Button onClick={() => { setCaptureModalOpen(false); setCaptureStepIndex(null); }}>
-            취소
+            {t('common.cancel')}
           </Button>
         }
       >
@@ -1969,13 +1969,13 @@ export default function RecordPage() {
           />
         </div>
         <div style={{ marginTop: 8, color: '#888', fontSize: 12, textAlign: 'center' }}>
-          마우스로 저장할 영역을 드래그하면 크롭하여 기대이미지로 저장됩니다
+          {t('record.cropModalHint')}
         </div>
       </Modal>
 
       {/* ROI Crop Modal — full resolution */}
       <Modal
-        title={`ROI 크롭 — 스텝 #${(roiEditingIndex ?? 0) + 1} (원본 해상도에서 비교 영역을 드래그하세요)`}
+        title={t('record.roiModalTitle', { index: (roiEditingIndex ?? 0) + 1 })}
         open={roiModalOpen}
         onCancel={() => { setRoiModalOpen(false); setRoiEditingIndex(null); }}
         width="90vw"
@@ -1983,16 +1983,16 @@ export default function RecordPage() {
         footer={
           <Space>
             <Button onClick={() => { setRoiModalOpen(false); setRoiEditingIndex(null); }}>
-              취소
+              {t('common.cancel')}
             </Button>
             {roiEditingIndex != null && steps[roiEditingIndex]?.roi && (
               <Button danger onClick={() => {
                 setSteps((prev) => prev.map((s, i) => i === roiEditingIndex ? { ...s, roi: null } : s));
-                message.info('ROI 해제 (전체 화면 비교)');
+                message.info(t('record.roiCleared'));
                 setRoiModalOpen(false);
                 setRoiEditingIndex(null);
               }}>
-                ROI 해제
+                {t('record.roiClear')}
               </Button>
             )}
           </Space>
@@ -2009,14 +2009,14 @@ export default function RecordPage() {
         </div>
         <div style={{ marginTop: 8, color: '#888', fontSize: 12, textAlign: 'center' }}>
           {roiEditingIndex != null && steps[roiEditingIndex]?.roi
-            ? `현재 ROI: ${steps[roiEditingIndex].roi!.width}×${steps[roiEditingIndex].roi!.height} @ (${steps[roiEditingIndex].roi!.x}, ${steps[roiEditingIndex].roi!.y}) — 다시 드래그하여 변경`
+            ? t('record.roiCurrent', { size: `${steps[roiEditingIndex].roi!.width}×${steps[roiEditingIndex].roi!.height}`, pos: `${steps[roiEditingIndex].roi!.x}, ${steps[roiEditingIndex].roi!.y}` })
             : t('record.dragArea')}
         </div>
       </Modal>
 
       {/* Exclude ROI Modal — add/remove exclusion regions */}
       <Modal
-        title={`제외 영역 편집 — 스텝 #${(excludeRoiEditingIndex ?? 0) + 1} (드래그하여 제외할 영역 추가)`}
+        title={t('record.excludeModalTitle', { index: (excludeRoiEditingIndex ?? 0) + 1 })}
         open={excludeRoiModalOpen}
         onCancel={() => { setExcludeRoiModalOpen(false); setExcludeRoiEditingIndex(null); setExcludeRoiSelectedIdx(null); }}
         width="90vw"
@@ -2024,14 +2024,14 @@ export default function RecordPage() {
         footer={
           <Space>
             <Button onClick={() => { setExcludeRoiModalOpen(false); setExcludeRoiEditingIndex(null); setExcludeRoiSelectedIdx(null); }}>
-              닫기
+              {t('common.close')}
             </Button>
             {excludeRoiEditingIndex != null && (steps[excludeRoiEditingIndex]?.exclude_rois?.length || 0) > 0 && (
               <Button danger onClick={() => {
                 setSteps(prev => prev.map((s, i) => i === excludeRoiEditingIndex ? { ...s, exclude_rois: [] } : s));
                 message.info(t('record.allExcludeCleared'));
               }}>
-                전체 해제
+                {t('record.clearAll')}
               </Button>
             )}
           </Space>
@@ -2048,7 +2048,7 @@ export default function RecordPage() {
         </div>
         {excludeRoiEditingIndex != null && (steps[excludeRoiEditingIndex]?.exclude_rois?.length || 0) > 0 && (
           <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>제외 영역 목록 (클릭하여 선택 후 드래그로 수정, X로 삭제):</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{t('record.excludeList')}</div>
             <Space wrap>
               {steps[excludeRoiEditingIndex]?.exclude_rois?.map((r, ri) => (
                 <Tag
@@ -2076,7 +2076,7 @@ export default function RecordPage() {
 
       {/* Multi-crop Modal — add/remove crop regions */}
       <Modal
-        title={`멀티크롭 편집 — 스텝 #${(multiCropEditingIndex ?? 0) + 1} (드래그하여 크롭 영역 추가)`}
+        title={t('record.multiCropModalTitle', { index: (multiCropEditingIndex ?? 0) + 1 })}
         open={multiCropModalOpen}
         onCancel={() => { setMultiCropModalOpen(false); setMultiCropEditingIndex(null); setMultiCropSelectedIdx(null); }}
         width="90vw"
@@ -2084,7 +2084,7 @@ export default function RecordPage() {
         footer={
           <Space>
             <Button onClick={() => { setMultiCropModalOpen(false); setMultiCropEditingIndex(null); setMultiCropSelectedIdx(null); }}>
-              닫기
+              {t('common.close')}
             </Button>
             {multiCropEditingIndex != null && (steps[multiCropEditingIndex]?.expected_images?.length || 0) > 0 && (
               <Button danger onClick={() => {
@@ -2093,7 +2093,7 @@ export default function RecordPage() {
                 message.info(t('record.allCropCleared'));
                 setTimeout(() => drawMultiCropCanvas(), 50);
               }}>
-                전체 해제
+                {t('record.clearAll')}
               </Button>
             )}
           </Space>
@@ -2110,7 +2110,7 @@ export default function RecordPage() {
         </div>
         {multiCropEditingIndex != null && (steps[multiCropEditingIndex]?.expected_images?.length || 0) > 0 && (
           <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>크롭 영역 목록 (클릭하여 선택 후 드래그로 수정, X로 삭제):</div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{t('record.cropList')}</div>
             <Space wrap>
               {steps[multiCropEditingIndex]?.expected_images?.map((ci, ci_idx) => (
                 <Tag
@@ -2134,18 +2134,18 @@ export default function RecordPage() {
 
       {/* Step command edit modal */}
       <Modal
-        title={editStepIndex != null ? `스텝 #${editStepIndex + 1} 커맨드 수정 (${steps[editStepIndex]?.type})` : ''}
+        title={editStepIndex != null ? t('record.editStepTitle', { index: editStepIndex + 1, type: steps[editStepIndex]?.type }) : ''}
         open={editStepIndex != null}
         onCancel={() => setEditStepIndex(null)}
         width={['tap', 'long_press', 'swipe'].includes(steps[editStepIndex ?? 0]?.type) ? '80vw' : 500}
         style={['tap', 'long_press', 'swipe'].includes(steps[editStepIndex ?? 0]?.type) ? { top: 20 } : undefined}
         footer={
           ['tap', 'long_press', 'swipe'].includes(steps[editStepIndex ?? 0]?.type)
-            ? <Button onClick={() => setEditStepIndex(null)}>취소</Button>
+            ? <Button onClick={() => setEditStepIndex(null)}>{t('common.cancel')}</Button>
             : (
               <Space>
-                <Button onClick={() => setEditStepIndex(null)}>취소</Button>
-                <Button type="primary" onClick={applyEditStepParams}>적용</Button>
+                <Button onClick={() => setEditStepIndex(null)}>{t('common.cancel')}</Button>
+                <Button type="primary" onClick={applyEditStepParams}>{t('record.apply')}</Button>
               </Space>
             )
         }
@@ -2168,7 +2168,7 @@ export default function RecordPage() {
                   {step.type === 'swipe' && t('record.swipeHint')}
                 </div>
                 <div style={{ marginBottom: 8 }}>
-                  <Tag>현재: {JSON.stringify(step.params)}</Tag>
+                  <Tag>{t('record.currentParams', { params: JSON.stringify(step.params) })}</Tag>
                 </div>
                 <div style={{ overflow: 'auto', maxHeight: '70vh', textAlign: 'center' }}>
                   <canvas
@@ -2185,7 +2185,7 @@ export default function RecordPage() {
           if (step.type === 'input_text') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>입력 텍스트</div>
+                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.inputTextLabel')}</div>
                 <TextArea
                   rows={3}
                   value={editStepParams.text ?? ''}
@@ -2198,7 +2198,7 @@ export default function RecordPage() {
           if (step.type === 'key_event') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>키코드</div>
+                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.keycodeLabel')}</div>
                 <Input
                   value={editStepParams.keycode ?? ''}
                   onChange={(e) => setEditStepParams({ ...editStepParams, keycode: e.target.value })}
@@ -2211,7 +2211,7 @@ export default function RecordPage() {
           if (step.type === 'wait') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>대기 시간 (ms)</div>
+                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.waitTimeLabel')}</div>
                 <Space>
                   <InputNumber
                     min={100}
@@ -2230,7 +2230,7 @@ export default function RecordPage() {
           if (step.type === 'adb_command') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>ADB 명령어</div>
+                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.adbCommandLabel')}</div>
                 <TextArea
                   rows={3}
                   value={editStepParams.command ?? ''}
@@ -2244,7 +2244,7 @@ export default function RecordPage() {
           if (step.type === 'serial_command') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>시리얼 데이터</div>
+                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.serialDataLabel')}</div>
                 <TextArea
                   rows={3}
                   value={editStepParams.data ?? ''}
@@ -2286,13 +2286,13 @@ export default function RecordPage() {
                     ))}
                   </div>
                 ) : (
-                  <div style={{ color: '#888' }}>파라미터 없음</div>
+                  <div style={{ color: '#888' }}>{t('record.noParams')}</div>
                 )}
               </div>
             );
           }
 
-          return <div style={{ color: '#888' }}>이 스텝 유형은 편집을 지원하지 않습니다.</div>;
+          return <div style={{ color: '#888' }}>{t('record.editNotSupported')}</div>;
         })()}
       </Modal>
 
@@ -2302,7 +2302,7 @@ export default function RecordPage() {
         open={testResultModalOpen}
         onCancel={() => { setTestResultModalOpen(false); setTestResult(null); }}
         width={800}
-        footer={<Button onClick={() => { setTestResultModalOpen(false); setTestResult(null); }}>닫기</Button>}
+        footer={<Button onClick={() => { setTestResultModalOpen(false); setTestResult(null); }}>{t('common.close')}</Button>}
       >
         {testResult && (
           <div>
@@ -2319,7 +2319,7 @@ export default function RecordPage() {
                 {testResult.status.toUpperCase()}
               </Tag>
               {testResult.similarity_score != null && (
-                <span>유사도: <strong>{(testResult.similarity_score * 100).toFixed(1)}%</strong></span>
+                <span>{t('record.similarityLabel')}: <strong>{(testResult.similarity_score * 100).toFixed(1)}%</strong></span>
               )}
               <span style={{ color: '#888', marginLeft: 'auto' }}>
                 {testResult.execution_time_ms}ms
@@ -2331,7 +2331,7 @@ export default function RecordPage() {
             <Row gutter={12}>
               {testResult.expected_image && (
                 <Col span={testResult.actual_image ? 12 : 24}>
-                  <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>기대 이미지</div>
+                  <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>{t('record.expectedImageLabel')}</div>
                   <Image
                     src={`/screenshots/${testResult.expected_annotated_image || testResult.expected_image}?t=${Date.now()}`}
                     style={{ width: '100%', borderRadius: 4, border: '1px solid #333' }}
@@ -2341,10 +2341,10 @@ export default function RecordPage() {
               {testResult.actual_image && (
                 <Col span={testResult.expected_image ? 12 : 24}>
                   <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>
-                    실제 결과
+                    {t('record.actualResult')}
                     {testResult.match_location && (
                       <span style={{ fontWeight: 400, color: '#ff4d4f', marginLeft: 4 }}>
-                        (매칭 위치: {testResult.match_location.x},{testResult.match_location.y} {testResult.match_location.width}×{testResult.match_location.height})
+                        ({t('record.matchLocation')}: {testResult.match_location.x},{testResult.match_location.y} {testResult.match_location.width}×{testResult.match_location.height})
                       </span>
                     )}
                   </div>
@@ -2357,7 +2357,7 @@ export default function RecordPage() {
             </Row>
             {testResult.diff_image && (
               <div style={{ marginTop: 12 }}>
-                <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>차이 히트맵</div>
+                <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>{t('record.diffHeatmap')}</div>
                 <Image
                   src={`/screenshots/${testResult.diff_image}?t=${Date.now()}`}
                   style={{ width: '100%', borderRadius: 4, border: '1px solid #333' }}
@@ -2366,7 +2366,7 @@ export default function RecordPage() {
             )}
             {!testResult.expected_image && !testResult.actual_image && (
               <div style={{ color: '#888', textAlign: 'center', padding: 24 }}>
-                기대이미지가 없어 비교 없이 실행만 완료되었습니다.
+                {t('record.noExpectedImage')}
               </div>
             )}
           </div>

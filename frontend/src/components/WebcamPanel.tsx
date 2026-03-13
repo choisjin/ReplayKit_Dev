@@ -1,6 +1,7 @@
 import { Button, Collapse, Select, Slider, Space } from 'antd';
 import { PlayCircleOutlined, PauseOutlined, VideoCameraOutlined, SettingOutlined } from '@ant-design/icons';
-import { useWebcam, WEBCAM_SETTING_LABELS } from '../hooks/useWebcam';
+import { useWebcam } from '../hooks/useWebcam';
+import { useTranslation } from '../i18n';
 
 const { Option } = Select;
 
@@ -14,6 +15,7 @@ const RESOLUTION_LABELS: Record<string, string> = {
 };
 
 export default function WebcamPanel({ webcam }: WebcamPanelProps) {
+  const { t } = useTranslation();
   const {
     webcamOpen, webcamIndex, webcamDevices, webcamVideoRef, webcamRecording,
     webcamSettingsOpen, setWebcamSettingsOpen, webcamCapabilities, webcamSettings,
@@ -33,7 +35,7 @@ export default function WebcamPanel({ webcam }: WebcamPanelProps) {
         label: (
           <Space>
             <VideoCameraOutlined />
-            <span>웹캠</span>
+            <span>{t('webcam.title')}</span>
           </Space>
         ),
         extra: webcamOpen ? (
@@ -43,11 +45,11 @@ export default function WebcamPanel({ webcam }: WebcamPanelProps) {
               value={webcamIndex}
               onChange={(v) => { handleWebcamChange(v); }}
               style={{ width: 180 }}
-              placeholder="웹캠 선택"
+              placeholder={t('webcam.select')}
             >
               {webcamDevices.map((d, i) => (
                 <Option key={d.deviceId} value={i}>
-                  {d.label || `카메라 ${i}`}
+                  {d.label || t('webcam.camera', { index: i })}
                 </Option>
               ))}
             </Select>
@@ -59,7 +61,7 @@ export default function WebcamPanel({ webcam }: WebcamPanelProps) {
                 icon={<PlayCircleOutlined />}
                 onClick={startWebcamRecording}
               >
-                녹화
+                {t('webcam.record')}
               </Button>
             ) : (
               <Button
@@ -69,7 +71,7 @@ export default function WebcamPanel({ webcam }: WebcamPanelProps) {
                 onClick={stopWebcamRecording}
                 style={{ animation: 'blink 1s infinite' }}
               >
-                녹화 중지
+                {t('webcam.recordStop')}
               </Button>
             )}
             <Button
@@ -89,7 +91,7 @@ export default function WebcamPanel({ webcam }: WebcamPanelProps) {
                   value={webcamResolution || undefined}
                   onChange={handleWebcamResolutionChange}
                   style={{ width: '100%' }}
-                  placeholder="해상도 선택"
+                  placeholder={t('webcam.resolutionSelect')}
                 >
                   {webcamResolutions.map(r => {
                     const [w, h] = r.split('x');
@@ -143,13 +145,13 @@ export default function WebcamPanel({ webcam }: WebcamPanelProps) {
               }}>
                 {Object.keys(webcamCapabilities).length === 0 ? (
                   <div style={{ color: '#888', fontSize: 12, textAlign: 'center' }}>
-                    이 웹캠은 조절 가능한 설정이 없습니다
+                    {t('webcam.noSettings')}
                   </div>
                 ) : (
                   Object.entries(webcamCapabilities).map(([key, cap]) => (
                     <div key={key} style={{ marginBottom: 4 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 2 }}>
-                        <span>{WEBCAM_SETTING_LABELS[key] || key}</span>
+                        <span>{t((`webcam.${key}`) as any) !== `webcam.${key}` ? t((`webcam.${key}`) as any) : key}</span>
                         <span style={{ color: '#888' }}>{webcamSettings[key] ?? '-'}</span>
                       </div>
                       <Slider

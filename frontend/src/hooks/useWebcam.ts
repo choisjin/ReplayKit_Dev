@@ -1,14 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { message } from 'antd';
-
-export const WEBCAM_SETTING_LABELS: Record<string, string> = {
-  brightness: '밝기',
-  contrast: '대비',
-  sharpness: '선명도',
-  exposureTime: '노출',
-};
+import { useTranslation } from '../i18n';
 
 export function useWebcam() {
+  const { t } = useTranslation();
   const [webcamOpen, setWebcamOpen] = useState(false);
   const [webcamIndex, setWebcamIndex] = useState(0);
   const [webcamDevices, setWebcamDevices] = useState<MediaDeviceInfo[]>([]);
@@ -98,9 +93,9 @@ export function useWebcam() {
         setWebcamResolution(`${settings.width}x${settings.height}`);
       }
     } catch (e: any) {
-      message.error('웹캠을 열 수 없습니다: ' + (e.message || e));
+      message.error(t('webcam.openFailed') + ': ' + (e.message || e));
     }
-  }, [webcamDevices]);
+  }, [webcamDevices, t]);
 
   const stopWebcam = useCallback(() => {
     if (webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') {
@@ -153,7 +148,7 @@ export function useWebcam() {
 
   const startWebcamRecording = useCallback(async () => {
     if (!webcamStreamRef.current) {
-      message.error('웹캠이 활성화되지 않았습니다');
+      message.error(t('webcam.notActive'));
       return;
     }
 
@@ -187,26 +182,26 @@ export function useWebcam() {
         if (uploadFnRef.current) {
           const filename = `webcam_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
           const path = await uploadFnRef.current(blob, filename);
-          message.success(`웹캠 녹화 저장 완료: ${path}`);
+          message.success(t('webcam.recordSaveCompletePath', { path }));
         } else {
           const handle = webcamFileHandleRef.current;
           if (handle) {
             const writable = await (handle as any).createWritable();
             await writable.write(blob);
             await writable.close();
-            message.success('웹캠 녹화 저장 완료');
+            message.success(t('webcam.recordSaveComplete'));
           }
         }
       } catch (e: any) {
-        message.error('파일 저장 실패: ' + (e.message || e));
+        message.error(t('webcam.fileSaveFailed') + ': ' + (e.message || e));
       }
       webcamFileHandleRef.current = null;
     };
     recorder.start(1000);
     webcamRecorderRef.current = recorder;
     setWebcamRecording(true);
-    message.success('웹캠 녹화 시작');
-  }, []);
+    message.success(t('webcam.recordStart'));
+  }, [t]);
 
   const stopWebcamRecording = useCallback(() => {
     if (webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') {
@@ -224,7 +219,8 @@ export function useWebcam() {
     const settings = (track as any).getSettings?.() || {};
     const supported: Record<string, any> = {};
     const current: Record<string, number> = {};
-    for (const key of Object.keys(WEBCAM_SETTING_LABELS)) {
+    const WEBCAM_SETTING_KEYS = ['brightness', 'contrast', 'sharpness', 'exposureTime'];
+    for (const key of WEBCAM_SETTING_KEYS) {
       if (caps[key] && typeof caps[key] === 'object' && 'min' in caps[key]) {
         supported[key] = caps[key];
         current[key] = settings[key] ?? caps[key].min;
@@ -246,9 +242,9 @@ export function useWebcam() {
       }
       setWebcamSettings(prev => ({ ...prev, [key]: value }));
     } catch (e: any) {
-      message.error(`설정 적용 실패: ${e.message || e}`);
+      message.error(t('webcam.settingFailed') + ': ' + (e.message || e));
     }
-  }, []);
+  }, [t]);
 
   return {
     webcamOpen,
