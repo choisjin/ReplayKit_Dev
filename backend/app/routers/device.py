@@ -382,5 +382,9 @@ async def get_screenshot(device_id: str, fmt: str = "jpeg", screen_type: str = "
             img_bytes = await adb.screencap_bytes(serial=adb_serial, fmt=fmt)
             b64 = base64.b64encode(img_bytes).decode("ascii")
             return {"image": b64, "format": fmt}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        # Transient ADB/HKMC capture failure — return empty image so the
+        # browser doesn't log a 500 error on every polling cycle.
+        return {"image": "", "format": fmt}

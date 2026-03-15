@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ConfigProvider, Layout, Menu, theme } from 'antd';
+import { App as AntdApp, ConfigProvider, Layout, Menu, theme } from 'antd';
 import {
   DesktopOutlined,
   PlayCircleOutlined,
@@ -78,11 +78,13 @@ function AppContent() {
 function App() {
   return (
     <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
-      <SettingsProvider>
-        <DeviceProvider>
-          <AppContent />
-        </DeviceProvider>
-      </SettingsProvider>
+      <AntdApp>
+        <SettingsProvider>
+          <DeviceProvider>
+            <AppContent />
+          </DeviceProvider>
+        </SettingsProvider>
+      </AntdApp>
     </ConfigProvider>
   );
 }

@@ -97,7 +97,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     try {
       const res = await deviceApi.screenshot(deviceId, screenTypeRef.current);
       // Only update if the device hasn't changed while the request was in-flight
-      if (deviceId === screenshotDeviceIdRef.current) {
+      // and the server returned a non-empty image (empty = transient capture failure)
+      if (deviceId === screenshotDeviceIdRef.current && res.data.image) {
         const fmt = res.data.format || 'jpeg';
         const mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
         setScreenshot(`data:${mime};base64,${res.data.image}`);

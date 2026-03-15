@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { message } from 'antd';
+import { App } from 'antd';
 import { useTranslation } from '../i18n';
 
 export function useWebcam() {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [webcamOpen, setWebcamOpen] = useState(false);
   const [webcamIndex, setWebcamIndex] = useState(0);
   const [webcamDevices, setWebcamDevices] = useState<MediaDeviceInfo[]>([]);
