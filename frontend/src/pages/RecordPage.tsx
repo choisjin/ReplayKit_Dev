@@ -1777,8 +1777,7 @@ export default function RecordPage() {
                     ? `${lastGesture} → ${recording ? t('record.gestureRecord') : t('record.directExec')}`
                     : t('record.gestureHint', { device: screenDevice?.name || screenshotDeviceId || '' })}
                 </div>
-                {/* HKMC Hardware Key Panel */}
-                {isScreenHkmc && hkmcKeys.length > 0 && (
+                {false && isScreenHkmc && hkmcKeys.length > 0 && (
                   <div style={{ marginTop: 4, width: '100%', maxHeight: 120, overflow: 'auto' }}>
                     {['MKBD', 'CCP', 'RRC', 'SWRC', 'MIRROR'].map(group => {
                       const groupKeys = hkmcKeys.filter(k => k.group === group);
