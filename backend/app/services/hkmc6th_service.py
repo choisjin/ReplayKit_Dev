@@ -280,6 +280,7 @@ class HKMC6thService:
         """Build and send a framed packet with CRC16."""
         agent_cmd = [cmd, sub_cmd, resp] + data
         crc = _calc_crc16(agent_cmd)
+        logger.debug("[HKMC SEND] cmd=0x%02X sub=0x%02X resp=0x%02X data_len=%d", cmd, sub_cmd, resp, len(data))
         packet_len = len(agent_cmd)
 
         packet = [START_BIT, START_BIT]

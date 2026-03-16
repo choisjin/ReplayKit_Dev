@@ -1,10 +1,13 @@
 """Device management API routes."""
 
 import base64
+import logging
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from ..dependencies import adb_service as adb, device_manager as dm
 from ..services.module_service import list_available_modules, get_module_functions, execute_module_function
@@ -201,18 +204,23 @@ async def device_input(req: InputRequest):
             hkmc = dm.get_hkmc_service(req.device_id)
             if not hkmc:
                 raise HTTPException(status_code=400, detail=f"HKMC device {req.device_id} not connected")
+            logger.info("[HKMC INPUT] device=%s action=%s params=%s connected=%s",
+                        req.device_id, req.action, req.params, hkmc.is_connected)
             p = req.params
             screen_type = p.get("screen_type", "front_center")
             if req.action == "hkmc_touch":
                 await hkmc.async_tap(p["x"], p["y"], screen_type)
+                logger.info("[HKMC INPUT] tap sent: x=%s y=%s screen=%s", p["x"], p["y"], screen_type)
             elif req.action == "hkmc_swipe":
                 await hkmc.async_swipe(p["x1"], p["y1"], p["x2"], p["y2"], screen_type)
+                logger.info("[HKMC INPUT] swipe sent")
             elif req.action == "hkmc_key":
                 key_name = p.get("key_name")
                 if key_name:
                     await hkmc.async_send_key_by_name(
                         key_name, p.get("sub_cmd", 0x43), p.get("monitor", 0x00), p.get("direction")
                     )
+                    logger.info("[HKMC INPUT] key sent: %s", key_name)
                 else:
                     await hkmc.async_send_key(
                         p["cmd"], p["sub_cmd"], p["key_data"], p.get("monitor", 0x00), p.get("direction")
