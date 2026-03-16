@@ -45,6 +45,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const screenshotDeviceIdRef = useRef('');
   const screenTypeRef = useRef('front_center');
+  const wsRef = useRef<WebSocket | null>(null);
+  const prevBlobUrlRef = useRef<string>('');
 
   // Keep refs in sync with state for use in pollFn/refreshScreenshot
   useEffect(() => {
@@ -85,19 +87,81 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     fetchDevices();
   }, []);
 
+  // --- WebSocket cleanup helper ---
+  const closeWs = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    if (prevBlobUrlRef.current) {
+      URL.revokeObjectURL(prevBlobUrlRef.current);
+      prevBlobUrlRef.current = '';
+    }
+  }, []);
+
+  // --- Check if device is HKMC ---
+  const isHkmcDevice = useCallback((deviceId: string) => {
+    const dev = primaryDevices.find(d => d.id === deviceId);
+    return dev?.type === 'hkmc6th';
+  }, [primaryDevices]);
+
+  // --- WebSocket screen streaming (HKMC) ---
+  const startWsStream = useCallback((deviceId: string, st: string) => {
+    closeWs();
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProto}//${window.location.host}/ws/screen`);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ device_id: deviceId, screen_type: st }));
+    };
+
+    ws.onmessage = (event) => {
+      if (event.data instanceof Blob) {
+        // 바이너리 JPEG 프레임
+        if (prevBlobUrlRef.current) {
+          URL.revokeObjectURL(prevBlobUrlRef.current);
+        }
+        const url = URL.createObjectURL(event.data);
+        prevBlobUrlRef.current = url;
+        if (screenshotDeviceIdRef.current === deviceId) {
+          setScreenshot(url);
+        }
+      } else {
+        // JSON 메시지 (에러 등)
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'frame' && msg.image) {
+            const mime = msg.format === 'jpeg' ? 'image/jpeg' : 'image/png';
+            if (screenshotDeviceIdRef.current === deviceId) {
+              setScreenshot(`data:${mime};base64,${msg.image}`);
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    };
+
+    ws.onerror = () => {
+      // WebSocket 실패 시 폴링 폴백으로 전환
+      closeWs();
+    };
+
+    ws.onclose = () => {
+      wsRef.current = null;
+    };
+  }, [closeWs]);
+
   // Prevent overlapping poll requests
   const pollInFlightRef = useRef(false);
 
-  // Simple poll function (no error-based recovery)
+  // Simple poll function (for non-HKMC or fallback)
   const pollFn = useCallback(async () => {
     const deviceId = screenshotDeviceIdRef.current;
     if (!deviceId) return;
-    if (pollInFlightRef.current) return; // skip if previous request still pending
+    if (pollInFlightRef.current) return;
     pollInFlightRef.current = true;
     try {
       const res = await deviceApi.screenshot(deviceId, screenTypeRef.current);
-      // Only update if the device hasn't changed while the request was in-flight
-      // and the server returned a non-empty image (empty = transient capture failure)
       if (deviceId === screenshotDeviceIdRef.current && res.data.image) {
         const fmt = res.data.format || 'jpeg';
         const mime = fmt === 'jpeg' ? 'image/jpeg' : 'image/png';
@@ -110,33 +174,46 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const refreshScreenshot = useCallback(async () => {
     const deviceId = screenshotDeviceIdRef.current;
     if (!deviceId) return;
+    // HKMC WebSocket 연결 중이면 별도 요청 불필요 (자동 갱신)
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
     await pollFn();
-    // Reset polling timer so next poll is a full interval from now
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = setInterval(pollFn, pollInterval);
     }
   }, [pollInterval, pollFn]);
 
-  // Screenshot polling for the selected primary device
+  // Screenshot source management: WebSocket for HKMC, polling for ADB
   useEffect(() => {
+    // 기존 정리
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+    closeWs();
+
     if (!screenshotDeviceId) {
       setScreenshot('');
       return;
     }
-    pollFn(); // immediate first fetch
-    intervalRef.current = setInterval(pollFn, pollInterval);
+
+    if (isHkmcDevice(screenshotDeviceId)) {
+      // HKMC: WebSocket 바이너리 스트리밍
+      startWsStream(screenshotDeviceId, screenType);
+    } else {
+      // ADB: HTTP 폴링
+      pollFn();
+      intervalRef.current = setInterval(pollFn, pollInterval);
+    }
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-};
-  }, [screenshotDeviceId, pollInterval, screenType, pollFn]);
+      closeWs();
+    };
+  }, [screenshotDeviceId, pollInterval, screenType, pollFn, isHkmcDevice, startWsStream, closeWs]);
 
   return (
     <DeviceContext.Provider value={{

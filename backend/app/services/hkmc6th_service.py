@@ -169,6 +169,7 @@ class HKMC6thService:
         self._img_event = threading.Event()
         self._img_filename = ""
         self._img_made = False
+        self._img_buffer: bytes = b""  # 인메모리 BMP 데이터
 
         # Screen sizes (populated after reqScreenSize)
         self._screen_size_event = threading.Event()
@@ -402,8 +403,9 @@ class HKMC6thService:
                 self._screen_size_event.set()
 
             elif cmd == CMD_GETIMG:
-                # Image data received — write to file
+                # Image data received — store in memory buffer
                 raw_bytes = data_str.encode("iso-8859-1")
+                self._img_buffer = raw_bytes
                 if self._img_filename:
                     with open(self._img_filename, "wb") as f:
                         f.write(raw_bytes)
@@ -502,42 +504,67 @@ class HKMC6thService:
         """Capture screenshot and return as PNG/JPEG bytes.
 
         The agent sends BMP format. We convert to the requested format.
+        Prefers in-memory processing (no temp file) when possible.
         """
-        # Use a temp file for the BMP
-        with tempfile.NamedTemporaryFile(suffix=".bmp", delete=False) as tmp:
-            tmp_path = tmp.name
+        w, h = self.get_screen_size(screen_type)
+        screen_bits = SCREEN_CAPTURE_MAP.get(screen_type)
 
+        # 인메모리 캡처 요청 (파일명 없이)
+        self._img_buffer = b""
+        self._img_made = False
+        self._img_event.clear()
+        self._img_filename = ""
+
+        img_data = []
+        img_data.append((0 >> 8) & 0xFF)
+        img_data.append(0 & 0xFF)
+        img_data.append((0 >> 8) & 0xFF)
+        img_data.append(0 & 0xFF)
+        img_data.append((w >> 8) & 0xFF)
+        img_data.append(w & 0xFF)
+        img_data.append((h >> 8) & 0xFF)
+        img_data.append(h & 0xFF)
+        if screen_bits is not None:
+            img_data.append((screen_bits >> 8) & 0xFF)
+            img_data.append(screen_bits & 0xFF)
+
+        with self._send_lock:
+            self._make_send_packet(CMD_GETIMG, 0, 0, img_data)
+
+        if not self._img_event.wait(timeout=timeout):
+            raise TimeoutError(f"Screenshot timeout ({timeout}s) for {screen_type}")
+
+        bmp_bytes = self._img_buffer
+        if not bmp_bytes:
+            raise ValueError("Empty image buffer")
+
+        # 인메모리 변환: cv2.imdecode (임시파일 불필요)
         try:
-            self.screencap(tmp_path, screen_type=screen_type, timeout=timeout)
-
-            # Try to convert with cv2 first, fall back to PIL
-            try:
-                from . import image_compare_service  # for cv2 import chain
-                import cv2
-                img = cv2.imread(tmp_path)
-                if img is None:
-                    raise ValueError("cv2 could not read BMP")
+            import cv2
+            import numpy as np
+            arr = np.frombuffer(bmp_bytes, dtype=np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img is not None:
                 if fmt == "jpeg":
-                    _, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                    _, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 60])
                 else:
                     _, buf = cv2.imencode(".png", img)
                 return buf.tobytes()
-            except Exception:
-                # Fallback: PIL
-                try:
-                    from PIL import Image
-                    img = Image.open(tmp_path)
-                    bio = io.BytesIO()
-                    img.save(bio, format="PNG" if fmt == "png" else "JPEG")
-                    return bio.getvalue()
-                except ImportError:
-                    # Last resort: return raw BMP
-                    return Path(tmp_path).read_bytes()
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+        except Exception:
+            pass
+
+        # 폴백: PIL 인메모리
+        try:
+            from PIL import Image
+            img = Image.open(io.BytesIO(bmp_bytes))
+            bio = io.BytesIO()
+            img.save(bio, format="PNG" if fmt == "png" else "JPEG", quality=60)
+            return bio.getvalue()
+        except Exception:
+            pass
+
+        # 최후 수단: raw BMP 반환
+        return bmp_bytes
 
     # ------------------------------------------------------------------
     # Touch input

@@ -72,26 +72,57 @@ async def root():
 
 @app.websocket("/ws/screen")
 async def websocket_screen_mirror(websocket: WebSocket):
-    """WebSocket endpoint for real-time screen mirroring."""
+    """WebSocket endpoint for real-time screen mirroring.
+
+    클라이언트가 첫 메시지로 {"device_id": "...", "screen_type": "front_center"} 전송.
+    바이너리 JPEG 프레임을 연속 전송. device_id 미전송 시 기존 ADB 방식 폴백.
+    """
     await websocket.accept()
     logger.info("Screen mirror WebSocket connected")
+
+    # 클라이언트로부터 device_id 수신 (선택)
+    target_device_id = ""
+    screen_type = "front_center"
+    try:
+        init_msg = await asyncio.wait_for(websocket.receive_json(), timeout=2.0)
+        target_device_id = init_msg.get("device_id", "")
+        screen_type = init_msg.get("screen_type", "front_center")
+    except (asyncio.TimeoutError, Exception):
+        pass  # 타임아웃이면 ADB 폴백
+
+    # 디바이스 타입 판별
+    dev = device_manager.get_device(target_device_id) if target_device_id else None
+    is_hkmc = dev and dev.type == "hkmc6th"
+    hkmc = device_manager.get_hkmc_service(target_device_id) if is_hkmc else None
+
+    logger.info("Screen mirror: device=%s type=%s", target_device_id, "hkmc" if is_hkmc else "adb")
 
     try:
         while True:
             try:
-                png_bytes = await adb_service.screencap_bytes()
-                b64 = base64.b64encode(png_bytes).decode("ascii")
-                await websocket.send_json({
-                    "type": "frame",
-                    "image": b64,
-                    "format": "png",
-                })
+                if hkmc and hkmc.is_connected:
+                    jpeg_bytes = await hkmc.async_screencap_bytes(
+                        screen_type=screen_type, fmt="jpeg", timeout=10.0
+                    )
+                    await websocket.send_bytes(jpeg_bytes)
+                else:
+                    png_bytes = await adb_service.screencap_bytes()
+                    b64 = base64.b64encode(png_bytes).decode("ascii")
+                    await websocket.send_json({
+                        "type": "frame",
+                        "image": b64,
+                        "format": "png",
+                    })
+            except WebSocketDisconnect:
+                raise
             except Exception as e:
                 await websocket.send_json({
                     "type": "error",
                     "message": str(e),
                 })
-            await asyncio.sleep(0.3)  # ~3 FPS
+                await asyncio.sleep(1)
+                continue
+            await asyncio.sleep(0.1)  # 프레임 간 최소 간격
     except WebSocketDisconnect:
         logger.info("Screen mirror WebSocket disconnected")
 
