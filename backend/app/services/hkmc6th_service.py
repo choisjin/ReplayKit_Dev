@@ -196,6 +196,7 @@ class HKMC6thService:
 
         try:
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self._socket.connect((self.host, self.port))
         except Exception as e:
             logger.error("Failed to connect to %s:%d: %s", self.host, self.port, e)
@@ -534,7 +535,7 @@ class HKMC6thService:
         release_event = [x, y, RELEASE_KEY, st]
         with self._send_lock:
             self._lcd_touch_ext_6th([press_event])
-            time.sleep(0.05)
+            time.sleep(0.1)
             self._lcd_touch_ext_6th([release_event])
 
     def long_press(self, x: int, y: int, duration_ms: int = 3000,
