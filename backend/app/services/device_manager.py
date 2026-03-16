@@ -135,6 +135,91 @@ async def _scan_hkmc_tcp(
     return deduped
 
 
+async def _probe_tcp_open(
+    ip: str, port: int, timeout: float, semaphore: asyncio.Semaphore
+) -> dict | None:
+    """단일 IP:port에 TCP 연결이 열리는지만 확인 (핸드셰이크 없음)."""
+    async with semaphore:
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(ip, port), timeout=timeout
+            )
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+            return {"ip": ip, "port": port}
+        except (asyncio.TimeoutError, OSError, ConnectionRefusedError):
+            return None
+
+
+async def _scan_tcp_generic(
+    ports: list[int],
+    connect_timeout: float = 0.3,
+    max_concurrent: int = 100,
+) -> list[dict]:
+    """LAN 서브넷에서 지정 TCP 포트가 열린 호스트를 탐색한다."""
+    import ipaddress
+    import ifaddr
+
+    if not ports:
+        return []
+
+    # 로컬 IP 수집
+    local_ips: set[str] = {"127.0.0.1"}
+    subnets: list[ipaddress.IPv4Network] = []
+
+    for adapter in ifaddr.get_adapters():
+        for ip_info in adapter.ips:
+            if not isinstance(ip_info.ip, str):
+                continue
+            ip_str = ip_info.ip
+            prefix = ip_info.network_prefix
+            if ip_str.startswith("127.") or ip_str.startswith("169.254."):
+                continue
+            local_ips.add(ip_str)
+            try:
+                net = ipaddress.IPv4Network(f"{ip_str}/{prefix}", strict=False)
+                if net.prefixlen >= 20:
+                    subnets.append(net)
+            except ValueError:
+                pass
+
+    unique = list({str(s): s for s in subnets}.values())
+
+    candidate_ips: set[str] = set()
+    for subnet in unique:
+        for host in subnet.hosts():
+            ip_str = str(host)
+            if ip_str not in local_ips:
+                candidate_ips.add(ip_str)
+
+    if not candidate_ips:
+        return []
+
+    semaphore = asyncio.Semaphore(max_concurrent)
+    tasks = [
+        _probe_tcp_open(ip, port, connect_timeout, semaphore)
+        for ip in candidate_ips
+        for port in ports
+    ]
+    results = await asyncio.gather(*tasks)
+    found = [r for r in results if r is not None]
+
+    # IP+port 별 중복 제거
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for r in found:
+        key = f"{r['ip']}:{r['port']}"
+        if key not in seen:
+            seen.add(key)
+            deduped.append(r)
+            logger.info("TCP scan: found open port at %s:%d", r["ip"], r["port"])
+
+    return deduped
+
+
 def _validate_serial(port: str, baudrate: int) -> str:
     import serial
     s = serial.Serial(port, baudrate=baudrate, timeout=1)
@@ -394,6 +479,18 @@ class DeviceManager:
     async def scan_hkmc(self) -> list[dict]:
         """TCP 포트 스캔으로 LAN 상의 HKMC 디바이스 탐지."""
         return await _scan_hkmc_tcp()
+
+    async def scan_tcp(self, ports: list[int] | None = None) -> list[dict]:
+        """LAN에서 지정 TCP 포트가 열린 호스트를 탐색 (보조디바이스용)."""
+        if ports is None:
+            # socket 타입 모듈의 scan_ports에서 수집
+            from .module_service import list_available_modules
+            port_set: set[int] = set()
+            for m in list_available_modules():
+                if m.get("connect_type") == "socket" and m.get("scan_ports"):
+                    port_set.update(m["scan_ports"])
+            ports = list(port_set)
+        return await _scan_tcp_generic(ports)
 
     async def add_serial_device(self, port: str, baudrate: int = 115200, name: str = "", category: str = "auxiliary", device_id: str = "") -> ManagedDevice:
         """Add a serial device and open a persistent connection."""

@@ -57,6 +57,7 @@ export default function DevicePage() {
   const [scannedAdb, setScannedAdb] = useState<any[]>([]);
   const [scannedSerial, setScannedSerial] = useState<SerialPort[]>([]);
   const [scannedHkmc, setScannedHkmc] = useState<{ ip: string; port: number; raw: string }[]>([]);
+  const [scannedTcp, setScannedTcp] = useState<{ ip: string; port: number }[]>([]);
   const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th'>('adb');
   const [connectAddress, setConnectAddress] = useState('');
   const [baudrate, setBaudrate] = useState(115200);
@@ -121,6 +122,7 @@ export default function DevicePage() {
       setScannedAdb(res.data.adb_devices || []);
       setScannedSerial(res.data.serial_ports || []);
       setScannedHkmc(res.data.hkmc_devices || []);
+      setScannedTcp(res.data.tcp_devices || []);
     } catch {
       message.error(t('device.scanFailed'));
     }
@@ -190,6 +192,26 @@ export default function DevicePage() {
     setConnecting(true);
     try {
       const result = await connectDevice('hkmc6th', ip, undefined, '', 'primary', undefined, undefined, undefined, '', port);
+      message.success(result);
+      setModalOpen(false);
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || t('device.connectFailed'));
+    }
+    setConnecting(false);
+  };
+
+  const handleAddTcp = async (ip: string, port: number) => {
+    const moduleName = scanSelectedModule;
+    const moduleConnType = getModuleConnectType(moduleName);
+    setConnecting(true);
+    try {
+      let result: string;
+      if (moduleName && (moduleConnType === 'socket' || moduleConnType === 'none')) {
+        result = await connectDevice('module', ip, undefined, '', 'auxiliary', moduleName, moduleConnType);
+      } else {
+        // 모듈 미선택 시 module 타입으로 추가 (address = ip)
+        result = await connectDevice('module', ip, undefined, `TCP ${ip}:${port}`, 'auxiliary', moduleName, 'socket');
+      }
       message.success(result);
       setModalOpen(false);
     } catch (e: any) {
@@ -497,7 +519,37 @@ export default function DevicePage() {
                     </>
                   )}
 
-                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && !scanning && (
+                  {modalCategory === 'auxiliary' && scannedTcp.length > 0 && (
+                    <>
+                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{t('device.detectedTcp')}</div>
+                      {modules.length > 0 && (
+                        <div style={{ marginBottom: 8 }}>
+                          <span style={{ marginRight: 8, color: '#888', fontSize: 12 }}>{`${t('device.module')}:`}</span>
+                          <Select
+                            allowClear
+                            placeholder={t('device.moduleSelect')}
+                            value={scanSelectedModule}
+                            onChange={setScanSelectedModule}
+                            style={{ width: 280 }}
+                            options={modules.filter(m => m.connect_type === 'socket').map(m => ({ label: m.label, value: m.name }))}
+                          />
+                        </div>
+                      )}
+                      <List
+                        size="small"
+                        dataSource={scannedTcp}
+                        renderItem={(d) => (
+                          <List.Item actions={[
+                            <Button size="small" type="primary" loading={connecting} onClick={() => handleAddTcp(d.ip, d.port)}>{t('common.add')}</Button>
+                          ]}>
+                            <Tag color="geekblue">TCP</Tag> <Tag color="blue">{d.ip}</Tag> <span style={{ color: '#888' }}>Port: {d.port}</span>
+                          </List.Item>
+                        )}
+                      />
+                    </>
+                  )}
+
+                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && scannedTcp.length === 0 && !scanning && (
                     <div style={{ color: '#666', textAlign: 'center', padding: 24 }}>
                       {t('device.noDevicesFound')}
                     </div>
