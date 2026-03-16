@@ -158,6 +158,7 @@ class HKMC6thService:
         self._recv_thread: Optional[threading.Thread] = None
         self._exit_flag = False
         self._send_lock = threading.Lock()  # 송신 시퀀스 보호 (press-release 등)
+        self._capture_lock = threading.Lock()  # 스크린샷 캡처 직렬화
 
         # Receive state
         self._recv_queue: queue.Queue = queue.Queue()
@@ -449,10 +450,12 @@ class HKMC6thService:
             w, h = self.screen_width_cluster, self.screen_height_cluster
         else:
             w, h = self.screen_width_front, self.screen_height_front
-        # 0이면 기본값 사용
+        # 0이면 기본값 사용 (최초 1회만 로그)
         if w == 0 or h == 0:
             dw, dh = self._DEFAULT_SCREEN_SIZES.get(screen_type, (1920, 720))
-            logger.info("Screen size 0 for %s, using default %dx%d", screen_type, dw, dh)
+            if not getattr(self, '_screen_default_logged', False):
+                logger.info("Screen size 0 for %s, using default %dx%d", screen_type, dw, dh)
+                self._screen_default_logged = True
             return dw, dh
         return w, h
 
@@ -504,45 +507,37 @@ class HKMC6thService:
         """Capture screenshot and return as PNG/JPEG bytes.
 
         The agent sends BMP format. We convert to the requested format.
-        Prefers in-memory processing (no temp file) when possible.
+        _capture_lock으로 동시 호출을 직렬화하여 _img_event 경쟁 방지.
         """
-        w, h = self.get_screen_size(screen_type)
-        screen_bits = SCREEN_CAPTURE_MAP.get(screen_type)
+        with self._capture_lock:
+            w, h = self.get_screen_size(screen_type)
+            screen_bits = SCREEN_CAPTURE_MAP.get(screen_type)
 
-        # 인메모리 캡처 요청 (파일명 없이)
-        self._img_buffer = b""
-        self._img_made = False
-        self._img_event.clear()
-        self._img_filename = ""
+            self._img_buffer = b""
+            self._img_made = False
+            self._img_event.clear()
+            self._img_filename = ""
 
-        img_data = []
-        img_data.append((0 >> 8) & 0xFF)
-        img_data.append(0 & 0xFF)
-        img_data.append((0 >> 8) & 0xFF)
-        img_data.append(0 & 0xFF)
-        img_data.append((w >> 8) & 0xFF)
-        img_data.append(w & 0xFF)
-        img_data.append((h >> 8) & 0xFF)
-        img_data.append(h & 0xFF)
-        if screen_bits is not None:
-            img_data.append((screen_bits >> 8) & 0xFF)
-            img_data.append(screen_bits & 0xFF)
+            img_data = [0, 0, 0, 0]  # left=0, top=0
+            img_data.append((w >> 8) & 0xFF)
+            img_data.append(w & 0xFF)
+            img_data.append((h >> 8) & 0xFF)
+            img_data.append(h & 0xFF)
+            if screen_bits is not None:
+                img_data.append((screen_bits >> 8) & 0xFF)
+                img_data.append(screen_bits & 0xFF)
 
-        t0 = time.time()
-        with self._send_lock:
-            lock_wait = time.time() - t0
-            if lock_wait > 0.05:
-                logger.info("[SCREENSHOT] lock 대기: %.3fs", lock_wait)
-            self._make_send_packet(CMD_GETIMG, 0, 0, img_data)
+            with self._send_lock:
+                self._make_send_packet(CMD_GETIMG, 0, 0, img_data)
 
-        if not self._img_event.wait(timeout=timeout):
-            raise TimeoutError(f"Screenshot timeout ({timeout}s) for {screen_type}")
+            if not self._img_event.wait(timeout=timeout):
+                raise TimeoutError(f"Screenshot timeout ({timeout}s) for {screen_type}")
 
-        bmp_bytes = self._img_buffer
-        if not bmp_bytes:
-            raise ValueError("Empty image buffer")
+            bmp_bytes = self._img_buffer
+            if not bmp_bytes:
+                raise ValueError("Empty image buffer")
 
-        # 인메모리 변환: cv2.imdecode (임시파일 불필요)
+        # 변환은 lock 밖에서 (다른 캡처를 블로킹하지 않도록)
         try:
             import cv2
             import numpy as np
@@ -557,17 +552,15 @@ class HKMC6thService:
         except Exception:
             pass
 
-        # 폴백: PIL 인메모리
         try:
             from PIL import Image
-            img = Image.open(io.BytesIO(bmp_bytes))
+            pil_img = Image.open(io.BytesIO(bmp_bytes))
             bio = io.BytesIO()
-            img.save(bio, format="PNG" if fmt == "png" else "JPEG", quality=60)
+            pil_img.save(bio, format="PNG" if fmt == "png" else "JPEG", quality=60)
             return bio.getvalue()
         except Exception:
             pass
 
-        # 최후 수단: raw BMP 반환
         return bmp_bytes
 
     # ------------------------------------------------------------------
