@@ -46,3 +46,4 @@ IVIHKMC6thAppMemInfo.py
 IVIHKMC6thPlugin.py
 IVIHKMC6thClient.py
 IVIHKMC6thProtocol.py
+backend/settings.json
