@@ -12,6 +12,16 @@ logger = logging.getLogger(__name__)
 from ..dependencies import adb_service as adb, device_manager as dm
 from ..services.module_service import list_available_modules, get_module_functions, execute_module_function
 
+
+def _parse_adb_display_id(screen_type: str | None) -> int | None:
+    """screen_type 문자열에서 ADB display_id 추출. '0', '2' 등 숫자 또는 None."""
+    if screen_type is None:
+        return None
+    try:
+        return int(screen_type)
+    except (ValueError, TypeError):
+        return None
+
 router = APIRouter(prefix="/api/device", tags=["device"])
 
 
@@ -240,18 +250,19 @@ async def device_input(req: InputRequest):
 
         # Resolve alias to real ADB serial address
         adb_serial = dev.address if dev else req.device_id
+        display_id = _parse_adb_display_id(req.params.get("screen_type"))
 
         p = req.params
         if req.action == "tap":
-            await adb.tap(p["x"], p["y"], serial=adb_serial)
+            await adb.tap(p["x"], p["y"], serial=adb_serial, display_id=display_id)
         elif req.action == "long_press":
-            await adb.long_press(p["x"], p["y"], p.get("duration_ms", 1000), serial=adb_serial)
+            await adb.long_press(p["x"], p["y"], p.get("duration_ms", 1000), serial=adb_serial, display_id=display_id)
         elif req.action == "swipe":
-            await adb.swipe(p["x1"], p["y1"], p["x2"], p["y2"], p.get("duration_ms", 300), serial=adb_serial)
+            await adb.swipe(p["x1"], p["y1"], p["x2"], p["y2"], p.get("duration_ms", 300), serial=adb_serial, display_id=display_id)
         elif req.action == "input_text":
-            await adb.input_text(p["text"], serial=adb_serial)
+            await adb.input_text(p["text"], serial=adb_serial, display_id=display_id)
         elif req.action == "key_event":
-            await adb.key_event(p["keycode"], serial=adb_serial)
+            await adb.key_event(p["keycode"], serial=adb_serial, display_id=display_id)
         elif req.action == "adb_command":
             await adb.run_shell_command(p["command"], serial=adb_serial)
         else:
@@ -403,7 +414,8 @@ async def get_screenshot(device_id: str, fmt: str = "jpeg", screen_type: str = "
         else:
             # ADB device
             adb_serial = dev.address if dev else device_id
-            img_bytes = await adb.screencap_bytes(serial=adb_serial, fmt=fmt)
+            display_id = _parse_adb_display_id(screen_type)
+            img_bytes = await adb.screencap_bytes(serial=adb_serial, fmt=fmt, display_id=display_id)
             b64 = base64.b64encode(img_bytes).decode("ascii")
             return {"image": b64, "format": fmt}
     except HTTPException:

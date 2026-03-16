@@ -105,6 +105,12 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     return dev?.type === 'hkmc6th';
   }, [primaryDevices]);
 
+  // --- Check if ADB device has multi-display ---
+  const hasMultiDisplay = useCallback((deviceId: string) => {
+    const dev = primaryDevices.find(d => d.id === deviceId);
+    return dev?.type === 'adb' && (dev.info?.displays?.length ?? 0) > 1;
+  }, [primaryDevices]);
+
   // --- WebSocket screen streaming (HKMC) ---
   const startWsStream = useCallback((deviceId: string, st: string) => {
     closeWs();
@@ -200,8 +206,11 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     if (isHkmcDevice(screenshotDeviceId)) {
       // HKMC: WebSocket 바이너리 스트리밍
       startWsStream(screenshotDeviceId, screenType);
+    } else if (hasMultiDisplay(screenshotDeviceId)) {
+      // ADB multi-display: WebSocket으로 screen_type(display_id) 전달
+      startWsStream(screenshotDeviceId, screenType);
     } else {
-      // ADB: HTTP 폴링
+      // ADB 단일 디스플레이: HTTP 폴링
       pollFn();
       intervalRef.current = setInterval(pollFn, pollInterval);
     }

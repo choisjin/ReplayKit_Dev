@@ -226,6 +226,15 @@ def get_module_functions(module_name: str) -> list[dict]:
 
 def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None) -> Any:
     """Get or create a singleton instance of the module class."""
+    # host/port가 변경된 경우 기존 인스턴스 무효화
+    if module_name in _instances and constructor_kwargs:
+        existing = _instances[module_name]
+        existing_host = getattr(existing, "_host", None) or getattr(existing, "host", None)
+        new_host = constructor_kwargs.get("host")
+        if new_host and existing_host and new_host != existing_host:
+            logger.info("Host changed for %s (%s → %s), recreating instance",
+                        module_name, existing_host, new_host)
+            _instances.pop(module_name, None)
     if module_name not in _instances:
         cls = _import_module_class(module_name)
         if cls is None:

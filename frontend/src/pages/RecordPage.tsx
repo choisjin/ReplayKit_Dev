@@ -335,6 +335,9 @@ export default function RecordPage() {
   // Get current screen device info
   const screenDevice = primaryDevices.find(d => d.id === screenshotDeviceId);
   const isScreenHkmc = screenDevice?.type === 'hkmc6th';
+  const isScreenAdb = screenDevice?.type === 'adb';
+  const adbDisplays: { id: number; name: string }[] = screenDevice?.info?.displays || [];
+  const hasMultiDisplay = isScreenAdb && adbDisplays.length > 1;
   const deviceRes = screenDevice?.info?.resolution ?? { width: 1080, height: 1920 };
 
   // Note: step device selection no longer auto-switches the screenshot.
@@ -406,10 +409,14 @@ export default function RecordPage() {
     return action;
   }, [allDevices]);
 
-  // Inject screen_type into params for HKMC actions
+  // Inject screen_type into params for HKMC / ADB multi-display actions
   const resolveParams = useCallback((action: string, params: Record<string, any>, targetDevice: string): Record<string, any> => {
     const dev = allDevices.find(d => d.id === targetDevice);
     if (dev?.type === 'hkmc6th' && (action === 'hkmc_touch' || action === 'hkmc_swipe' || action === 'hkmc_key')) {
+      return { ...params, screen_type: screenType };
+    }
+    // ADB multi-display: screen_type이 '0'이 아닌 경우에만 주입
+    if (dev?.type === 'adb' && screenType && screenType !== '0' && screenType !== 'front_center') {
       return { ...params, screen_type: screenType };
     }
     return params;
@@ -528,7 +535,7 @@ export default function RecordPage() {
   const saveExpectedFull = useCallback(async (stepIdx: number) => {
     if (!scenarioName || !screenshotDeviceId) return;
     try {
-      const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId, undefined, undefined, undefined, isScreenHkmc ? screenType : undefined);
+      const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
       setSteps(prev => prev.map((s, i) => i === stepIdx ? { ...s, expected_image: res.data.filename, _imageVer: Date.now() } : s));
       message.success(t('record.expectedSaved', { index: stepIdx + 1 }));
     } catch (e: any) {
@@ -631,7 +638,7 @@ export default function RecordPage() {
       const crop = { x: rx, y: ry, width: rw, height: rh };
       try {
         const res = await scenarioApi.captureExpectedImage(
-          scenarioName, captureStepIndex, screenshotDeviceId, crop, undefined, undefined, isScreenHkmc ? screenType : undefined,
+          scenarioName, captureStepIndex, screenshotDeviceId, crop, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined,
         );
         setSteps(prev => prev.map((s, i) => i === captureStepIndex ? { ...s, expected_image: res.data.filename, roi: crop, _imageVer: Date.now() } : s));
         message.success(t('record.cropExpectedSaved', { index: captureStepIndex + 1, size: `${rw}×${rh}` }));
@@ -767,7 +774,7 @@ export default function RecordPage() {
     const step = steps[index];
     if (!step?.expected_image && scenarioName && screenshotDeviceId) {
       try {
-        const res = await scenarioApi.captureExpectedImage(scenarioName, index, screenshotDeviceId, undefined, undefined, undefined, isScreenHkmc ? screenType : undefined);
+        const res = await scenarioApi.captureExpectedImage(scenarioName, index, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
         setSteps(prev => prev.map((s, i) => i === index ? { ...s, expected_image: res.data.filename, _imageVer: Date.now() } : s));
         message.success(t('record.expectedFullCapture'));
       } catch {
@@ -910,7 +917,7 @@ export default function RecordPage() {
     const step = steps[stepIdx];
     if (!step?.expected_image && scenarioName && screenshotDeviceId) {
       try {
-        const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId, undefined, undefined, undefined, isScreenHkmc ? screenType : undefined);
+        const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
         setSteps(prev => prev.map((s, i) => i === stepIdx ? { ...s, expected_image: res.data.filename, _imageVer: Date.now() } : s));
         message.success(t('record.expectedFullCapture'));
       } catch (e: any) {
@@ -1768,7 +1775,19 @@ export default function RecordPage() {
                       <Option value="cluster">{t('record.hkmcCluster')}</Option>
                     </Select>
                   )}
-                  {!isScreenHkmc && (
+                  {hasMultiDisplay && (
+                    <Select
+                      size="small"
+                      value={screenType}
+                      onChange={setScreenType}
+                      style={{ width: 140 }}
+                    >
+                      {adbDisplays.map(d => (
+                        <Option key={d.id} value={String(d.id)}>{d.name} (ID:{d.id})</Option>
+                      ))}
+                    </Select>
+                  )}
+                  {!isScreenHkmc && !hasMultiDisplay && (
                     <InputNumber
                       size="small"
                       min={100}

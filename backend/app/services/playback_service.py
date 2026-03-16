@@ -285,7 +285,17 @@ class PlaybackService:
                 actual_path = str(actual_dir / f"{file_prefix}.png")
 
                 if ss_device["type"] == "adb":
-                    await self.adb.screencap(actual_path, serial=ss_device["id"])
+                    # screen_type이 숫자면 display_id로 사용
+                    adb_did = None
+                    _st = ss_device.get("screen_type")
+                    if _st is not None:
+                        try:
+                            adb_did = int(_st)
+                            if adb_did == 0:
+                                adb_did = None
+                        except (ValueError, TypeError):
+                            pass
+                    await self.adb.screencap(actual_path, serial=ss_device["id"], display_id=adb_did)
                 elif ss_device["type"] == "hkmc6th":
                     hkmc_svc = self.dm.get_hkmc_service(ss_device["id"])
                     if hkmc_svc:
@@ -562,7 +572,11 @@ class PlaybackService:
                 screen_type = step.screen_type or step.params.get("screen_type", "front_center")
                 return {"type": "hkmc6th", "id": dev.id, "screen_type": screen_type}
             # ADB: dev.id 사용 (address fallback으로 찾은 경우 대응)
-            return {"type": "adb", "id": dev.id if dev else real_id}
+            adb_screen = step.screen_type or step.params.get("screen_type")
+            result = {"type": "adb", "id": dev.id if dev else real_id}
+            if adb_screen is not None:
+                result["screen_type"] = adb_screen
+            return result
         # For wait steps without device_id, find the first available primary device
         if step.type == StepType.WAIT:
             primary = self.dm.list_primary()
@@ -640,21 +654,32 @@ class PlaybackService:
                 if dev and dev.type != "adb":
                     raise ValueError(f"Device {serial} is not an ADB device, cannot run {step.type.value}")
 
+            # screen_type이 숫자면 ADB display_id로 사용
+            adb_display_id = None
+            st = step.screen_type or params.get("screen_type")
+            if st is not None:
+                try:
+                    adb_display_id = int(st)
+                    if adb_display_id == 0:
+                        adb_display_id = None
+                except (ValueError, TypeError):
+                    pass
+
             if step.type == StepType.TAP:
-                await self.adb.tap(params["x"], params["y"], serial=serial)
+                await self.adb.tap(params["x"], params["y"], serial=serial, display_id=adb_display_id)
             elif step.type == StepType.LONG_PRESS:
-                await self.adb.long_press(params["x"], params["y"], params.get("duration_ms", 1000), serial=serial)
+                await self.adb.long_press(params["x"], params["y"], params.get("duration_ms", 1000), serial=serial, display_id=adb_display_id)
             elif step.type == StepType.SWIPE:
                 await self.adb.swipe(
                     params["x1"], params["y1"],
                     params["x2"], params["y2"],
                     params.get("duration_ms", 300),
-                    serial=serial,
+                    serial=serial, display_id=adb_display_id,
                 )
             elif step.type == StepType.INPUT_TEXT:
-                await self.adb.input_text(params["text"], serial=serial)
+                await self.adb.input_text(params["text"], serial=serial, display_id=adb_display_id)
             elif step.type == StepType.KEY_EVENT:
-                await self.adb.key_event(params["keycode"], serial=serial)
+                await self.adb.key_event(params["keycode"], serial=serial, display_id=adb_display_id)
             elif step.type == StepType.ADB_COMMAND:
                 await self.adb.run_shell_command(params["command"], serial=serial)
 

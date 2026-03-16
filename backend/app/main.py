@@ -106,7 +106,18 @@ async def websocket_screen_mirror(websocket: WebSocket):
                     )
                     await websocket.send_bytes(jpeg_bytes)
                 else:
-                    png_bytes = await adb_service.screencap_bytes()
+                    # ADB: screen_type이 숫자면 display_id로 사용
+                    adb_display_id = None
+                    try:
+                        adb_display_id = int(screen_type)
+                        if adb_display_id == 0:
+                            adb_display_id = None
+                    except (ValueError, TypeError):
+                        pass
+                    adb_serial = dev.address if dev else target_device_id
+                    png_bytes = await adb_service.screencap_bytes(
+                        serial=adb_serial or None, display_id=adb_display_id
+                    )
                     b64 = base64.b64encode(png_bytes).decode("ascii")
                     await websocket.send_json({
                         "type": "frame",

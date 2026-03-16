@@ -136,50 +136,85 @@ class ADBService:
         # parse resolution e.g. "Physical size: 1080x1920"
         res_match = re.search(r"(\d+)x(\d+)", resolution)
         width, height = (int(res_match.group(1)), int(res_match.group(2))) if res_match else (0, 0)
+        # 디스플레이 목록 조회
+        displays = await self.list_displays(s)
         return {
             "serial": s,
             "model": model.strip(),
             "brand": brand.strip(),
             "android_version": android_ver.strip(),
             "resolution": {"width": width, "height": height},
+            "displays": displays,
         }
+
+    async def list_displays(self, serial: Optional[str] = None) -> list[dict]:
+        """디바이스의 디스플레이 목록 조회."""
+        s = serial or self._active_serial
+        if not s:
+            return []
+        output = await self._run_device(s, "shell dumpsys SurfaceFlinger --display-id")
+        displays: list[dict] = []
+        # 기본 디스플레이(0)는 항상 포함
+        displays.append({"id": 0, "name": "Default"})
+        # dumpsys display로 추가 디스플레이 탐색
+        disp_output = await self._run_device(s, "shell dumpsys display")
+        seen_ids = {0}
+        for m in re.finditer(r"mDisplayId=(\d+)", disp_output):
+            did = int(m.group(1))
+            if did not in seen_ids:
+                seen_ids.add(did)
+                displays.append({"id": did, "name": f"Display {did}"})
+        return displays
 
     # ------------------------------------------------------------------
     # Input commands
     # ------------------------------------------------------------------
 
-    async def tap(self, x: int, y: int, serial: Optional[str] = None) -> str:
+    def _display_flag(self, display_id: Optional[int]) -> str:
+        """display_id가 0이 아닌 경우 --display-id 플래그 반환."""
+        if display_id is not None and display_id != 0:
+            return f"--display-id {display_id} "
+        return ""
+
+    async def tap(self, x: int, y: int, serial: Optional[str] = None, display_id: Optional[int] = None) -> str:
         s = serial or self._active_serial
         if not s:
             raise ValueError("No device selected")
-        return await self._run_device(s, f"shell input tap {x} {y}")
+        dflag = self._display_flag(display_id)
+        return await self._run_device(s, f"shell input {dflag}tap {x} {y}")
 
     async def swipe(
-        self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300, serial: Optional[str] = None
+        self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300,
+        serial: Optional[str] = None, display_id: Optional[int] = None,
     ) -> str:
         s = serial or self._active_serial
         if not s:
             raise ValueError("No device selected")
-        return await self._run_device(s, f"shell input swipe {x1} {y1} {x2} {y2} {duration_ms}")
+        dflag = self._display_flag(display_id)
+        return await self._run_device(s, f"shell input {dflag}swipe {x1} {y1} {x2} {y2} {duration_ms}")
 
-    async def long_press(self, x: int, y: int, duration_ms: int = 1000, serial: Optional[str] = None) -> str:
+    async def long_press(self, x: int, y: int, duration_ms: int = 1000,
+                         serial: Optional[str] = None, display_id: Optional[int] = None) -> str:
         s = serial or self._active_serial
         if not s:
             raise ValueError("No device selected")
-        return await self._run_device(s, f"shell input swipe {x} {y} {x} {y} {duration_ms}")
+        dflag = self._display_flag(display_id)
+        return await self._run_device(s, f"shell input {dflag}swipe {x} {y} {x} {y} {duration_ms}")
 
-    async def input_text(self, text: str, serial: Optional[str] = None) -> str:
+    async def input_text(self, text: str, serial: Optional[str] = None, display_id: Optional[int] = None) -> str:
         s = serial or self._active_serial
         if not s:
             raise ValueError("No device selected")
         escaped = text.replace(" ", "%s").replace("&", "\\&").replace("<", "\\<").replace(">", "\\>")
-        return await self._run_device(s, f'shell input text "{escaped}"')
+        dflag = self._display_flag(display_id)
+        return await self._run_device(s, f'shell input {dflag}text "{escaped}"')
 
-    async def key_event(self, keycode: str, serial: Optional[str] = None) -> str:
+    async def key_event(self, keycode: str, serial: Optional[str] = None, display_id: Optional[int] = None) -> str:
         s = serial or self._active_serial
         if not s:
             raise ValueError("No device selected")
-        return await self._run_device(s, f"shell input keyevent {keycode}")
+        dflag = self._display_flag(display_id)
+        return await self._run_device(s, f"shell input {dflag}keyevent {keycode}")
 
     async def run_shell_command(self, command: str, serial: Optional[str] = None) -> str:
         """Run an arbitrary adb command on the device."""
@@ -192,25 +227,27 @@ class ADBService:
     # Screenshot
     # ------------------------------------------------------------------
 
-    async def screencap(self, save_path: str, serial: Optional[str] = None) -> str:
+    async def screencap(self, save_path: str, serial: Optional[str] = None, display_id: Optional[int] = None) -> str:
         """Capture a screenshot and save as PNG."""
         s = serial or self._active_serial
         if not s:
             raise ValueError("No device selected")
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
-        cmd = f'{ADB_PATH} -s {s} exec-out screencap -p > "{save_path}"'
+        dflag = f"--display-id {display_id} " if display_id else ""
+        cmd = f'{ADB_PATH} -s {s} exec-out screencap {dflag}-p > "{save_path}"'
         loop = asyncio.get_event_loop()
         stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, cmd))
         if rc != 0:
             logger.error("screencap save error: %s", stderr)
         return save_path
 
-    async def screencap_bytes(self, serial: Optional[str] = None, fmt: str = "png") -> bytes:
+    async def screencap_bytes(self, serial: Optional[str] = None, fmt: str = "png", display_id: Optional[int] = None) -> bytes:
         """Capture a screenshot and return image bytes (png or jpeg)."""
         s = serial or self._active_serial
         if not s:
             raise ValueError("No device selected")
-        cmd = f"{ADB_PATH} -s {s} exec-out screencap -p"
+        dflag = f"--display-id {display_id} " if display_id else ""
+        cmd = f"{ADB_PATH} -s {s} exec-out screencap {dflag}-p"
         loop = asyncio.get_event_loop()
         stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync_bytes, cmd))
         if rc != 0:

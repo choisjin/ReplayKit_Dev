@@ -141,27 +141,36 @@ BENCH_UDP_PROBE = bytes([0x55, 0xAA, 100, 0, 0x20, 0x02, 0x00, 0x00])
 
 
 def _probe_udp_bench_sync(ip: str, port: int, timeout: float) -> dict | None:
-    """UDP 프로브 전송 후 응답이 있으면 벤치로 판정."""
-    import socket
+    """UDP 프로브 전송 후 응답이 있으면 벤치로 판정.
+
+    레거시와 동일: connect() → sendto() → settimeout → recv → settimeout(None)
+    """
+    import socket as _socket
     sock = None
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(timeout)
+        sock = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+        # 레거시와 동일: connect로 기본 목적지 설정
+        sock.connect((ip, port))
         sock.sendto(BENCH_UDP_PROBE, (ip, port))
-        data, addr = sock.recvfrom(256)
+        sock.settimeout(timeout)
+        data = sock.recv(16)
+        sock.settimeout(None)
         if len(data) >= 2 and data[0] == 0x55 and data[1] == 0xAA:
             return {"ip": ip, "port": port}
     except Exception:
         pass
     finally:
         if sock:
-            sock.close()
+            try:
+                sock.close()
+            except Exception:
+                pass
     return None
 
 
 async def _scan_udp_bench(
     ports: list[int] | None = None,
-    probe_timeout: float = 0.5,
+    probe_timeout: float = 2.0,
     max_concurrent: int = 50,
 ) -> list[dict]:
     """LAN 서브넷에서 UDP 벤치 디바이스를 탐색한다."""
@@ -594,6 +603,11 @@ class DeviceManager:
         hkmc = self._hkmc_conns.pop(dev.id, None)
         if hkmc:
             hkmc.disconnect()
+        # 모듈 인스턴스 캐시 제거
+        module_name = dev.info.get("module")
+        if module_name:
+            from .module_service import reset_instance
+            reset_instance(module_name)
         self._devices.pop(dev.id, None)
         self._save_auxiliary_devices()
         return result
