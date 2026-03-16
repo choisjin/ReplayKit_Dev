@@ -550,7 +550,7 @@ class HKMC6thService:
         release_event = [x, y, RELEASE_KEY, st]
         with self._send_lock:
             self._lcd_touch_ext_6th([press_event])
-            time.sleep(0.1)
+            time.sleep(0.5)
             self._lcd_touch_ext_6th([release_event])
 
     def long_press(self, x: int, y: int, duration_ms: int = 3000,
