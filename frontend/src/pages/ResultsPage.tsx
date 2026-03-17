@@ -259,6 +259,14 @@ export default function ResultsPage() {
 
   const columns = [
     {
+      title: t('results.execTime'),
+      key: 'time',
+      width: 200,
+      render: (_: any, r: ResultSummary) => <span style={{ whiteSpace: 'nowrap' }}>{formatTime(r.started_at)}</span>,
+      sorter: (a: ResultSummary, b: ResultSummary) => (a.started_at || '').localeCompare(b.started_at || ''),
+      defaultSortOrder: 'descend' as const,
+    },
+    {
       title: t('results.scenario'),
       dataIndex: 'scenario_name',
       key: 'name',
@@ -291,14 +299,6 @@ export default function ResultsPage() {
           <span style={{ color: '#888' }}>/ {r.total_steps}</span>
         </Space>
       ),
-    },
-    {
-      title: t('results.execTime'),
-      key: 'time',
-      width: 160,
-      render: (_: any, r: ResultSummary) => formatTime(r.started_at),
-      sorter: (a: ResultSummary, b: ResultSummary) => (a.started_at || '').localeCompare(b.started_at || ''),
-      defaultSortOrder: 'descend' as const,
     },
     {
       title: t('common.actions'),
