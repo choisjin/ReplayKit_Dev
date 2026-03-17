@@ -142,10 +142,6 @@ class PlaybackService:
                     break
 
                 step = scenario.steps[idx]
-
-                # 스텝 실행 전 디바이스 연결 상태 확인 + 자동 재연결
-                await self._ensure_device_connected(step)
-
                 step_result = await self._execute_step(step, scenario.name, verify)
                 result.step_results.append(step_result)
 
@@ -221,9 +217,6 @@ class PlaybackService:
                     break
                 step = scenario.steps[idx]
 
-                # 스텝 실행 전 디바이스 연결 상태 확인 + 자동 재연결
-                await self._ensure_device_connected(step)
-
                 step_result = await self._execute_step(step, scenario.name, verify, repeat_index=repeat_index)
                 yield step_result
 
@@ -278,14 +271,21 @@ class PlaybackService:
         file_prefix = f"c{repeat_index}_step_{step.id:03d}"
 
         try:
+            # 1) 액션 실행 전: 해당 스텝의 디바이스 연결 확인
+            action_device_id = self._resolve_real_device_id(step)
+            if action_device_id:
+                await self._ensure_device_connected(action_device_id)
+
             # Execute the action
             await self._run_action(step)
 
             # Wait
             await asyncio.sleep(step.delay_after_ms / 1000.0)
 
-            # Capture actual screenshot (ADB or HKMC)
+            # 2) 이미지 비교 전: 스크린샷 대상 디바이스 연결 확인
             ss_device = self._resolve_screenshot_device(step)
+            if ss_device:
+                await self._ensure_device_connected(ss_device["id"])
             actual_path = None
             if ss_device:
                 actual_dir = SCREENSHOTS_DIR / scenario_name / "actual"
@@ -552,32 +552,32 @@ class PlaybackService:
             return f"hkmc_key {key}"
         return step.type.value
 
-    async def _ensure_device_connected(self, step: Step, max_retries: int = 3, retry_interval: float = 3.0) -> None:
-        """스텝 실행 전 디바이스 연결 상태 확인 + 자동 재연결.
+    async def _ensure_device_connected(self, device_id: str, max_retries: int = 3, retry_interval: float = 3.0) -> None:
+        """특정 디바이스의 연결 상태 확인 + 끊어진 경우 재연결 시도.
 
-        HKMC: 끊어진 경우 재연결 시도 (최대 max_retries회)
-        ADB: refresh로 상태 갱신
+        Args:
+            device_id: 실제 디바이스 ID (alias가 아닌 resolve된 ID)
         """
-        real_id = self._resolve_real_device_id(step)
-        if not real_id:
+        if not device_id:
             return
-        dev = self.dm.get_device(real_id)
+        dev = self.dm.get_device(device_id)
         if not dev:
             return
 
         if dev.type == "hkmc6th":
-            hkmc = self.dm.get_hkmc_service(real_id)
+            hkmc = self.dm.get_hkmc_service(device_id)
             if hkmc and hkmc.is_connected:
-                return  # 정상
-            # 재연결 시도
+                return
             port = dev.info.get("port", 0)
             if not port:
                 return
             from .hkmc6th_service import HKMC6thService
             for attempt in range(1, max_retries + 1):
-                logger.info("Playback: HKMC reconnect attempt %d/%d for %s",
-                            attempt, max_retries, real_id)
+                if self._should_stop:
+                    return
+                logger.info("Playback: reconnect %s attempt %d/%d", device_id, attempt, max_retries)
                 try:
+                    hkmc = self.dm.get_hkmc_service(device_id)
                     if hkmc:
                         hkmc.disconnect()
                     svc = HKMC6thService(dev.address, port, device_id=dev.id)
@@ -587,17 +587,15 @@ class PlaybackService:
                         dev.status = "connected"
                         dev.info["agent_version"] = svc.agent_version
                         dev.info["screens"] = svc.get_info()["screens"]
-                        logger.info("Playback: HKMC reconnected: %s", real_id)
+                        logger.info("Playback: reconnected %s", device_id)
                         return
                 except Exception as e:
-                    logger.warning("Playback: HKMC reconnect failed: %s: %s", real_id, e)
+                    logger.debug("Playback: reconnect %s failed: %s", device_id, e)
                 if attempt < max_retries:
                     await asyncio.sleep(retry_interval)
             dev.status = "disconnected"
-            logger.error("Playback: HKMC reconnect exhausted for %s", real_id)
 
         elif dev.type == "adb":
-            # 해당 디바이스만 ADB 상태 확인
             try:
                 adb_devices = await self.adb.list_devices()
                 found = next((d for d in adb_devices if d.serial == dev.address), None)
