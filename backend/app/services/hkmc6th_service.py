@@ -278,7 +278,7 @@ class HKMC6thService:
             self._socket.send(msg)
         except (ConnectionResetError, ConnectionAbortedError, OSError) as e:
             # WinError 10054 등: 원격 호스트 연결 끊김 → 자동 disconnect
-            logger.warning("HKMC connection lost (device=%s): %s", self._device_id, e)
+            logger.warning("HKMC connection lost (device=%s): %s", self.device_id, e)
             self.disconnect()
             raise ConnectionError(f"HKMC connection lost: {e}")
 
