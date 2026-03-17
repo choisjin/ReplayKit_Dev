@@ -11,8 +11,6 @@ import {
 import { scenarioApi, deviceApi } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from '../i18n';
-import { useWebcam } from '../hooks/useWebcam';
-import WebcamPanel from '../components/WebcamPanel';
 
 interface ScenarioDetail {
   name: string;
@@ -103,8 +101,7 @@ const formatTime = (iso: string, lang: string = 'ko') => {
 
 export default function ScenarioPage() {
   const { t, lang } = useTranslation();
-  const { settings, uploadWebcamRecording, saveExportZipToDir } = useSettings();
-  const webcam = useWebcam();
+  const { settings, saveExportZipToDir } = useSettings();
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<ScenarioDetail | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
@@ -238,15 +235,6 @@ export default function ScenarioPage() {
     const desc = step.description ? ` [${step.description}]` : '';
     return `#${idx + 1} ${type} ${detail}${desc}`;
   };
-
-  // Wire up webcam upload when save dir is configured
-  useEffect(() => {
-    if (settings.webcam_save_dir) {
-      webcam.setUploadFn(uploadWebcamRecording);
-    } else {
-      webcam.setUploadFn(null);
-    }
-  }, [settings.webcam_save_dir, webcam.setUploadFn, uploadWebcamRecording]);
 
   useEffect(() => {
     fetchScenarios();
@@ -975,19 +963,14 @@ export default function ScenarioPage() {
           </div>
         )}
       </Card>
+      </div>
 
-      {/* ===== 웹캠 패널 (오른쪽) ===== */}
-      <div style={{ width: 540, flexShrink: 0 }}>
-        <style>{`
-          @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-          .row-pass td { background: rgba(82, 196, 26, 0.06) !important; }
-          .row-fail td { background: rgba(255, 77, 79, 0.08) !important; }
-          .row-error td { background: rgba(255, 77, 79, 0.06) !important; }
-          .row-running td { background: rgba(22, 119, 255, 0.08) !important; }
-        `}</style>
-        <WebcamPanel webcam={webcam} />
-      </div>
-      </div>
+      <style>{`
+        .row-pass td { background: rgba(82, 196, 26, 0.06) !important; }
+        .row-fail td { background: rgba(255, 77, 79, 0.08) !important; }
+        .row-error td { background: rgba(255, 77, 79, 0.06) !important; }
+        .row-running td { background: rgba(22, 119, 255, 0.08) !important; }
+      `}</style>
 
       {/* ===== 실시간 재생 패널 ===== */}
       {(playing || stepResults.length > 0) && playbackScenario && (

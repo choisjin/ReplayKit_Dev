@@ -4,8 +4,6 @@ import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOp
 import { deviceApi, scenarioApi } from '../services/api';
 import { useDevice } from '../context/DeviceContext';
 import { useSettings } from '../context/SettingsContext';
-import { useWebcam } from '../hooks/useWebcam';
-import WebcamPanel from '../components/WebcamPanel';
 import { useTranslation } from '../i18n';
 import type { TranslationKey } from '../i18n/translations';
 
@@ -179,27 +177,7 @@ export default function RecordPage() {
   const [lastGesture, setLastGesture] = useState('');
 
   // Settings
-  const { settings, uploadWebcamRecording } = useSettings();
-
-  // Webcam (shared hook)
-  const webcam = useWebcam();
-  const {
-    webcamOpen, webcamIndex, webcamDevices, webcamVideoRef, webcamRecording,
-    webcamSettingsOpen, setWebcamSettingsOpen, webcamCapabilities, webcamSettings,
-    webcamResolution, webcamResolutions,
-    handleWebcamToggle, handleWebcamChange, handleWebcamResolutionChange,
-    startWebcamRecording, stopWebcamRecording, loadWebcamCapabilities, applyWebcamSetting,
-    stopWebcam, setUploadFn,
-  } = webcam;
-
-  // Wire up webcam upload when save dir is configured
-  useEffect(() => {
-    if (settings.webcam_save_dir) {
-      setUploadFn(uploadWebcamRecording);
-    } else {
-      setUploadFn(null);
-    }
-  }, [settings.webcam_save_dir, setUploadFn, uploadWebcamRecording]);
+  const { settings } = useSettings();
 
   // Wait step insertion
   const [waitDurationMs, setWaitDurationMs] = useState(1000);
@@ -383,11 +361,10 @@ export default function RecordPage() {
     }
   }, [primaryDevices]);
 
-  // Stop screenshot polling & webcam when leaving page
+  // Stop screenshot polling when leaving page
   useEffect(() => {
     return () => {
       setScreenshotDeviceId('');
-      stopWebcam();
     };
   }, []);
 
@@ -1885,8 +1862,6 @@ export default function RecordPage() {
             )}
           </Card>
 
-          {/* Webcam panel */}
-          <WebcamPanel webcam={webcam} />
         </Splitter.Panel>
 
         <Splitter.Panel style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>

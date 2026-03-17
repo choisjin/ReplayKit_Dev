@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { App as AntdApp, ConfigProvider, Layout, Menu, theme } from 'antd';
+import { useEffect, useState } from 'react';
+import { App as AntdApp, Button, ConfigProvider, Layout, Menu, Tooltip, theme } from 'antd';
 import {
   BarChartOutlined,
   DesktopOutlined,
@@ -10,11 +10,13 @@ import {
 import { DeviceProvider } from './context/DeviceContext';
 import { SettingsProvider, useSettings } from './context/SettingsContext';
 import { useTranslation } from './i18n';
+import { useWebcam } from './hooks/useWebcam';
 import DevicePage from './pages/DevicePage';
 import RecordPage from './pages/RecordPage';
 import ScenarioPage from './pages/ScenarioPage';
 import ResultsPage from './pages/ResultsPage';
 import SettingsPage from './pages/SettingsPage';
+import WebcamPip from './components/WebcamPip';
 
 const { Sider, Content } = Layout;
 
@@ -28,8 +30,31 @@ const pageKeys = [
 
 function AppContent() {
   const [activeKey, setActiveKey] = useState('/');
-  const { settings } = useSettings();
+  const { settings, uploadWebcamRecording } = useSettings();
   const { t } = useTranslation();
+
+  // Global webcam
+  const webcam = useWebcam();
+  const [webcamVisible, setWebcamVisible] = useState(false);
+
+  // Wire up webcam upload when save dir is configured
+  useEffect(() => {
+    if (settings.webcam_save_dir) {
+      webcam.setUploadFn(uploadWebcamRecording);
+    } else {
+      webcam.setUploadFn(null);
+    }
+  }, [settings.webcam_save_dir, webcam.setUploadFn, uploadWebcamRecording]);
+
+  const toggleWebcam = () => {
+    if (webcamVisible) {
+      webcam.stopWebcam();
+      setWebcamVisible(false);
+    } else {
+      webcam.handleWebcamToggle(['webcam']);
+      setWebcamVisible(true);
+    }
+  };
 
   const pages = pageKeys.map(p => ({ ...p, label: t(p.labelKey) }));
   const menuItems = pages.map(({ key, icon, label }) => ({ key, icon, label }));
@@ -63,6 +88,19 @@ function AppContent() {
             items={menuItems}
             onClick={({ key }) => { setActiveKey(key); window.dispatchEvent(new CustomEvent('tab-change', { detail: key })); }}
           />
+          <div style={{ padding: '12px 16px' }}>
+            <Tooltip title={t('webcam.title')} placement="right">
+              <Button
+                block
+                type={webcamVisible ? 'primary' : 'default'}
+                icon={<VideoCameraOutlined />}
+                onClick={toggleWebcam}
+                style={webcamVisible && webcam.webcamRecording ? { animation: 'blink 1s infinite' } : undefined}
+              >
+                {t('webcam.title')}
+              </Button>
+            </Tooltip>
+          </div>
         </Sider>
         <Layout style={layoutBg ? { background: layoutBg } : undefined}>
           <Content style={{ margin: 8, padding: 12, background: contentBg, borderRadius: 8 }}>
@@ -74,6 +112,12 @@ function AppContent() {
           </Content>
         </Layout>
       </Layout>
+
+      {webcamVisible && (
+        <WebcamPip webcam={webcam} onClose={toggleWebcam} />
+      )}
+
+      <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
     </ConfigProvider>
   );
 }
