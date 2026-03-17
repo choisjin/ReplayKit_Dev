@@ -1562,7 +1562,7 @@ export default function RecordPage() {
                 <InputNumber
                   size="small"
                   min={0}
-                  max={30000}
+                  max={Infinity}
                   step={100}
                   value={s.delay_after_ms}
                   onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, delay_after_ms: v || 0 } : st))}
@@ -1964,7 +1964,7 @@ export default function RecordPage() {
                   </Select>
                   <InputNumber
                     min={100}
-                    max={30000}
+                    max={Infinity}
                     step={100}
                     value={delayMs}
                     onChange={(v) => setDelayMs(v || 1000)}
@@ -2097,7 +2097,7 @@ export default function RecordPage() {
                 <InputNumber
                   size="small"
                   min={100}
-                  max={30000}
+                  max={Infinity}
                   step={100}
                   value={waitDurationMs}
                   onChange={(v) => { const val = v || 1000; setWaitDurationMs(val); waitDurationRef.current = val; }}

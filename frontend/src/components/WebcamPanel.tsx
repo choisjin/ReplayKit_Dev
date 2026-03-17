@@ -84,26 +84,6 @@ export default function WebcamPanel({ webcam }: WebcamPanelProps) {
         ) : null,
         children: (
           <div>
-            {webcamResolutions.length > 0 && (
-              <div style={{ marginBottom: 4 }}>
-                <Select
-                  size="small"
-                  value={webcamResolution || undefined}
-                  onChange={handleWebcamResolutionChange}
-                  style={{ width: '100%' }}
-                  placeholder={t('webcam.resolutionSelect')}
-                >
-                  {webcamResolutions.map(r => {
-                    const [w, h] = r.split('x');
-                    return (
-                      <Option key={r} value={r}>
-                        {RESOLUTION_LABELS[r] ? `${RESOLUTION_LABELS[r]} (${w}×${h})` : `${w}×${h}`}
-                      </Option>
-                    );
-                  })}
-                </Select>
-              </div>
-            )}
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <div style={{ width: '66.6%', position: 'relative' }}>
                 <video
@@ -143,7 +123,28 @@ export default function WebcamPanel({ webcam }: WebcamPanelProps) {
                 background: 'rgba(0,0,0,0.15)',
                 borderRadius: 6,
               }}>
-                {Object.keys(webcamCapabilities).length === 0 ? (
+                {webcamResolutions.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, marginBottom: 2 }}>{t('webcam.resolutionSelect')}</div>
+                    <Select
+                      size="small"
+                      value={webcamResolution || undefined}
+                      onChange={handleWebcamResolutionChange}
+                      style={{ width: '100%' }}
+                      placeholder={t('webcam.resolutionSelect')}
+                    >
+                      {webcamResolutions.map(r => {
+                        const [w, h] = r.split('x');
+                        return (
+                          <Option key={r} value={r}>
+                            {RESOLUTION_LABELS[r] ? `${RESOLUTION_LABELS[r]} (${w}×${h})` : `${w}×${h}`}
+                          </Option>
+                        );
+                      })}
+                    </Select>
+                  </div>
+                )}
+                {Object.keys(webcamCapabilities).length === 0 && webcamResolutions.length === 0 ? (
                   <div style={{ color: '#888', fontSize: 12, textAlign: 'center' }}>
                     {t('webcam.noSettings')}
                   </div>

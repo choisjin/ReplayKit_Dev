@@ -55,6 +55,17 @@ class PlaybackService:
     async def stop(self) -> None:
         self._should_stop = True
 
+    async def _interruptible_sleep(self, seconds: float) -> bool:
+        """중단 가능한 sleep. _should_stop이면 즉시 반환. 중단 시 True 반환."""
+        interval = 0.5
+        remaining = seconds
+        while remaining > 0:
+            if self._should_stop:
+                return True
+            await asyncio.sleep(min(interval, remaining))
+            remaining -= interval
+        return False
+
     def _resolve_device_map(self, scenario: Scenario, override_map: Optional[dict[str, str]] = None) -> dict[str, str]:
         """Build alias -> real device ID mapping.
 
@@ -272,15 +283,26 @@ class PlaybackService:
 
         try:
             # 1) 액션 실행 전: 해당 스텝의 디바이스 연결 확인
+            if self._should_stop:
+                step_result.status = "error"
+                step_result.error_message = "Stopped by user"
+                return step_result
             action_device_id = self._resolve_real_device_id(step)
             if action_device_id:
                 await self._ensure_device_connected(action_device_id)
 
             # Execute the action
+            if self._should_stop:
+                step_result.status = "error"
+                step_result.error_message = "Stopped by user"
+                return step_result
             await self._run_action(step)
 
-            # Wait
-            await asyncio.sleep(step.delay_after_ms / 1000.0)
+            # Wait (중단 가능)
+            if await self._interruptible_sleep(step.delay_after_ms / 1000.0):
+                step_result.status = "error"
+                step_result.error_message = "Stopped by user"
+                return step_result
 
             # 2) 이미지 비교 전: 스크린샷 대상 디바이스 연결 확인
             ss_device = self._resolve_screenshot_device(step)
@@ -592,7 +614,8 @@ class PlaybackService:
                 except Exception as e:
                     logger.debug("Playback: reconnect %s failed: %s", device_id, e)
                 if attempt < max_retries:
-                    await asyncio.sleep(retry_interval)
+                    if await self._interruptible_sleep(retry_interval):
+                        return
             dev.status = "disconnected"
 
         elif dev.type == "adb":
@@ -708,7 +731,7 @@ class PlaybackService:
                         params.get("monitor", 0x00), params.get("direction"),
                     )
         elif step.type == StepType.WAIT:
-            await asyncio.sleep(params.get("duration_ms", 1000) / 1000.0)
+            await self._interruptible_sleep(params.get("duration_ms", 1000) / 1000.0)
         else:
             # ADB actions
             serial = real_id
