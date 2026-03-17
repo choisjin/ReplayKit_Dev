@@ -151,6 +151,19 @@ export default function ScenarioPage() {
   const setRepeatCount = (name: string, val: number) =>
     setRepeatCounts((prev) => ({ ...prev, [name]: val }));
 
+  // 시나리오 스텝 미리보기
+  const [previewSteps, setPreviewSteps] = useState<any[]>([]);
+  const [skipStepIds, setSkipStepIds] = useState<Set<number>>(new Set());
+
+  // 시나리오 선택 시 스텝 로드
+  useEffect(() => {
+    if (!selectedName) { setPreviewSteps([]); setSkipStepIds(new Set()); return; }
+    scenarioApi.get(selectedName).then(res => {
+      setPreviewSteps(res.data.steps || []);
+      setSkipStepIds(new Set());
+    }).catch(() => setPreviewSteps([]));
+  }, [selectedName]);
+
   // Group play
   const [playingGroupName, setPlayingGroupName] = useState<string | null>(null);
   const [currentGroupScenario, setCurrentGroupScenario] = useState('');
@@ -580,7 +593,8 @@ export default function ScenarioPage() {
     const hasMap = Object.keys(deviceMap).length > 0;
     ws.onopen = () => {
       setCurrentStepId(1);
-      ws.send(JSON.stringify({ action: 'play', scenario: name, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}) }));
+      const skipIds = Array.from(skipStepIds);
+      ws.send(JSON.stringify({ action: 'play', scenario: name, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}), ...(skipIds.length > 0 ? { skip_steps: skipIds } : {}) }));
     };
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -1061,6 +1075,76 @@ export default function ScenarioPage() {
           )}
         </Space>
       </Card>
+
+      {/* ===== 시나리오 스텝 미리보기 ===== */}
+      {selectedName && previewSteps.length > 0 && !playing && (
+        <Card
+          size="small"
+          title={<span>{selectedName} — {previewSteps.length} {t('scenario.steps')}</span>}
+          style={{ marginTop: 4, maxHeight: 300, overflow: 'auto' }}
+          styles={{ body: { padding: '0' } }}
+        >
+          <Table
+            size="small"
+            pagination={false}
+            dataSource={previewSteps}
+            rowKey="id"
+            rowClassName={(r: any) => skipStepIds.has(r.id) ? 'row-skip' : ''}
+            columns={[
+              {
+                title: <Checkbox
+                  checked={skipStepIds.size === 0}
+                  indeterminate={skipStepIds.size > 0 && skipStepIds.size < previewSteps.length}
+                  onChange={(e) => {
+                    if (e.target.checked) setSkipStepIds(new Set());
+                    else setSkipStepIds(new Set(previewSteps.map((s: any) => s.id)));
+                  }}
+                />,
+                key: 'check', width: 40, align: 'center' as const,
+                render: (_: any, r: any) => (
+                  <Checkbox
+                    checked={!skipStepIds.has(r.id)}
+                    onChange={(e) => {
+                      setSkipStepIds(prev => {
+                        const next = new Set(prev);
+                        if (e.target.checked) next.delete(r.id);
+                        else next.add(r.id);
+                        return next;
+                      });
+                    }}
+                  />
+                ),
+              },
+              { title: '#', dataIndex: 'id', key: 'id', width: 40, align: 'center' as const },
+              { title: 'Type', dataIndex: 'type', key: 'type', width: 120, render: (v: string) => <Tag>{v}</Tag> },
+              { title: 'Device', dataIndex: 'device_id', key: 'device', width: 120, render: (v: string) => v ? <Tag color="blue">{v}</Tag> : '-' },
+              { title: t('common.description'), dataIndex: 'description', key: 'desc', ellipsis: true },
+              {
+                title: 'Delay (ms)', dataIndex: 'delay_after_ms', key: 'delay', width: 120, align: 'center' as const,
+                render: (v: number, r: any, idx: number) => (
+                  <InputNumber
+                    size="small"
+                    min={0}
+                    max={Infinity}
+                    step={100}
+                    value={v}
+                    style={{ width: 100 }}
+                    onChange={(val) => {
+                      const updated = [...previewSteps];
+                      updated[idx] = { ...updated[idx], delay_after_ms: val ?? 0 };
+                      setPreviewSteps(updated);
+                      // 서버에 저장
+                      scenarioApi.updateStep(selectedName!, idx, { delay_after_ms: val ?? 0 }).catch(() => {});
+                    }}
+                  />
+                ),
+              },
+              { title: t('scenario.compare'), key: 'img', width: 50, align: 'center' as const, render: (_: any, r: any) => r.expected_image ? '✓' : '-' },
+            ]}
+          />
+          <style>{`.row-skip td { opacity: 0.35; }`}</style>
+        </Card>
+      )}
 
       {/* ===== 웹캠 패널 (오른쪽) ===== */}
       <div style={{ width: 540, flexShrink: 0 }}>

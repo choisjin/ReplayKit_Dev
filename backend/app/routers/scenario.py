@@ -115,6 +115,26 @@ async def delete_step(req: DeleteStepRequest):
     return {"status": "ok", "removed_step_id": removed.id, "remaining": len(scenario.steps)}
 
 
+class UpdateStepRequest(BaseModel):
+    scenario_name: str
+    step_index: int
+    updates: dict  # e.g. {"delay_after_ms": 5000}
+
+
+@router.post("/record/update-step")
+async def update_step(req: UpdateStepRequest):
+    """시나리오 스텝의 속성을 업데이트 (딜레이 등)."""
+    scenario = await _resolve_scenario(req.scenario_name)
+    if req.step_index < 0 or req.step_index >= len(scenario.steps):
+        raise HTTPException(status_code=400, detail=f"Invalid step index: {req.step_index}")
+    step = scenario.steps[req.step_index]
+    for k, v in req.updates.items():
+        if hasattr(step, k):
+            setattr(step, k, v)
+    await recording_svc.save_scenario(scenario)
+    return {"status": "ok"}
+
+
 @router.get("/record/status")
 async def recording_status():
     """Check if recording is in progress."""

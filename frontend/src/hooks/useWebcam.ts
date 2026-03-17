@@ -69,6 +69,8 @@ export function useWebcam() {
     if (webcamStreamRef.current) {
       webcamStreamRef.current.getTracks().forEach(t => t.stop());
       webcamStreamRef.current = null;
+      // OS가 카메라를 해제할 시간 확보
+      await new Promise(r => setTimeout(r, 300));
     }
     try {
       const devices = webcamDevices.length > 0 ? webcamDevices : [];
@@ -77,8 +79,8 @@ export function useWebcam() {
         : {};
       if (resolution) {
         const [w, h] = resolution.split('x').map(Number);
-        videoConstraints.width = { exact: w };
-        videoConstraints.height = { exact: h };
+        videoConstraints.width = { ideal: w };
+        videoConstraints.height = { ideal: h };
       }
       const constraints: MediaStreamConstraints = {
         video: Object.keys(videoConstraints).length > 0 ? videoConstraints : true,

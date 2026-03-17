@@ -218,8 +218,13 @@ async def websocket_playback(websocket: WebSocket):
                 verify = data.get("verify", True)
                 repeat = data.get("repeat", 1)
                 device_map_override = data.get("device_map")  # optional override from frontend
+                skip_steps: set[int] = set(data.get("skip_steps", []))
                 try:
                     scen = await recording_service.load_scenario(scenario_name)
+
+                    # 스킵할 스텝 제거
+                    if skip_steps:
+                        scen.steps = [s for s in scen.steps if s.id not in skip_steps]
 
                     # Preflight device check
                     preflight_errors = await playback_service.preflight_check(scen, device_map_override)
