@@ -93,18 +93,23 @@ async def websocket_screen_mirror(websocket: WebSocket):
     # 디바이스 타입 판별
     dev = device_manager.get_device(target_device_id) if target_device_id else None
     is_hkmc = dev and dev.type == "hkmc6th"
-    hkmc = device_manager.get_hkmc_service(target_device_id) if is_hkmc else None
 
     logger.info("Screen mirror: device=%s type=%s", target_device_id, "hkmc" if is_hkmc else "adb")
 
     try:
         while True:
             try:
+                # 매 프레임마다 최신 서비스 인스턴스 조회 (재연결 대응)
+                hkmc = device_manager.get_hkmc_service(target_device_id) if is_hkmc else None
                 if hkmc and hkmc.is_connected:
                     jpeg_bytes = await hkmc.async_screencap_bytes(
                         screen_type=screen_type, fmt="jpeg", timeout=10.0
                     )
                     await websocket.send_bytes(jpeg_bytes)
+                elif is_hkmc:
+                    # HKMC 재연결 대기 중 — 빈 프레임 대신 잠시 대기
+                    await asyncio.sleep(1)
+                    continue
                 else:
                     # ADB: screen_type이 숫자면 display_id로 사용
                     adb_display_id = None
