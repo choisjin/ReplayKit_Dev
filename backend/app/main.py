@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from .routers import device, results, scenario, settings
-from .dependencies import adb_service, device_manager, playback_service, recording_service
+from .dependencies import adb_service, device_manager, playback_service, recording_service, scrcpy_manager
 from .services.adb_service import resolve_sf_display_id
 from .models.scenario import ScenarioResult
 
@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
     yield
     # --- Shutdown ---
     reconnect_task.cancel()
+    scrcpy_manager.stop_all()
     logger.info("Closing all serial connections...")
     device_manager.close_all_serial_connections()
 
@@ -109,7 +110,29 @@ async def websocket_screen_mirror(websocket: WebSocket):
 
     logger.info("Screen mirror: device=%s type=%s", target_device_id, "hkmc" if is_hkmc else "adb")
 
+    # ADB scrcpy 스트림 참조 (정리용)
+    scrcpy_stream = None
+    scrcpy_serial = ""
+    scrcpy_display = 0
+
     try:
+        # ADB 디바이스: scrcpy 스트림 획득 시도
+        if not is_hkmc and dev:
+            adb_display_id = 0
+            try:
+                adb_display_id = int(screen_type)
+            except (ValueError, TypeError):
+                pass
+            scrcpy_serial = dev.address or target_device_id
+            scrcpy_display = adb_display_id
+            scrcpy_stream = await scrcpy_manager.acquire_stream(
+                serial=scrcpy_serial, display_id=scrcpy_display
+            )
+            if scrcpy_stream:
+                logger.info("scrcpy stream acquired for %s (display=%d)", scrcpy_serial, scrcpy_display)
+            else:
+                logger.info("scrcpy unavailable for %s, falling back to screencap", scrcpy_serial)
+
         while True:
             try:
                 # 매 프레임마다 최신 서비스 인스턴스 조회 (재연결 대응)
@@ -123,14 +146,21 @@ async def websocket_screen_mirror(websocket: WebSocket):
                     # HKMC 재연결 대기 중 — 빈 프레임 대신 잠시 대기
                     await asyncio.sleep(1)
                     continue
+                elif scrcpy_stream and scrcpy_stream.is_running:
+                    # scrcpy H.264 스트리밍 — binary JPEG
+                    jpeg_bytes = await scrcpy_stream.async_wait_frame(timeout=2.0)
+                    if jpeg_bytes:
+                        await websocket.send_bytes(jpeg_bytes)
+                    else:
+                        await asyncio.sleep(0.03)
+                        continue
                 else:
-                    # ADB: screen_type이 숫자면 display_id로 사용
+                    # ADB screencap 폴백 — binary JPEG로 전송
                     adb_display_id = None
                     try:
                         adb_display_id = int(screen_type)
                     except (ValueError, TypeError):
                         pass
-                    # SF display ID 조회
                     sf_did = resolve_sf_display_id(
                         dev.info if dev else None, adb_display_id
                     )
@@ -138,12 +168,22 @@ async def websocket_screen_mirror(websocket: WebSocket):
                     png_bytes = await adb_service.screencap_bytes(
                         serial=adb_serial or None, sf_display_id=sf_did
                     )
-                    b64 = base64.b64encode(png_bytes).decode("ascii")
-                    await websocket.send_json({
-                        "type": "frame",
-                        "image": b64,
-                        "format": "png",
-                    })
+                    # PNG → JPEG 변환하여 binary 전송 (프론트엔드 Blob 핸들러 통합)
+                    try:
+                        from PIL import Image as _PILImage
+                        import io as _io
+                        img = _PILImage.open(_io.BytesIO(png_bytes))
+                        buf = _io.BytesIO()
+                        img.save(buf, format="JPEG", quality=85)
+                        await websocket.send_bytes(buf.getvalue())
+                    except Exception:
+                        # PIL 없으면 기존 JSON base64 방식 폴백
+                        b64 = base64.b64encode(png_bytes).decode("ascii")
+                        await websocket.send_json({
+                            "type": "frame",
+                            "image": b64,
+                            "format": "png",
+                        })
             except WebSocketDisconnect:
                 raise
             except Exception as e:
@@ -153,9 +193,13 @@ async def websocket_screen_mirror(websocket: WebSocket):
                 })
                 await asyncio.sleep(1)
                 continue
-            await asyncio.sleep(0.1)  # 프레임 간 최소 간격
+            await asyncio.sleep(0.03)  # ~30fps 프레임 간격
     except WebSocketDisconnect:
         logger.info("Screen mirror WebSocket disconnected")
+    finally:
+        # scrcpy 스트림 해제
+        if scrcpy_stream:
+            scrcpy_manager.release_stream(scrcpy_serial, scrcpy_display)
 
 
 @app.websocket("/ws/playback")

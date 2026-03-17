@@ -223,17 +223,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (isHkmcDevice(screenshotDeviceId)) {
-      // HKMC: WebSocket 바이너리 스트리밍
-      startWsStream(screenshotDeviceId, screenType);
-    } else if (hasMultiDisplay(screenshotDeviceId)) {
-      // ADB multi-display: WebSocket으로 screen_type(display_id) 전달
-      startWsStream(screenshotDeviceId, screenType);
-    } else {
-      // ADB 단일 디스플레이: HTTP 폴링
-      pollFn();
-      intervalRef.current = setInterval(pollFn, pollInterval);
-    }
+    // 모든 디바이스 WebSocket 스트리밍 (scrcpy H.264 또는 screencap 폴백은 백엔드에서 처리)
+    startWsStream(screenshotDeviceId, screenType);
 
     return () => {
       if (intervalRef.current) {
