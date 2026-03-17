@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { App as AntdApp, ConfigProvider, Layout, Menu, theme } from 'antd';
 import {
+  BarChartOutlined,
   DesktopOutlined,
   PlayCircleOutlined,
   SettingOutlined,
@@ -12,6 +13,7 @@ import { useTranslation } from './i18n';
 import DevicePage from './pages/DevicePage';
 import RecordPage from './pages/RecordPage';
 import ScenarioPage from './pages/ScenarioPage';
+import ResultsPage from './pages/ResultsPage';
 import SettingsPage from './pages/SettingsPage';
 
 const { Sider, Content } = Layout;
@@ -20,6 +22,7 @@ const pageKeys = [
   { key: '/', icon: <DesktopOutlined />, labelKey: 'nav.device' as const, component: <DevicePage /> },
   { key: '/record', icon: <VideoCameraOutlined />, labelKey: 'nav.record' as const, component: <RecordPage /> },
   { key: '/scenarios', icon: <PlayCircleOutlined />, labelKey: 'nav.scenario' as const, component: <ScenarioPage /> },
+  { key: '/results', icon: <BarChartOutlined />, labelKey: 'nav.results' as const, component: <ResultsPage /> },
   { key: '/settings', icon: <SettingOutlined />, labelKey: 'nav.settings' as const, component: <SettingsPage /> },
 ];
 

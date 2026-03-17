@@ -44,6 +44,7 @@ const translations = {
     'nav.device': '디바이스',
     'nav.record': '녹화',
     'nav.scenario': '시나리오',
+    'nav.results': '테스트 결과',
     'nav.settings': '설정',
 
     // === Device Page ===
@@ -482,6 +483,7 @@ const translations = {
     'nav.device': 'Devices',
     'nav.record': 'Record',
     'nav.scenario': 'Scenarios',
+    'nav.results': 'Results',
     'nav.settings': 'Settings',
 
     // === Device Page ===

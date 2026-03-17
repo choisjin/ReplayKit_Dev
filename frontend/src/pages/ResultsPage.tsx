@@ -226,6 +226,13 @@ export default function ResultsPage() {
 
   useEffect(() => {
     fetchResults();
+    const onTabChange = (e: Event) => {
+      if ((e as CustomEvent).detail === '/results') {
+        fetchResults();
+      }
+    };
+    window.addEventListener('tab-change', onTabChange);
+    return () => window.removeEventListener('tab-change', onTabChange);
   }, []);
 
   const totalTime = (stepResults: StepResultDetail[]) =>

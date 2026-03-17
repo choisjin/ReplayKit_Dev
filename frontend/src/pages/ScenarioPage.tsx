@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, Card, Checkbox, Col, Collapse, Descriptions, Divider, Image, Input, InputNumber, List, Modal, Radio, Row, Select, Space, Table, Tag, Tooltip, Upload, message } from 'antd';
+import { Button, Card, Checkbox, Col, Collapse, Descriptions, Divider, Image, Input, InputNumber, List, Modal, Radio, Row, Select, Space, Table, Tabs, Tag, Tooltip, Upload, message } from 'antd';
 import {
-  PlayCircleOutlined, DeleteOutlined, DownloadOutlined, EyeOutlined,
-  ReloadOutlined, StopOutlined, CopyOutlined, MergeCellsOutlined,
+  PlayCircleOutlined, DeleteOutlined, EyeOutlined,
+  StopOutlined, CopyOutlined, MergeCellsOutlined,
   FolderOutlined, FolderAddOutlined, MinusOutlined,
   ArrowUpOutlined, ArrowDownOutlined, EditOutlined, BranchesOutlined,
   DownOutlined, RightOutlined, ClearOutlined, UploadOutlined,
   ExportOutlined, ImportOutlined, CheckCircleOutlined, WarningOutlined,
 } from '@ant-design/icons';
-import { scenarioApi, resultsApi, deviceApi } from '../services/api';
+import { scenarioApi, deviceApi } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from '../i18n';
 import { useWebcam } from '../hooks/useWebcam';
@@ -58,34 +58,6 @@ interface StepResultData {
   sub_results: SubResultData[];
 }
 
-interface ResultSummary {
-  filename: string;
-  scenario_name: string;
-  status: string;
-  total_steps: number;
-  passed_steps: number;
-  failed_steps: number;
-  warning_steps: number;
-  error_steps: number;
-  started_at: string;
-  finished_at: string;
-}
-
-interface ResultDetail {
-  scenario_name: string;
-  device_serial: string;
-  status: string;
-  total_steps: number;
-  total_repeat: number;
-  passed_steps: number;
-  failed_steps: number;
-  warning_steps: number;
-  error_steps: number;
-  step_results: StepResultData[];
-  started_at: string;
-  finished_at: string;
-}
-
 interface JumpTarget {
   scenario: number;  // group index (0-based), -1 = END
   step: number;      // step index within scenario (0-based)
@@ -131,7 +103,7 @@ const formatTime = (iso: string, lang: string = 'ko') => {
 
 export default function ScenarioPage() {
   const { t, lang } = useTranslation();
-  const { settings, uploadWebcamRecording, saveExcelToDir, saveExportZipToDir } = useSettings();
+  const { settings, uploadWebcamRecording, saveExportZipToDir } = useSettings();
   const webcam = useWebcam();
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<ScenarioDetail | null>(null);
@@ -216,13 +188,6 @@ export default function ScenarioPage() {
   const [importResolutions, setImportResolutions] = useState<Record<string, { action: string; new_name?: string }>>({});
   const [importLoading, setImportLoading] = useState(false);
 
-  // Results
-  const [results, setResults] = useState<ResultSummary[]>([]);
-  const [resultsLoading, setResultsLoading] = useState(false);
-  const [resultDetail, setResultDetail] = useState<ResultDetail | null>(null);
-  const [resultDetailFilename, setResultDetailFilename] = useState('');
-  const [resultDetailVisible, setResultDetailVisible] = useState(false);
-
   const wsRef = useRef<WebSocket | null>(null);
 
   // --- Filtered scenarios by group ---
@@ -243,15 +208,6 @@ export default function ScenarioPage() {
       const res = await scenarioApi.getGroups();
       setGroups(res.data.groups);
     } catch { /* ignore */ }
-  };
-
-  const fetchResults = async () => {
-    setResultsLoading(true);
-    try {
-      const res = await resultsApi.list();
-      setResults(res.data.results);
-    } catch { message.error(t('scenario.resultsListFailed')); }
-    setResultsLoading(false);
   };
 
   const fetchScenarioStepsCache = async (names: string[]) => {
@@ -295,7 +251,6 @@ export default function ScenarioPage() {
   useEffect(() => {
     fetchScenarios();
     fetchGroups();
-    fetchResults();
     const onTabChange = (e: Event) => {
       if ((e as CustomEvent).detail === '/scenarios') {
         fetchScenarios();
@@ -641,7 +596,7 @@ export default function ScenarioPage() {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setCurrentStepId(null);
         message.success(repeat > 1 ? t('scenario.playCompleteRepeat', { count: String(repeat) }) : t('scenario.playComplete'));
-        ws.close(); fetchResults();
+        ws.close();
       } else if (msg.type === 'preflight_error') {
         setPlaying(false); setCurrentStepId(null);
         Modal.error({
@@ -658,11 +613,11 @@ export default function ScenarioPage() {
       } else if (msg.type === 'error') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setCurrentStepId(null);
-        message.error(msg.message); ws.close(); fetchResults();
+        message.error(msg.message); ws.close();
       } else if (msg.type === 'playback_stopped') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setCurrentStepId(null);
-        message.info(t('scenario.playStopped')); ws.close(); fetchResults();
+        message.info(t('scenario.playStopped')); ws.close();
       }
     };
     ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
@@ -772,7 +727,7 @@ export default function ScenarioPage() {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         message.success(t('scenario.playComplete'));
-        ws.close(); fetchResults();
+        ws.close();
       } else if (msg.type === 'preflight_error') {
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         Modal.error({
@@ -789,11 +744,11 @@ export default function ScenarioPage() {
       } else if (msg.type === 'error') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
-        message.error(msg.message); ws.close(); fetchResults();
+        message.error(msg.message); ws.close();
       } else if (msg.type === 'playback_stopped') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
-        message.info(t('scenario.playStopped')); ws.close(); fetchResults();
+        message.info(t('scenario.playStopped')); ws.close();
       }
     };
     ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
@@ -804,57 +759,6 @@ export default function ScenarioPage() {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'stop' }));
     }
-  };
-
-  // --- Results ---
-  const viewResultDetail = async (filename: string) => {
-    try {
-      const res = await resultsApi.get(filename);
-      setResultDetail(res.data);
-      setResultDetailFilename(filename);
-      setResultDetailVisible(true);
-    } catch { message.error(t('scenario.resultDetailFailed')); }
-  };
-
-  const deleteResult = (filename: string) => {
-    Modal.confirm({
-      title: t('scenario.deleteResultTitle'),
-      content: t('scenario.deleteResultConfirm', { name: filename }),
-      okText: t('common.delete'), okType: 'danger', cancelText: t('common.cancel'),
-      onOk: async () => {
-        try {
-          await resultsApi.delete(filename);
-          message.success(t('common.deleteComplete'));
-          fetchResults();
-          if (resultDetailFilename === filename) { setResultDetailVisible(false); setResultDetail(null); }
-        } catch { message.error(t('common.deleteFailed')); }
-      },
-    });
-  };
-
-  const exportExcel = async (filename: string) => {
-    // Always try server-side save first
-    try {
-      console.log('[exportExcel] trying saveExcelToDir', filename);
-      const path = await saveExcelToDir(filename);
-      console.log('[exportExcel] success:', path);
-      message.success(t('scenario.excelSaveComplete', { path }));
-      return;
-    } catch (serverErr: any) {
-      console.error('[exportExcel] saveExcelToDir failed:', serverErr);
-      console.error('[exportExcel] response:', serverErr.response?.status, serverErr.response?.data);
-      const detail = serverErr.response?.data?.detail || serverErr.message || String(serverErr);
-      message.error(t('scenario.excelSaveFailed', { detail }));
-    }
-    // Fallback: browser download
-    try {
-      const res = await resultsApi.exportExcel(filename);
-      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename.replace('.json', '.xlsx'); a.click();
-      window.URL.revokeObjectURL(url);
-    } catch (e: any) { message.error(e.response?.data?.detail || t('scenario.excelExportFailed')); }
   };
 
   // --- Columns ---
@@ -896,14 +800,6 @@ export default function ScenarioPage() {
     { title: <div>Delay<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colSetting')}</span></div>, dataIndex: 'delay_ms', key: 'delay', width: 80, align: 'center' as const, render: (ms: number) => ms ? formatDuration(ms) : '-' },
     { title: <div>Duration<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colActual')}</span></div>, dataIndex: 'execution_time_ms', key: 'duration', width: 90, align: 'center' as const, render: (ms: number, r: StepResultData) => r.status === 'running' ? <span style={{ color: '#1677ff' }}>{formatDuration(liveDuration)}</span> : formatDuration(ms) },
     { title: t('scenario.compare'), key: 'compare', width: 70, align: 'center' as const, render: (_: any, r: StepResultData) => r.status === 'running' ? '-' : (r.expected_image || r.actual_image) ? <Button size="small" onClick={() => setCompareStep(r)}>{t('scenario.compare')}</Button> : '-' },
-  ];
-
-  const resultsColumns = [
-    { title: t('scenario.title'), dataIndex: 'scenario_name', key: 'name', width: 200, ellipsis: true, sorter: (a: ResultSummary, b: ResultSummary) => a.scenario_name.localeCompare(b.scenario_name) },
-    { title: t('common.status'), dataIndex: 'status', key: 'status', width: 90, filters: [{ text: 'PASS', value: 'pass' }, { text: 'FAIL', value: 'fail' }, { text: 'WARNING', value: 'warning' }, { text: 'ERROR', value: 'error' }], onFilter: (value: any, record: ResultSummary) => record.status === value, render: (s: string) => <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
-    { title: t('common.result'), key: 'counts', width: 180, render: (_: any, r: ResultSummary) => (<Space size={4}><Tag color="green">{r.passed_steps}P</Tag><Tag color="red">{r.failed_steps}F</Tag>{r.warning_steps > 0 && <Tag color="orange">{r.warning_steps}W</Tag>}{r.error_steps > 0 && <Tag color="volcano">{r.error_steps}E</Tag>}<span style={{ color: '#888' }}>/ {r.total_steps}</span></Space>) },
-    { title: t('results.execTime'), key: 'time', width: 200, render: (_: any, r: ResultSummary) => <span style={{ whiteSpace: 'nowrap' }}>{formatTime(r.started_at, lang)}</span>, sorter: (a: ResultSummary, b: ResultSummary) => (a.started_at || '').localeCompare(b.started_at || ''), defaultSortOrder: 'descend' as const },
-    { title: t('common.actions'), key: 'actions', width: 200, render: (_: any, record: ResultSummary) => (<Space size={4}><Tooltip title={t('common.details')}><Button size="small" icon={<EyeOutlined />} onClick={() => viewResultDetail(record.filename)}>{t('common.details')}</Button></Tooltip><Tooltip title="Excel"><Button size="small" icon={<DownloadOutlined />} onClick={() => exportExcel(record.filename)} /></Tooltip><Tooltip title={t('common.delete')}><Button size="small" danger icon={<DeleteOutlined />} onClick={() => deleteResult(record.filename)} /></Tooltip></Space>) },
   ];
 
   const totalTime = (steps: StepResultData[]) => steps.reduce((sum, s) => sum + (s.execution_time_ms || 0), 0);
@@ -948,47 +844,40 @@ export default function ScenarioPage() {
           </Space>
         }
       >
-        {/* Group filter */}
-        <Space wrap style={{ width: '100%', marginBottom: 12 }}>
-          <span style={{ fontSize: 13, color: '#888' }}>{t('scenario.groupLabel')}:</span>
-          <Tag
-            color={selectedGroup === null ? 'blue' : undefined}
-            style={{ cursor: 'pointer' }}
-            onClick={() => setSelectedGroup(null)}
-          >
-            {t('scenario.all')} ({scenarios.length})
-          </Tag>
-          {Object.entries(groups).map(([gName, members]) => {
-            const validCount = members.filter((m) => scenarios.includes(m.name)).length;
-            return (
-              <Space key={gName} size={2}>
-                <Tag
-                  color={selectedGroup === gName ? 'blue' : undefined}
-                  style={{ cursor: 'pointer', marginRight: 0 }}
-                  onClick={() => setSelectedGroup(selectedGroup === gName ? null : gName)}
-                >
-                  <FolderOutlined /> {gName} ({validCount})
-                </Tag>
-                {validCount > 0 && (
-                  <Tooltip title={t('scenario.playGroupAll', { name: gName })}>
-                    <Button
-                      size="small"
-                      type="text"
-                      icon={<PlayCircleOutlined />}
-                      disabled={playing}
-                      onClick={(e) => { e.stopPropagation(); playGroup(gName); }}
-                      style={{ padding: '0 4px', height: 22 }}
-                    />
-                  </Tooltip>
-                )}
-              </Space>
-            );
-          })}
-        </Space>
+        {/* Group tabs */}
+        <Tabs
+          activeKey={selectedGroup ?? '__all__'}
+          onChange={(key) => setSelectedGroup(key === '__all__' ? null : key)}
+          size="small"
+          tabBarStyle={{ marginBottom: 8 }}
+          items={[
+            { key: '__all__', label: `${t('scenario.all')} (${scenarios.length})` },
+            ...Object.entries(groups).map(([gName, members]) => {
+              const validCount = members.filter((m) => scenarios.includes(m.name)).length;
+              return {
+                key: gName,
+                label: (
+                  <Space size={4}>
+                    <FolderOutlined />
+                    <span>{gName} ({validCount})</span>
+                    {validCount > 0 && !playing && (
+                      <Tooltip title={t('scenario.playGroupAll', { name: gName })}>
+                        <PlayCircleOutlined
+                          onClick={(e) => { e.stopPropagation(); playGroup(gName); }}
+                          style={{ color: '#1677ff', marginLeft: 2 }}
+                        />
+                      </Tooltip>
+                    )}
+                  </Space>
+                ),
+              };
+            }),
+          ]}
+        />
 
         {/* Group play repeat */}
         {selectedGroup && (groups[selectedGroup] || []).length > 0 && (
-          <Space style={{ marginBottom: 12 }}>
+          <Space style={{ marginBottom: 8 }}>
             <span style={{ fontSize: 13, color: '#888' }}>{t('scenario.groupPlay')}:</span>
             <InputNumber
               min={1} max={999} size="small"
@@ -1011,144 +900,81 @@ export default function ScenarioPage() {
           </Space>
         )}
 
-        {/* Scenario select + actions */}
-        <Space wrap style={{ width: '100%' }}>
-          <Select
-            showSearch
-            placeholder={t('scenario.scenarioSelect')}
-            value={selectedName}
-            onChange={(v) => setSelectedName(v)}
-            style={{ minWidth: 260 }}
-            options={filteredScenarios.map((n) => ({ label: n, value: n }))}
-            notFoundContent={t('scenario.noScenarios')}
-          />
-          <Button icon={<EyeOutlined />} disabled={!selectedName} onClick={() => selectedName && viewScenario(selectedName)}>{t('scenario.view')}</Button>
-          <Button icon={<EditOutlined />} disabled={!selectedName || playing} onClick={openRenameModal}>{t('scenario.rename')}</Button>
-          <Button icon={<CopyOutlined />} disabled={!selectedName || playing} onClick={openCopyModal}>{t('common.copy')}</Button>
-          {playing && playingName === selectedName ? (
-            <Button danger icon={<StopOutlined />} onClick={stopPlayback}>{t('scenario.stop')}</Button>
-          ) : (
-            <>
-              <InputNumber
-                min={1} max={999}
-                value={selectedName ? getRepeatCount(selectedName) : 1}
-                onChange={(v) => selectedName && setRepeatCount(selectedName, v || 1)}
-                style={{ width: 65 }}
-                disabled={playing || !selectedName}
-              />
-              <span style={{ fontSize: 13, color: '#888' }}>{t('scenario.times')}</span>
-              <Button type="primary" icon={<PlayCircleOutlined />}
-                loading={playing && playingName === selectedName}
-                disabled={playing || !selectedName}
-                onClick={() => selectedName && playScenario(selectedName)}
-              >{t('scenario.play')}</Button>
-            </>
-          )}
-          <Button danger icon={<DeleteOutlined />} disabled={playing || !selectedName}
-            onClick={() => selectedName && deleteScenario(selectedName)}>{t('common.delete')}</Button>
-
-          {/* Quick group assign */}
-          {selectedName && Object.keys(groups).length > 0 && (
-            <>
-              <Divider type="vertical" />
-              <Select
-                placeholder={t('scenario.addToGroup')}
-                style={{ width: 140 }}
-                size="small"
-                value={undefined}
-                onChange={(gName: string) => { if (gName && selectedName) addToGroup(gName, selectedName); }}
-                options={Object.keys(groups)
-                  .filter((g) => !(groups[g] || []).some((m) => m.name === selectedName!))
-                  .map((g) => ({ label: g, value: g }))}
-              />
-              {scenarioGroups(selectedName).map((g) => (
-                <Tag
-                  key={g}
-                  closable
-                  onClose={() => removeFromGroup(g, selectedName)}
-                  color="blue"
-                >
-                  {g}
-                </Tag>
-              ))}
-            </>
-          )}
-        </Space>
-      </Card>
-
-      {/* ===== 시나리오 스텝 미리보기 ===== */}
-      {selectedName && previewSteps.length > 0 && !playing && (
-        <Collapse
+        {/* Scenario list */}
+        <List
           size="small"
-          style={{ marginTop: 4 }}
-          defaultActiveKey={['steps']}
-          items={[{
-            key: 'steps',
-            label: <span>{selectedName} — {previewSteps.length} {t('scenario.steps')} {skipStepIds.size > 0 && <Tag color="orange">{skipStepIds.size} skip</Tag>}</span>,
-            children: <div style={{ maxHeight: 250, overflow: 'auto' }}>
-          <Table
-            size="small"
-            pagination={false}
-            dataSource={previewSteps}
-            rowKey="id"
-            rowClassName={(r: any) => skipStepIds.has(r.id) ? 'row-skip' : ''}
-            columns={[
-              {
-                title: <Checkbox
-                  checked={skipStepIds.size === 0}
-                  indeterminate={skipStepIds.size > 0 && skipStepIds.size < previewSteps.length}
-                  onChange={(e) => {
-                    if (e.target.checked) setSkipStepIds(new Set());
-                    else setSkipStepIds(new Set(previewSteps.map((s: any) => s.id)));
-                  }}
-                />,
-                key: 'check', width: 40, align: 'center' as const,
-                render: (_: any, r: any) => (
-                  <Checkbox
-                    checked={!skipStepIds.has(r.id)}
-                    onChange={(e) => {
-                      setSkipStepIds(prev => {
-                        const next = new Set(prev);
-                        if (e.target.checked) next.delete(r.id);
-                        else next.add(r.id);
-                        return next;
-                      });
-                    }}
-                  />
-                ),
-              },
-              { title: '#', dataIndex: 'id', key: 'id', width: 40, align: 'center' as const },
-              { title: 'Type', dataIndex: 'type', key: 'type', width: 120, render: (v: string) => <Tag>{v}</Tag> },
-              { title: 'Device', dataIndex: 'device_id', key: 'device', width: 120, render: (v: string) => v ? <Tag color="blue">{v}</Tag> : '-' },
-              { title: t('common.description'), dataIndex: 'description', key: 'desc', ellipsis: true },
-              {
-                title: 'Delay (ms)', dataIndex: 'delay_after_ms', key: 'delay', width: 120, align: 'center' as const,
-                render: (v: number, r: any, idx: number) => (
-                  <InputNumber
-                    size="small"
-                    min={0}
-                    max={Infinity}
-                    step={100}
-                    value={v}
-                    style={{ width: 100 }}
-                    onChange={(val) => {
-                      const updated = [...previewSteps];
-                      updated[idx] = { ...updated[idx], delay_after_ms: val ?? 0 };
-                      setPreviewSteps(updated);
-                      // 서버에 저장
-                      scenarioApi.updateStep(selectedName!, idx, { delay_after_ms: val ?? 0 }).catch(() => {});
-                    }}
-                  />
-                ),
-              },
-              { title: t('scenario.compare'), key: 'img', width: 50, align: 'center' as const, render: (_: any, r: any) => r.expected_image ? '✓' : '-' },
-            ]}
-          />
-          <style>{`.row-skip td { opacity: 0.35; }`}</style>
-          </div>,
-          }]}
+          dataSource={filteredScenarios}
+          style={{ maxHeight: 300, overflow: 'auto' }}
+          locale={{ emptyText: t('scenario.noScenarios') }}
+          renderItem={(name) => (
+            <List.Item
+              onClick={() => setSelectedName(name)}
+              style={{
+                cursor: 'pointer',
+                padding: '6px 12px',
+                background: selectedName === name ? 'rgba(22,119,255,0.12)' : undefined,
+                borderRadius: 4,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                <span style={{ flex: 1, fontWeight: selectedName === name ? 600 : 400 }}>{name}</span>
+                {scenarioGroups(name).map((g) => <Tag key={g} color="blue" style={{ fontSize: 11 }}>{g}</Tag>)}
+              </div>
+            </List.Item>
+          )}
         />
-      )}
+
+        {/* Selected scenario action bar */}
+        {selectedName && (
+          <div style={{ marginTop: 8, padding: '8px 0', borderTop: '1px solid #303030', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <strong style={{ marginRight: 4 }}>{selectedName}</strong>
+            <Button icon={<EyeOutlined />} size="small" onClick={() => viewScenario(selectedName)}>{t('scenario.view')}</Button>
+            <Button icon={<EditOutlined />} size="small" disabled={playing} onClick={openRenameModal}>{t('scenario.rename')}</Button>
+            <Button icon={<CopyOutlined />} size="small" disabled={playing} onClick={openCopyModal}>{t('common.copy')}</Button>
+            {playing && playingName === selectedName ? (
+              <Button danger size="small" icon={<StopOutlined />} onClick={stopPlayback}>{t('scenario.stop')}</Button>
+            ) : (
+              <>
+                <InputNumber
+                  min={1} max={999} size="small"
+                  value={getRepeatCount(selectedName)}
+                  onChange={(v) => setRepeatCount(selectedName, v || 1)}
+                  style={{ width: 60 }}
+                  disabled={playing}
+                />
+                <span style={{ fontSize: 12, color: '#888' }}>{t('scenario.times')}</span>
+                <Button type="primary" size="small" icon={<PlayCircleOutlined />}
+                  loading={playing && playingName === selectedName}
+                  disabled={playing}
+                  onClick={() => playScenario(selectedName)}
+                >{t('scenario.play')}</Button>
+              </>
+            )}
+            <Button danger size="small" icon={<DeleteOutlined />} disabled={playing}
+              onClick={() => deleteScenario(selectedName)}>{t('common.delete')}</Button>
+
+            {/* Quick group assign */}
+            {Object.keys(groups).length > 0 && (
+              <>
+                <Divider type="vertical" />
+                <Select
+                  placeholder={t('scenario.addToGroup')}
+                  style={{ width: 140 }}
+                  size="small"
+                  value={undefined}
+                  onChange={(gName: string) => { if (gName && selectedName) addToGroup(gName, selectedName); }}
+                  options={Object.keys(groups)
+                    .filter((g) => !(groups[g] || []).some((m) => m.name === selectedName!))
+                    .map((g) => ({ label: g, value: g }))}
+                />
+                {scenarioGroups(selectedName).map((g) => (
+                  <Tag key={g} closable onClose={() => removeFromGroup(g, selectedName)} color="blue">{g}</Tag>
+                ))}
+              </>
+            )}
+          </div>
+        )}
+      </Card>
 
       {/* ===== 웹캠 패널 (오른쪽) ===== */}
       <div style={{ width: 540, flexShrink: 0 }}>
@@ -1181,10 +1007,75 @@ export default function ScenarioPage() {
         </Card>
       )}
 
-      {/* ===== 테스트 결과 목록 ===== */}
-      <Card title={t('scenario.testResults')} extra={<Button icon={<ReloadOutlined />} onClick={fetchResults} loading={resultsLoading} size="small">{t('common.refresh')}</Button>} style={{ marginTop: 8 }}>
-        <Table columns={resultsColumns} dataSource={results} rowKey="filename" size="small" pagination={{ pageSize: 10, showSizeChanger: true }} />
-      </Card>
+      {/* ===== 시나리오 스텝 미리보기 (하단) ===== */}
+      {selectedName && previewSteps.length > 0 && (
+        <Card
+          title={<span>{selectedName} — {previewSteps.length} {t('scenario.steps')} {skipStepIds.size > 0 && <Tag color="orange">{skipStepIds.size} skip</Tag>}</span>}
+          size="small"
+          style={{ marginTop: 8 }}
+        >
+          <div style={{ maxHeight: 400, overflow: 'auto' }}>
+            <Table
+              size="small"
+              pagination={false}
+              dataSource={previewSteps}
+              rowKey="id"
+              rowClassName={(r: any) => skipStepIds.has(r.id) ? 'row-skip' : ''}
+              columns={[
+                {
+                  title: <Checkbox
+                    checked={skipStepIds.size === 0}
+                    indeterminate={skipStepIds.size > 0 && skipStepIds.size < previewSteps.length}
+                    onChange={(e) => {
+                      if (e.target.checked) setSkipStepIds(new Set());
+                      else setSkipStepIds(new Set(previewSteps.map((s: any) => s.id)));
+                    }}
+                  />,
+                  key: 'check', width: 40, align: 'center' as const,
+                  render: (_: any, r: any) => (
+                    <Checkbox
+                      checked={!skipStepIds.has(r.id)}
+                      onChange={(e) => {
+                        setSkipStepIds(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.delete(r.id);
+                          else next.add(r.id);
+                          return next;
+                        });
+                      }}
+                    />
+                  ),
+                },
+                { title: '#', dataIndex: 'id', key: 'id', width: 40, align: 'center' as const },
+                { title: 'Type', dataIndex: 'type', key: 'type', width: 120, render: (v: string) => <Tag>{v}</Tag> },
+                { title: 'Device', dataIndex: 'device_id', key: 'device', width: 120, render: (v: string) => v ? <Tag color="blue">{v}</Tag> : '-' },
+                { title: t('common.description'), dataIndex: 'description', key: 'desc', ellipsis: true },
+                {
+                  title: 'Delay (ms)', dataIndex: 'delay_after_ms', key: 'delay', width: 120, align: 'center' as const,
+                  render: (v: number, _r: any, idx: number) => (
+                    <InputNumber
+                      size="small"
+                      min={0}
+                      max={Infinity}
+                      step={100}
+                      value={v}
+                      style={{ width: 100 }}
+                      onChange={(val) => {
+                        const updated = [...previewSteps];
+                        updated[idx] = { ...updated[idx], delay_after_ms: val ?? 0 };
+                        setPreviewSteps(updated);
+                        scenarioApi.updateStep(selectedName!, idx, { delay_after_ms: val ?? 0 }).catch(() => {});
+                      }}
+                    />
+                  ),
+                },
+                { title: t('scenario.compare'), key: 'img', width: 50, align: 'center' as const, render: (_: any, r: any) => r.expected_image ? '✓' : '-' },
+              ]}
+            />
+            <style>{`.row-skip td { opacity: 0.35; }`}</style>
+          </div>
+        </Card>
+      )}
 
       {/* ===== 그룹 관리 모달 ===== */}
       <Modal title={t('scenario.groupManage')} open={groupModalVisible} onCancel={() => setGroupModalVisible(false)} footer={null} width={960}
@@ -1408,30 +1299,6 @@ export default function ScenarioPage() {
               <Descriptions.Item label={t('scenario.stepCount')}>{selectedScenario.steps.length}</Descriptions.Item>
             </Descriptions>
             <Table columns={scenarioStepColumns} dataSource={selectedScenario.steps} rowKey="id" size="small" pagination={false} />
-          </>
-        )}
-      </Modal>
-
-      {/* ===== 결과 상세 모달 ===== */}
-      <Modal
-        title={<Space><span>{resultDetail?.scenario_name || t('scenario.resultDetail')}</span>{resultDetail && <Tag color={statusColor(resultDetail.status)}>{resultDetail.status.toUpperCase()}</Tag>}</Space>}
-        open={resultDetailVisible} onCancel={() => setResultDetailVisible(false)} width={1200}
-        footer={<Space><Button icon={<DownloadOutlined />} onClick={() => resultDetailFilename && exportExcel(resultDetailFilename)}>{t('scenario.excelExport')}</Button><Button danger icon={<DeleteOutlined />} onClick={() => resultDetailFilename && deleteResult(resultDetailFilename)}>{t('common.delete')}</Button></Space>}
-      >
-        {resultDetail && (
-          <>
-            <Descriptions bordered size="small" column={4} style={{ marginBottom: 8 }}>
-              <Descriptions.Item label={t('scenario.title')}>{resultDetail.scenario_name}</Descriptions.Item>
-              <Descriptions.Item label={t('scenario.device')}>{resultDetail.device_serial || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('scenario.startTime')}>{formatTime(resultDetail.started_at, lang)}</Descriptions.Item>
-              <Descriptions.Item label={t('scenario.endTime')}>{formatTime(resultDetail.finished_at, lang)}</Descriptions.Item>
-              <Descriptions.Item label={t('scenario.totalExecTime')}><strong>{formatDuration(totalTime(resultDetail.step_results))}</strong></Descriptions.Item>
-              <Descriptions.Item label="Repeat">{resultDetail.total_repeat}{t('scenario.times')}</Descriptions.Item>
-              <Descriptions.Item label={t('common.result')}><Space size={4}><Tag color="green">{resultDetail.passed_steps} Pass</Tag><Tag color="red">{resultDetail.failed_steps} Fail</Tag>{resultDetail.warning_steps > 0 && <Tag color="orange">{resultDetail.warning_steps} Warning</Tag>}{resultDetail.error_steps > 0 && <Tag color="volcano">{resultDetail.error_steps} Error</Tag>}</Space></Descriptions.Item>
-              <Descriptions.Item label={t('common.status')}><Tag color={statusColor(resultDetail.status)} style={{ fontSize: 14 }}>{resultDetail.status.toUpperCase()}</Tag></Descriptions.Item>
-            </Descriptions>
-            <Table columns={makeStepResultColumns(resultDetail.total_repeat)} dataSource={resultDetail.step_results} rowKey={(_r, idx) => `rd-${idx}`} size="small" pagination={false}
-              rowClassName={(r: StepResultData) => r.status === 'fail' ? 'row-fail' : r.status === 'error' ? 'row-error' : r.status === 'warning' ? 'row-warning' : ''} />
           </>
         )}
       </Modal>
