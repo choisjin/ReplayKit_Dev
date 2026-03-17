@@ -276,9 +276,11 @@ class HKMC6thService:
         msg = bytearray(packet)
         try:
             self._socket.send(msg)
-        except socket.error as e:
-            logger.error("Send error: %s", e)
-            raise
+        except (ConnectionResetError, ConnectionAbortedError, OSError) as e:
+            # WinError 10054 등: 원격 호스트 연결 끊김 → 자동 disconnect
+            logger.warning("HKMC connection lost (device=%s): %s", self._device_id, e)
+            self.disconnect()
+            raise ConnectionError(f"HKMC connection lost: {e}")
 
     def _make_send_packet(self, cmd: int, sub_cmd: int, resp: int, data: list[int]) -> None:
         """Build and send a framed packet with CRC16."""

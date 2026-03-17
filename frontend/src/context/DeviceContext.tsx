@@ -85,6 +85,9 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchDevices();
+    // 디바이스 상태 주기 갱신 (자동 재연결 포함) — 10초 간격
+    const devicePollId = setInterval(fetchDevices, 10000);
+    return () => clearInterval(devicePollId);
   }, []);
 
   // --- WebSocket cleanup helper ---

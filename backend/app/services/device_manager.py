@@ -462,10 +462,34 @@ class DeviceManager:
         available_ports = {p["port"] for p in await loop.run_in_executor(None, _scan_serial_ports)}
 
         for dev in self._devices.values():
-            # Check HKMC primary devices
+            # Check HKMC primary devices — 끊어진 경우 자동 재연결 시도
             if dev.type == "hkmc6th":
                 hkmc = self._hkmc_conns.get(dev.id)
-                dev.status = "connected" if (hkmc and hkmc.is_connected) else "disconnected"
+                if hkmc and hkmc.is_connected:
+                    dev.status = "connected"
+                else:
+                    # 재연결 시도
+                    port = dev.info.get("port", 0)
+                    if port:
+                        try:
+                            logger.info("HKMC auto-reconnect: %s (%s:%d)", dev.id, dev.address, port)
+                            if hkmc:
+                                hkmc.disconnect()
+                            svc = HKMC6thService(dev.address, port, device_id=dev.id)
+                            ok = await svc.async_connect()
+                            if ok:
+                                self._hkmc_conns[dev.id] = svc
+                                dev.status = "connected"
+                                dev.info["agent_version"] = svc.agent_version
+                                dev.info["screens"] = svc.get_info()["screens"]
+                                logger.info("HKMC auto-reconnect success: %s", dev.id)
+                            else:
+                                dev.status = "disconnected"
+                        except Exception as e:
+                            dev.status = "disconnected"
+                            logger.debug("HKMC auto-reconnect failed: %s: %s", dev.id, e)
+                    else:
+                        dev.status = "disconnected"
                 continue
             if dev.category != "auxiliary":
                 continue
