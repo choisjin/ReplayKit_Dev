@@ -1078,12 +1078,14 @@ export default function ScenarioPage() {
 
       {/* ===== 시나리오 스텝 미리보기 ===== */}
       {selectedName && previewSteps.length > 0 && !playing && (
-        <Card
+        <Collapse
           size="small"
-          title={<span>{selectedName} — {previewSteps.length} {t('scenario.steps')}</span>}
-          style={{ marginTop: 4, maxHeight: 300, overflow: 'auto' }}
-          styles={{ body: { padding: '0' } }}
-        >
+          style={{ marginTop: 4 }}
+          defaultActiveKey={['steps']}
+          items={[{
+            key: 'steps',
+            label: <span>{selectedName} — {previewSteps.length} {t('scenario.steps')} {skipStepIds.size > 0 && <Tag color="orange">{skipStepIds.size} skip</Tag>}</span>,
+            children: <div style={{ maxHeight: 250, overflow: 'auto' }}>
           <Table
             size="small"
             pagination={false}
@@ -1143,7 +1145,9 @@ export default function ScenarioPage() {
             ]}
           />
           <style>{`.row-skip td { opacity: 0.35; }`}</style>
-        </Card>
+          </div>,
+          }]}
+        />
       )}
 
       {/* ===== 웹캠 패널 (오른쪽) ===== */}
