@@ -298,9 +298,11 @@ class PlaybackService:
                 step_result.status = "error"
                 step_result.error_message = "Stopped by user"
                 return step_result
+            t0 = time.time()
             action_device_id = self._resolve_real_device_id(step)
             if action_device_id:
                 await self._ensure_device_connected(action_device_id)
+            t1 = time.time()
 
             # Execute the action
             if self._should_stop:
@@ -308,17 +310,20 @@ class PlaybackService:
                 step_result.error_message = "Stopped by user"
                 return step_result
             await self._run_action(step)
+            t2 = time.time()
 
             # Wait (중단 가능)
             if await self._interruptible_sleep(step.delay_after_ms / 1000.0):
                 step_result.status = "error"
                 step_result.error_message = "Stopped by user"
                 return step_result
+            t3 = time.time()
 
             # 2) 이미지 비교 전: 스크린샷 대상 디바이스 연결 확인
             ss_device = self._resolve_screenshot_device(step)
             if ss_device:
                 await self._ensure_device_connected(ss_device["id"])
+            t4 = time.time()
             actual_path = None
             if ss_device:
                 actual_dir = SCREENSHOTS_DIR / scenario_name / "actual"
@@ -565,7 +570,13 @@ class PlaybackService:
             step_result.message = str(e)
             logger.error("Step %d execution error: %s", step.id, e)
 
-        step_result.execution_time_ms = int((time.time() - start_time) * 1000)
+        t_end = time.time()
+        step_result.execution_time_ms = int((t_end - start_time) * 1000)
+        logger.info(
+            "Step %d timing: check1=%.1fs action=%.1fs delay=%.1fs check2=%.1fs rest=%.1fs total=%.1fs",
+            step.id,
+            t1 - t0, t2 - t1, t3 - t2, t4 - t3, t_end - t4, t_end - start_time,
+        )
         return step_result
 
     @staticmethod
