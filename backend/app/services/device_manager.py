@@ -512,79 +512,46 @@ class DeviceManager:
         return None
 
     async def refresh_auxiliary(self) -> None:
-        """Check connectivity of auxiliary/HKMC devices and update their status."""
-        loop = asyncio.get_event_loop()
-        available_ports = {p["port"] for p in await loop.run_in_executor(None, _scan_serial_ports)}
-
+        """빠른 상태 확인만 수행 (네트워크 I/O 없음). 재연결은 백그라운드에서."""
         for dev in self._devices.values():
-            # Check HKMC primary devices — 끊어진 경우 자동 재연결 시도
             if dev.type == "hkmc6th":
                 hkmc = self._hkmc_conns.get(dev.id)
                 if hkmc and hkmc.is_connected:
                     dev.status = "connected"
-                else:
-                    # 재연결 시도
-                    port = dev.info.get("port", 0)
-                    if port:
-                        try:
-                            logger.info("HKMC auto-reconnect: %s (%s:%d)", dev.id, dev.address, port)
-                            if hkmc:
-                                hkmc.disconnect()
-                            svc = HKMC6thService(dev.address, port, device_id=dev.id)
-                            ok = await svc.async_connect()
-                            if ok:
-                                self._hkmc_conns[dev.id] = svc
-                                dev.status = "connected"
-                                dev.info["agent_version"] = svc.agent_version
-                                dev.info["screens"] = svc.get_info()["screens"]
-                                logger.info("HKMC auto-reconnect success: %s", dev.id)
-                            else:
-                                dev.status = "disconnected"
-                        except Exception as e:
-                            dev.status = "disconnected"
-                            logger.debug("HKMC auto-reconnect failed: %s: %s", dev.id, e)
-                    else:
-                        dev.status = "disconnected"
+                elif dev.status != "reconnecting":
+                    dev.status = "disconnected"
                 continue
             if dev.category != "auxiliary":
                 continue
-            ct = dev.info.get("connect_type", "serial" if dev.type == "serial" else "none")
-            if dev.type == "serial" or ct == "serial":
-                # Check if COM port exists in system
-                port = dev.address
-                dev.status = "connected" if port in available_ports else "disconnected"
-            elif ct == "socket":
-                import socket
-                host = dev.address
-                udp_port = dev.info.get("udp_port", 0)
-                tcp_port = dev.info.get("port", 0)
-                if host and udp_port:
-                    # UDP 벤치: 프로브로 상태 확인
-                    try:
-                        ok = await loop.run_in_executor(
-                            None, _probe_udp_bench_sync, host, int(udp_port), 1.0
-                        )
-                        dev.status = "connected" if ok else "disconnected"
-                    except Exception:
+            # Serial/Module: 기존 상태 유지 (별도 프로브 없음)
+
+    async def reconnect_disconnected(self) -> None:
+        """끊어진 디바이스 재연결 시도 (백그라운드 태스크용, 느린 I/O 포함)."""
+        for dev in list(self._devices.values()):
+            if dev.type == "hkmc6th":
+                hkmc = self._hkmc_conns.get(dev.id)
+                if hkmc and hkmc.is_connected:
+                    continue
+                port = dev.info.get("port", 0)
+                if not port:
+                    continue
+                dev.status = "reconnecting"
+                try:
+                    if hkmc:
+                        hkmc.disconnect()
+                    svc = HKMC6thService(dev.address, port, device_id=dev.id)
+                    ok = await svc.async_connect()
+                    if ok:
+                        self._hkmc_conns[dev.id] = svc
+                        dev.status = "connected"
+                        dev.info["agent_version"] = svc.agent_version
+                        dev.info["screens"] = svc.get_info()["screens"]
+                        logger.info("HKMC auto-reconnect success: %s", dev.id)
+                    else:
                         dev.status = "disconnected"
-                elif host and tcp_port:
-                    # TCP 소켓 모듈: 연결 확인
-                    try:
-                        def _check_socket():
-                            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                            s.settimeout(1)
-                            try:
-                                s.connect((host, int(tcp_port)))
-                                s.close()
-                                return True
-                            except Exception:
-                                s.close()
-                                return False
-                        ok = await loop.run_in_executor(None, _check_socket)
-                        dev.status = "connected" if ok else "disconnected"
-                    except Exception:
-                        dev.status = "disconnected"
-            # For 'none', 'can', etc. — we can't check, leave status as-is
+                except Exception as e:
+                    dev.status = "disconnected"
+                    logger.debug("HKMC auto-reconnect failed: %s: %s", dev.id, e)
 
     async def scan_serial(self) -> list[dict]:
         """Scan available serial ports."""

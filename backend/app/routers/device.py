@@ -62,10 +62,20 @@ class DisconnectRequest(BaseModel):
     address: str
 
 
+_last_full_refresh = 0.0
+
+
 @router.get("/list")
 async def list_devices():
     """List all managed devices, split by category."""
-    await dm.refresh_adb()
+    import time
+    global _last_full_refresh
+    now = time.time()
+    # ADB refresh는 30초마다만 (adb devices -l이 느림)
+    if now - _last_full_refresh > 30:
+        await dm.refresh_adb()
+        _last_full_refresh = now
+    # auxiliary는 빠른 상태 확인만 (네트워크 I/O 없음)
     await dm.refresh_auxiliary()
     return {
         "primary": [d.to_dict() for d in dm.list_primary()],

@@ -21,14 +21,26 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger(__name__)
 
 
+async def _reconnect_loop():
+    """백그라운드: 끊어진 디바이스 주기적 재연결 시도 (30초 간격)."""
+    while True:
+        await asyncio.sleep(30)
+        try:
+            await device_manager.reconnect_disconnected()
+        except Exception as e:
+            logger.debug("Reconnect loop error: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     # --- Startup ---
     logger.info("Opening persistent serial connections...")
     await device_manager.open_all_serial_connections()
+    reconnect_task = asyncio.create_task(_reconnect_loop())
     yield
     # --- Shutdown ---
+    reconnect_task.cancel()
     logger.info("Closing all serial connections...")
     device_manager.close_all_serial_connections()
 
