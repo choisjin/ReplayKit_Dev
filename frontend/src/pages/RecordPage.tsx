@@ -551,10 +551,16 @@ export default function RecordPage() {
   }, [scenarioName, screenshotDeviceId, isScreenHkmc, hasMultiDisplay, screenType, t]);
 
   const openCaptureModal = useCallback(async (stepIdx: number) => {
-    captureScreenshotRef.current = await snapshotScreenshot();
+    // 기대 이미지가 있으면 원본 해상도 사용 (scrcpy 축소 방지)
+    const step = steps[stepIdx];
+    if (step?.expected_image && scenarioName) {
+      captureScreenshotRef.current = `/screenshots/${scenarioName}/${step.expected_image}?t=${Date.now()}`;
+    } else {
+      captureScreenshotRef.current = await snapshotScreenshot();
+    }
     setCaptureStepIndex(stepIdx);
     setCaptureModalOpen(true);
-  }, [snapshotScreenshot]);
+  }, [snapshotScreenshot, steps, scenarioName]);
 
   const testStep = useCallback(async (stepIdx: number) => {
     if (!scenarioName) {
@@ -774,20 +780,27 @@ export default function RecordPage() {
   }, [excludeRoiEditingIndex, excludeRoiSelectedIdx, steps]);
 
   const openExcludeRoiModal = useCallback(async (index: number) => {
-    excludeRoiScreenshotRef.current = await snapshotScreenshot();
     setExcludeRoiEditingIndex(index);
     setExcludeRoiSelectedIdx(null);
     // Auto-capture full screenshot as expected_image if not set
     const step = steps[index];
-    if (!step?.expected_image && scenarioName && screenshotDeviceId) {
+    let expectedFilename = step?.expected_image;
+    if (!expectedFilename && scenarioName && screenshotDeviceId) {
       try {
         const res = await scenarioApi.captureExpectedImage(scenarioName, index, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
-        setSteps(prev => prev.map((s, i) => i === index ? { ...s, expected_image: res.data.filename, _imageVer: Date.now() } : s));
+        expectedFilename = res.data.filename;
+        setSteps(prev => prev.map((s, i) => i === index ? { ...s, expected_image: expectedFilename, _imageVer: Date.now() } : s));
         message.success(t('record.expectedFullCapture'));
       } catch {
         message.error(t('record.expectedCaptureFailed'));
         return;
       }
+    }
+    // 기대 이미지(원본 해상도)를 캔버스에 사용
+    if (expectedFilename && scenarioName) {
+      excludeRoiScreenshotRef.current = `/screenshots/${scenarioName}/${expectedFilename}?t=${Date.now()}`;
+    } else {
+      excludeRoiScreenshotRef.current = await snapshotScreenshot();
     }
     setExcludeRoiModalOpen(true);
   }, [snapshotScreenshot, steps, scenarioName, screenshotDeviceId, isScreenHkmc, hasMultiDisplay, screenType, t]);
@@ -917,20 +930,27 @@ export default function RecordPage() {
   }, [multiCropEditingIndex, multiCropSelectedIdx, steps]);
 
   const openMultiCropModal = useCallback(async (stepIdx: number) => {
-    multiCropScreenshotRef.current = await snapshotScreenshot();
     setMultiCropEditingIndex(stepIdx);
     setMultiCropSelectedIdx(null);
     // Auto-capture full screenshot as expected_image if not set
     const step = steps[stepIdx];
-    if (!step?.expected_image && scenarioName && screenshotDeviceId) {
+    let expectedFilename = step?.expected_image;
+    if (!expectedFilename && scenarioName && screenshotDeviceId) {
       try {
         const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
-        setSteps(prev => prev.map((s, i) => i === stepIdx ? { ...s, expected_image: res.data.filename, _imageVer: Date.now() } : s));
+        expectedFilename = res.data.filename;
+        setSteps(prev => prev.map((s, i) => i === stepIdx ? { ...s, expected_image: expectedFilename, _imageVer: Date.now() } : s));
         message.success(t('record.expectedFullCapture'));
       } catch (e: any) {
         message.error(t('record.expectedCaptureFailed'));
         return;
       }
+    }
+    // 기대 이미지(원본 해상도)를 캔버스에 사용 — scrcpy 축소 프레임 대신
+    if (expectedFilename && scenarioName) {
+      multiCropScreenshotRef.current = `/screenshots/${scenarioName}/${expectedFilename}?t=${Date.now()}`;
+    } else {
+      multiCropScreenshotRef.current = await snapshotScreenshot();
     }
     setMultiCropModalOpen(true);
   }, [snapshotScreenshot, steps, scenarioName, screenshotDeviceId, isScreenHkmc, hasMultiDisplay, screenType, t]);
