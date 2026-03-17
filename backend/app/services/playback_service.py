@@ -228,6 +228,17 @@ class PlaybackService:
                     break
                 step = scenario.steps[idx]
 
+                # 스텝 시작 알림
+                yield {
+                    "_type": "step_start",
+                    "step_id": step.id,
+                    "repeat_index": repeat_index,
+                    "device_id": step.device_id or "",
+                    "command": self._format_command(step),
+                    "description": step.description or "",
+                    "delay_ms": step.delay_after_ms,
+                }
+
                 step_result = await self._execute_step(step, scenario.name, verify, repeat_index=repeat_index)
                 yield step_result
 

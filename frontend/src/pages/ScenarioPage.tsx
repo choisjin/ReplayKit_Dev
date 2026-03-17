@@ -179,6 +179,11 @@ export default function ScenarioPage() {
   // Compare modal
   const [compareStep, setCompareStep] = useState<StepResultData | null>(null);
 
+  // 실시간 duration 카운트
+  const stepStartTimeRef = useRef<number>(0);
+  const [liveDuration, setLiveDuration] = useState(0);
+  const liveDurationRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Device mapping
   const [deviceMapModalVisible, setDeviceMapModalVisible] = useState(false);
   const [deviceMapEditing, setDeviceMapEditing] = useState<Record<string, string>>({});
@@ -581,11 +586,45 @@ export default function ScenarioPage() {
       const msg = JSON.parse(event.data);
       if (msg.type === 'iteration_start') {
         setCurrentIteration(msg.iteration);
+      } else if (msg.type === 'step_start') {
+        // 스텝 시작: running 상태로 테이블에 추가 + duration 카운트 시작
+        const d = msg.data;
+        const placeholder: StepResultData = {
+          step_id: d.step_id, repeat_index: d.repeat_index,
+          timestamp: new Date().toISOString(), device_id: d.device_id,
+          command: d.command, description: d.description,
+          status: 'running', similarity_score: null,
+          expected_image: null, expected_annotated_image: null,
+          actual_image: null, actual_annotated_image: null, diff_image: null,
+          roi: null, match_location: null, message: '',
+          delay_ms: d.delay_ms, execution_time_ms: 0,
+          compare_mode: null, sub_results: [],
+        };
+        setStepResults((prev) => [...prev, placeholder]);
+        setCurrentStepId(d.step_id);
+        // 실시간 카운터
+        stepStartTimeRef.current = Date.now();
+        setLiveDuration(0);
+        if (liveDurationRef.current) clearInterval(liveDurationRef.current);
+        liveDurationRef.current = setInterval(() => {
+          setLiveDuration(Date.now() - stepStartTimeRef.current);
+        }, 200);
       } else if (msg.type === 'step_result') {
+        // 스텝 완료: 마지막 running 행을 실제 결과로 교체
+        if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         const result: StepResultData = msg.data;
-        setStepResults((prev) => [...prev, result]);
-        setCurrentStepId(result.step_id + 1);
+        setStepResults((prev) => {
+          let idx = -1;
+          for (let i = prev.length - 1; i >= 0; i--) { if (prev[i].step_id === result.step_id && prev[i].repeat_index === result.repeat_index) { idx = i; break; } }
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = result;
+            return updated;
+          }
+          return [...prev, result];
+        });
       } else if (msg.type === 'playback_complete') {
+        if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setCurrentStepId(null);
         message.success(repeat > 1 ? t('scenario.playCompleteRepeat', { count: String(repeat) }) : t('scenario.playComplete'));
         ws.close(); fetchResults();
@@ -603,14 +642,16 @@ export default function ScenarioPage() {
         });
         ws.close();
       } else if (msg.type === 'error') {
+        if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setCurrentStepId(null);
         message.error(msg.message); ws.close(); fetchResults();
       } else if (msg.type === 'playback_stopped') {
+        if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setCurrentStepId(null);
         message.info(t('scenario.playStopped')); ws.close(); fetchResults();
       }
     };
-    ws.onerror = () => { setPlaying(false); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
+    ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
     ws.onclose = () => { wsRef.current = null; };
   };
 
@@ -679,10 +720,42 @@ export default function ScenarioPage() {
         setPlayingName(msg.scenario_name);
       } else if (msg.type === 'iteration_start') {
         setCurrentIteration(msg.iteration);
+      } else if (msg.type === 'step_start') {
+        const d = msg.data;
+        const placeholder: StepResultData = {
+          step_id: d.step_id, repeat_index: d.repeat_index,
+          timestamp: new Date().toISOString(), device_id: d.device_id,
+          command: d.command, description: d.description,
+          status: 'running', similarity_score: null,
+          expected_image: null, expected_annotated_image: null,
+          actual_image: null, actual_annotated_image: null, diff_image: null,
+          roi: null, match_location: null, message: '',
+          delay_ms: d.delay_ms, execution_time_ms: 0,
+          compare_mode: null, sub_results: [],
+        };
+        setStepResults((prev) => [...prev, placeholder]);
+        setCurrentStepId(d.step_id);
+        stepStartTimeRef.current = Date.now();
+        setLiveDuration(0);
+        if (liveDurationRef.current) clearInterval(liveDurationRef.current);
+        liveDurationRef.current = setInterval(() => {
+          setLiveDuration(Date.now() - stepStartTimeRef.current);
+        }, 200);
       } else if (msg.type === 'step_result') {
+        if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         const result: StepResultData = msg.data;
-        setStepResults((prev) => [...prev, result]);
+        setStepResults((prev) => {
+          let idx = -1;
+          for (let i = prev.length - 1; i >= 0; i--) { if (prev[i].step_id === result.step_id && prev[i].repeat_index === result.repeat_index) { idx = i; break; } }
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = result;
+            return updated;
+          }
+          return [...prev, result];
+        });
       } else if (msg.type === 'playback_complete') {
+        if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         message.success(t('scenario.playComplete'));
         ws.close(); fetchResults();
@@ -700,14 +773,16 @@ export default function ScenarioPage() {
         });
         ws.close();
       } else if (msg.type === 'error') {
+        if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         message.error(msg.message); ws.close(); fetchResults();
       } else if (msg.type === 'playback_stopped') {
+        if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         message.info(t('scenario.playStopped')); ws.close(); fetchResults();
       }
     };
-    ws.onerror = () => { setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
+    ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
     ws.onclose = () => { wsRef.current = null; };
   };
 
@@ -803,10 +878,10 @@ export default function ScenarioPage() {
     { title: <div>Device<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colDevice')}</span></div>, dataIndex: 'device_id', key: 'device_id', width: 120, render: (v: string) => v ? <Tag color={v.startsWith('Android') ? 'green' : v.startsWith('Serial') ? 'purple' : 'geekblue'}>{v}</Tag> : '-' },
     { title: <div>Command<br /><span style={{ fontSize: 11, color: '#888' }}>action</span></div>, dataIndex: 'command', key: 'command', ellipsis: true, render: (v: string, r: StepResultData) => v || r.message || '-' },
     { title: <div>Remark<br /><span style={{ fontSize: 11, color: '#888' }}>{t('common.description')}</span></div>, dataIndex: 'description', key: 'description', width: 150, ellipsis: true, render: (v: string) => v || '-' },
-    { title: <div>Status<br /><span style={{ fontSize: 11, color: '#888' }}>{t('common.result')}</span></div>, dataIndex: 'status', key: 'status', width: 90, align: 'center' as const, render: (s: string) => <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
+    { title: <div>Status<br /><span style={{ fontSize: 11, color: '#888' }}>{t('common.result')}</span></div>, dataIndex: 'status', key: 'status', width: 90, align: 'center' as const, render: (s: string) => s === 'running' ? <Tag color="processing">RUNNING</Tag> : <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
     { title: <div>Delay<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colSetting')}</span></div>, dataIndex: 'delay_ms', key: 'delay', width: 80, align: 'center' as const, render: (ms: number) => ms ? formatDuration(ms) : '-' },
-    { title: <div>Duration<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colActual')}</span></div>, dataIndex: 'execution_time_ms', key: 'duration', width: 90, align: 'center' as const, render: (ms: number) => formatDuration(ms) },
-    { title: t('scenario.compare'), key: 'compare', width: 70, align: 'center' as const, render: (_: any, r: StepResultData) => (r.expected_image || r.actual_image) ? <Button size="small" onClick={() => setCompareStep(r)}>{t('scenario.compare')}</Button> : '-' },
+    { title: <div>Duration<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colActual')}</span></div>, dataIndex: 'execution_time_ms', key: 'duration', width: 90, align: 'center' as const, render: (ms: number, r: StepResultData) => r.status === 'running' ? <span style={{ color: '#1677ff' }}>{formatDuration(liveDuration)}</span> : formatDuration(ms) },
+    { title: t('scenario.compare'), key: 'compare', width: 70, align: 'center' as const, render: (_: any, r: StepResultData) => r.status === 'running' ? '-' : (r.expected_image || r.actual_image) ? <Button size="small" onClick={() => setCompareStep(r)}>{t('scenario.compare')}</Button> : '-' },
   ];
 
   const resultsColumns = [
@@ -989,7 +1064,13 @@ export default function ScenarioPage() {
 
       {/* ===== 웹캠 패널 (오른쪽) ===== */}
       <div style={{ width: 540, flexShrink: 0 }}>
-        <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
+        <style>{`
+          @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+          .row-pass td { background: rgba(82, 196, 26, 0.06) !important; }
+          .row-fail td { background: rgba(255, 77, 79, 0.08) !important; }
+          .row-error td { background: rgba(255, 77, 79, 0.06) !important; }
+          .row-running td { background: rgba(22, 119, 255, 0.08) !important; }
+        `}</style>
         <WebcamPanel webcam={webcam} />
       </div>
       </div>
@@ -1008,7 +1089,7 @@ export default function ScenarioPage() {
           style={{ marginTop: 8 }}
         >
           <Table columns={makeStepResultColumns(totalIterations)} dataSource={stepResults} rowKey={(_r, idx) => `${idx}`} size="small" pagination={false}
-            rowClassName={(r: StepResultData) => r.status === 'fail' ? 'row-fail' : r.status === 'error' ? 'row-error' : r.status === 'pass' ? 'row-pass' : ''} />
+            rowClassName={(r: StepResultData) => r.status === 'running' ? 'row-running' : r.status === 'fail' ? 'row-fail' : r.status === 'error' ? 'row-error' : r.status === 'pass' ? 'row-pass' : ''} />
         </Card>
       )}
 

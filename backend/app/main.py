@@ -201,21 +201,29 @@ async def websocket_playback(websocket: WebSocket):
                                 "total": repeat,
                             })
 
-                        async for step_result in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, device_map_override=device_map_override):
-                            result.step_results.append(step_result)
-                            if step_result.status == "pass":
-                                result.passed_steps += 1
-                            elif step_result.status == "fail":
-                                result.failed_steps += 1
-                            elif step_result.status == "warning":
-                                result.warning_steps += 1
+                        async for item in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, device_map_override=device_map_override):
+                            if isinstance(item, dict) and item.get("_type") == "step_start":
+                                await websocket.send_json({
+                                    "type": "step_start",
+                                    "data": {k: v for k, v in item.items() if k != "_type"},
+                                    "iteration": iteration,
+                                })
                             else:
-                                result.error_steps += 1
-                            await websocket.send_json({
-                                "type": "step_result",
-                                "data": step_result.model_dump(),
-                                "iteration": iteration,
-                            })
+                                step_result = item
+                                result.step_results.append(step_result)
+                                if step_result.status == "pass":
+                                    result.passed_steps += 1
+                                elif step_result.status == "fail":
+                                    result.failed_steps += 1
+                                elif step_result.status == "warning":
+                                    result.warning_steps += 1
+                                else:
+                                    result.error_steps += 1
+                                await websocket.send_json({
+                                    "type": "step_result",
+                                    "data": step_result.model_dump(),
+                                    "iteration": iteration,
+                                })
 
                         if playback_service._should_stop:
                             break
