@@ -121,16 +121,17 @@ function AppContent() {
       } : {}),
     }}>
       <Layout style={{ minHeight: '100vh' }}>
-        <Sider collapsible>
-          <div style={{ height: 40, margin: 16, color: '#fff', fontSize: 14, fontWeight: 'bold', textAlign: 'center', lineHeight: '40px' }}>
+        <Sider collapsible style={isDark ? undefined : { background: '#f0f0f0' }}>
+          <div style={{ height: 40, margin: 16, color: isDark ? '#fff' : '#222', fontSize: 14, fontWeight: 'bold', textAlign: 'center', lineHeight: '40px' }}>
             Menu
           </div>
           <Menu
-            theme="dark"
+            theme={isDark ? 'dark' : 'light'}
             mode="inline"
             selectedKeys={[activeKey]}
             items={menuItems}
             onClick={({ key }) => { setActiveKey(key); window.dispatchEvent(new CustomEvent('tab-change', { detail: key })); }}
+            style={isDark ? undefined : { background: '#f0f0f0' }}
           />
           <div style={{ padding: '12px 16px' }}>
             <Tooltip title={t('webcam.title')} placement="right">
@@ -171,7 +172,7 @@ function AppContent() {
       </Layout>
 
       {webcamVisible && (
-        <WebcamPip webcam={webcam} onClose={toggleWebcam} />
+        <WebcamPip webcam={webcam} onClose={toggleWebcam} isDark={isDark} />
       )}
 
       <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
