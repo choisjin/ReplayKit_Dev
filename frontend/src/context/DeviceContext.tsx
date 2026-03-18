@@ -3,7 +3,7 @@ import { deviceApi } from '../services/api';
 
 export interface ManagedDevice {
   id: string;
-  type: string; // "adb" | "serial" | "module" | "hkmc6th"
+  type: string; // "adb" | "serial" | "module" | "hkmc6th" | "vision_camera"
   category: string; // "primary" | "auxiliary"
   address: string;
   status: string;
@@ -100,6 +100,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     if (!dev) return;
     if (dev.type === 'hkmc6th') {
       setScreenType('front_center');
+    } else if (dev.type === 'vision_camera') {
+      setScreenType('default');
     } else if (dev.type === 'adb' && (dev.info?.displays?.length ?? 0) > 1) {
       setScreenType(String(dev.info.displays[0]?.id ?? 0));
     } else {

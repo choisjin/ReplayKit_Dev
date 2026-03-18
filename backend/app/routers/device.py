@@ -43,11 +43,14 @@ def _build_constructor_kwargs(dev) -> dict | None:
     elif connect_type == "can":
         # CAN modules store extra fields in device info
         return {k: v for k, v in dev.info.items() if k not in ("module", "connect_type")}
+    elif connect_type == "vision_camera":
+        # VisionCamera: MAC, model, serial, ip, subnetmask
+        return {k: v for k, v in dev.info.items() if k not in ("module", "connect_type")}
     return None
 
 
 class ConnectRequest(BaseModel):
-    type: str  # "adb" | "serial" | "module" | "hkmc6th"
+    type: str  # "adb" | "serial" | "module" | "hkmc6th" | "vision_camera"
     category: str = ""  # "primary" | "auxiliary" — auto-detected if empty
     address: str = ""  # COM port for serial, IP for socket/HKMC, etc.
     baudrate: Optional[int] = 115200
@@ -55,7 +58,7 @@ class ConnectRequest(BaseModel):
     name: Optional[str] = ""
     device_id: Optional[str] = ""  # custom device ID/alias (e.g. "Android_1", "HKMC_1")
     module: Optional[str] = None  # lge.auto module name (e.g. "POWER", "CAN")
-    connect_type: Optional[str] = None  # "serial" | "socket" | "can" | "none"
+    connect_type: Optional[str] = None  # "serial" | "socket" | "can" | "none" | "vision_camera"
     extra_fields: Optional[dict] = None  # Additional module-specific fields
 
 
@@ -159,6 +162,28 @@ async def connect_device(req: ConnectRequest):
             "primary": [d.to_dict() for d in dm.list_primary()],
             "auxiliary": [d.to_dict() for d in dm.list_auxiliary()],
         }
+    elif req.type == "vision_camera":
+        ef = req.extra_fields or {}
+        mac = ef.get("mac", "")
+        if not mac:
+            raise HTTPException(status_code=400, detail="VisionCamera requires MAC address")
+        try:
+            dev = await dm.add_vision_camera_device(
+                mac=mac,
+                model=ef.get("model", ""),
+                serial=ef.get("serial", ""),
+                ip=req.address or ef.get("ip", ""),
+                subnetmask=ef.get("subnetmask", "255.255.0.0"),
+                device_id=custom_id,
+                name=req.name or "",
+            )
+            return {
+                "result": f"VisionCamera connected: {dev.name} (ID: {dev.id})",
+                "primary": [d.to_dict() for d in dm.list_primary()],
+                "auxiliary": [d.to_dict() for d in dm.list_auxiliary()],
+            }
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     else:
         raise HTTPException(status_code=400, detail=f"Unknown type: {req.type}")
 
@@ -421,8 +446,17 @@ async def get_screenshot(device_id: str, fmt: str = "jpeg", screen_type: str = "
             img_bytes = await hkmc.async_screencap_bytes(screen_type=screen_type, fmt=fmt)
             b64 = base64.b64encode(img_bytes).decode("ascii")
             return {"image": b64, "format": fmt}
+        elif dev and dev.type == "vision_camera":
+            cam = dm.get_vision_camera(device_id)
+            if not cam:
+                raise HTTPException(status_code=400, detail=f"VisionCamera {device_id} not connected")
+            import asyncio
+            loop = asyncio.get_event_loop()
+            img_bytes = await loop.run_in_executor(None, cam.CaptureBytes, fmt)
+            b64 = base64.b64encode(img_bytes).decode("ascii")
+            return {"image": b64, "format": fmt}
         elif dev and dev.type not in ("adb",):
-            raise HTTPException(status_code=400, detail="Screenshot only available for ADB or HKMC devices")
+            raise HTTPException(status_code=400, detail="Screenshot only available for ADB, HKMC, or VisionCamera devices")
         else:
             # ADB device
             adb_serial = dev.address if dev else device_id

@@ -144,6 +144,14 @@ def list_available_modules() -> list[dict]:
          "connect_fields": []},
         {"name": "Android", "label": "Android", "connect_type": "none",
          "connect_fields": []},
+        {"name": "VisionCamera", "label": "VisionCamera", "connect_type": "vision_camera",
+         "connect_fields": [
+             {"name": "mac", "label": "MAC Address", "type": "text", "default": ""},
+             {"name": "model", "label": "Model", "type": "text", "default": "exo264CGE"},
+             {"name": "serial", "label": "Serial Number", "type": "text", "default": ""},
+             {"name": "ip", "label": "IP Address", "type": "text", "default": ""},
+             {"name": "subnetmask", "label": "Subnet Mask", "type": "text", "default": "255.255.0.0"},
+         ]},
     ]
     available = []
     for m in modules:
@@ -250,6 +258,12 @@ def get_module_functions(module_name: str) -> list[dict]:
 
 def _is_connected(instance) -> bool:
     """Check if a module instance appears to have a live connection."""
+    # VisionCamera: IsConnected() 메서드
+    if hasattr(instance, "IsConnected") and callable(getattr(instance, "IsConnected")):
+        try:
+            return instance.IsConnected()
+        except Exception:
+            return False
     # Serial: check _conn attribute (e.g. IVIQEBenchIOClient)
     if hasattr(instance, "_conn"):
         conn = getattr(instance, "_conn", None)

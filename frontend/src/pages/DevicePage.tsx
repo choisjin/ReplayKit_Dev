@@ -58,11 +58,17 @@ export default function DevicePage() {
   const [scannedSerial, setScannedSerial] = useState<SerialPort[]>([]);
   const [scannedHkmc, setScannedHkmc] = useState<{ ip: string; port: number; raw: string }[]>([]);
   const [scannedBench, setScannedBench] = useState<{ ip: string; port: number; verified?: boolean }[]>([]);
-  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th'>('adb');
+  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th' | 'vision_camera'>('adb');
   const [connectAddress, setConnectAddress] = useState('');
   const [baudrate, setBaudrate] = useState(115200);
   const [connecting, setConnecting] = useState(false);
   const [hkmcPort, setHkmcPort] = useState(5000);
+
+  // VisionCamera
+  const [vcMac, setVcMac] = useState('');
+  const [vcModel, setVcModel] = useState('exo264CGE');
+  const [vcSerial, setVcSerial] = useState('');
+  const [vcSubnet, setVcSubnet] = useState('255.255.0.0');
 
   // Module
   const [modules, setModules] = useState<ModuleInfo[]>([]);
@@ -132,6 +138,33 @@ export default function DevicePage() {
   const handleConnect = async () => {
     const moduleConnType = getModuleConnectType(selectedModule);
     const fields = getModuleConnectFields(selectedModule);
+
+    // VisionCamera 전용 처리
+    if (connectType === 'vision_camera') {
+      if (!vcMac.trim()) {
+        message.warning('MAC Address is required');
+        return;
+      }
+      setConnecting(true);
+      try {
+        const extra = {
+          mac: vcMac.trim(),
+          model: vcModel.trim(),
+          serial: vcSerial.trim(),
+          subnetmask: vcSubnet.trim(),
+        };
+        const result = await connectDevice('vision_camera', connectAddress.trim(), undefined, '', 'primary', undefined, 'vision_camera', extra);
+        message.success(result);
+        setConnectAddress('');
+        setVcMac('');
+        setModalOpen(false);
+      } catch (e: any) {
+        message.error(e.response?.data?.detail || t('device.connectFailed'));
+      }
+      setConnecting(false);
+      return;
+    }
+
     if (moduleConnType !== 'none' && moduleConnType !== 'can' && !connectAddress.trim()) {
       message.warning(t('device.addressPlaceholder'));
       return;
@@ -270,6 +303,7 @@ export default function DevicePage() {
 
   const getTypeTag = (dev: ManagedDevice) => {
     if (dev.type === 'hkmc6th') return <Tag color="volcano">HKMC</Tag>;
+    if (dev.type === 'vision_camera') return <Tag color="magenta">VisionCam</Tag>;
     if (dev.type === 'module') return <Tag color="geekblue">Module</Tag>;
     if (dev.type === 'serial') return <Tag color="purple">Serial</Tag>;
     if (dev.type === 'adb' && dev.address?.includes(':')) return <Tag color="blue">WiFi</Tag>;
@@ -587,6 +621,7 @@ export default function DevicePage() {
                       <Select value={connectType} onChange={setConnectType} style={{ width: '100%' }}>
                         <Option value="adb">ADB (WiFi / TCP)</Option>
                         {modalCategory === 'primary' && <Option value="hkmc6th">HKMC 6th (TCP)</Option>}
+                        {modalCategory === 'primary' && <Option value="vision_camera">Vision Camera</Option>}
                         <Option value="serial">{t('device.serialPort')}</Option>
                       </Select>
                     )}
@@ -652,7 +687,37 @@ export default function DevicePage() {
                       </>
                     )}
 
-                    {!selectedModule && connectType !== 'hkmc6th' && (
+                    {!selectedModule && connectType === 'vision_camera' && (
+                      <>
+                        <Input
+                          placeholder="MAC Address (예: AC4FFC011D82)"
+                          value={vcMac}
+                          onChange={(e) => setVcMac(e.target.value)}
+                        />
+                        <Input
+                          placeholder="IP Address (예: 169.254.4.191)"
+                          value={connectAddress}
+                          onChange={(e) => setConnectAddress(e.target.value)}
+                        />
+                        <Input
+                          placeholder="Model (예: exo264CGE)"
+                          value={vcModel}
+                          onChange={(e) => setVcModel(e.target.value)}
+                        />
+                        <Input
+                          placeholder="Serial Number"
+                          value={vcSerial}
+                          onChange={(e) => setVcSerial(e.target.value)}
+                        />
+                        <Input
+                          placeholder="Subnet Mask (예: 255.255.0.0)"
+                          value={vcSubnet}
+                          onChange={(e) => setVcSubnet(e.target.value)}
+                        />
+                      </>
+                    )}
+
+                    {!selectedModule && connectType !== 'hkmc6th' && connectType !== 'vision_camera' && (
                       <>
                         <Input
                           placeholder={connectType === 'adb' ? t('device.adbPlaceholder') : t('device.comPlaceholder')}

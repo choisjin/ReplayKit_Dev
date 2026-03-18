@@ -130,8 +130,10 @@ async def websocket_screen_mirror(websocket: WebSocket):
     # 디바이스 타입 판별
     dev = device_manager.get_device(target_device_id) if target_device_id else None
     is_hkmc = dev and dev.type == "hkmc6th"
+    is_vision_camera = dev and dev.type == "vision_camera"
 
-    logger.info("Screen mirror: device=%s type=%s", target_device_id, "hkmc" if is_hkmc else "adb")
+    dev_type_label = "hkmc" if is_hkmc else ("vision_camera" if is_vision_camera else "adb")
+    logger.info("Screen mirror: device=%s type=%s", target_device_id, dev_type_label)
 
     # ADB scrcpy 스트림 참조 (정리용)
     scrcpy_stream = None
@@ -140,7 +142,7 @@ async def websocket_screen_mirror(websocket: WebSocket):
 
     try:
         # ADB 디바이스: scrcpy 스트림 획득 시도
-        if not is_hkmc and dev:
+        if not is_hkmc and not is_vision_camera and dev:
             adb_display_id = 0
             try:
                 adb_display_id = int(screen_type)
@@ -169,6 +171,17 @@ async def websocket_screen_mirror(websocket: WebSocket):
                     # HKMC 재연결 대기 중 — 빈 프레임 대신 잠시 대기
                     await asyncio.sleep(1)
                     continue
+                elif is_vision_camera:
+                    cam = device_manager.get_vision_camera(target_device_id)
+                    if cam and cam.IsConnected():
+                        loop = asyncio.get_event_loop()
+                        jpeg_bytes = await loop.run_in_executor(
+                            None, cam.CaptureBytes, "jpeg"
+                        )
+                        await websocket.send_bytes(jpeg_bytes)
+                    else:
+                        await asyncio.sleep(1)
+                        continue
                 elif scrcpy_stream and scrcpy_stream.is_running:
                     # scrcpy H.264 스트리밍 — binary JPEG
                     jpeg_bytes = await scrcpy_stream.async_wait_frame(timeout=2.0)

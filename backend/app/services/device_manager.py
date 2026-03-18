@@ -369,6 +369,7 @@ class DeviceManager:
         self._devices: dict[str, ManagedDevice] = {}
         self._serial_conns: dict[str, "serial.Serial"] = {}  # device_id -> open serial connection
         self._hkmc_conns: dict[str, HKMC6thService] = {}  # device_id -> HKMC6thService
+        self._vision_cams: dict[str, object] = {}  # device_id -> VisionCamera instance
         self._load_auxiliary_devices()
 
     def _load_auxiliary_devices(self) -> None:
@@ -400,6 +401,8 @@ class DeviceManager:
             prefix = "Serial"
         elif dev_type == "hkmc6th":
             prefix = "HKMC"
+        elif dev_type == "vision_camera":
+            prefix = "VisionCam"
         elif dev_type == "module" and module_name:
             prefix = module_name
         else:
@@ -415,7 +418,7 @@ class DeviceManager:
 
     def _save_auxiliary_devices(self) -> None:
         """Persist all manually registered devices (auxiliary + ADB + HKMC) to disk."""
-        aux = [d.to_dict() for d in self._devices.values() if d.category == "auxiliary" or d.type in ("adb", "hkmc6th")]
+        aux = [d.to_dict() for d in self._devices.values() if d.category == "auxiliary" or d.type in ("adb", "hkmc6th", "vision_camera")]
         try:
             _AUX_DEVICES_FILE.write_text(json.dumps(aux, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as e:
@@ -511,6 +514,51 @@ class DeviceManager:
             return self._hkmc_conns.get(dev.id)
         return None
 
+    async def add_vision_camera_device(self, mac: str, model: str = "", serial: str = "",
+                                       ip: str = "", subnetmask: str = "255.255.0.0",
+                                       device_id: str = "", name: str = "") -> ManagedDevice:
+        """비전 카메라를 주 디바이스로 연결 및 등록."""
+        final_id = device_id or self._generate_device_id("vision_camera")
+        display_name = name or f"VisionCam ({mac})"
+
+        from ..plugins.VisionCamera import VisionCamera
+        cam = VisionCamera(mac=mac, model=model, serial=serial, ip=ip, subnetmask=subnetmask)
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(None, cam.Connect)
+        except Exception as e:
+            raise RuntimeError(f"VisionCamera connect failed: {e}")
+
+        dev = ManagedDevice(
+            id=final_id,
+            type="vision_camera",
+            category="primary",
+            address=ip or mac,
+            status="connected",
+            name=display_name,
+            info={
+                "mac": mac,
+                "model": model,
+                "serial_number": serial,
+                "ip": ip,
+                "subnetmask": subnetmask,
+            },
+        )
+        self._devices[final_id] = dev
+        self._vision_cams[final_id] = cam
+        self._save_auxiliary_devices()
+        return dev
+
+    def get_vision_camera(self, device_id: str):
+        """Get VisionCamera instance for a device. Returns None if not found."""
+        cam = self._vision_cams.get(device_id)
+        if cam:
+            return cam
+        dev = self.get_device(device_id)
+        if dev and dev.type == "vision_camera":
+            return self._vision_cams.get(dev.id)
+        return None
+
     async def refresh_auxiliary(self) -> None:
         """빠른 상태 확인만 수행 (네트워크 I/O 없음). 재연결은 백그라운드에서."""
         for dev in self._devices.values():
@@ -519,6 +567,13 @@ class DeviceManager:
                 if hkmc and hkmc.is_connected:
                     dev.status = "connected"
                 elif dev.status != "reconnecting":
+                    dev.status = "disconnected"
+                continue
+            if dev.type == "vision_camera":
+                cam = self._vision_cams.get(dev.id)
+                if cam and cam.IsConnected():
+                    dev.status = "connected"
+                else:
                     dev.status = "disconnected"
                 continue
             if dev.category != "auxiliary":
@@ -662,6 +717,13 @@ class DeviceManager:
         hkmc = self._hkmc_conns.pop(dev.id, None)
         if hkmc:
             hkmc.disconnect()
+        # Close VisionCamera connection if applicable
+        cam = self._vision_cams.pop(dev.id, None)
+        if cam:
+            try:
+                cam.Disconnect()
+            except Exception:
+                pass
         # 모듈 인스턴스 캐시 제거
         module_name = dev.info.get("module")
         if module_name:
@@ -789,9 +851,29 @@ class DeviceManager:
                 except Exception as e:
                     dev.status = "disconnected"
                     logger.warning("Failed to init module %s (%s): %s", dev.id, module_name, e)
+            elif dev.type == "vision_camera":
+                mac = dev.info.get("mac", "")
+                if not mac:
+                    continue
+                try:
+                    from ..plugins.VisionCamera import VisionCamera
+                    cam = VisionCamera(
+                        mac=mac,
+                        model=dev.info.get("model", ""),
+                        serial=dev.info.get("serial_number", ""),
+                        ip=dev.info.get("ip", ""),
+                        subnetmask=dev.info.get("subnetmask", "255.255.0.0"),
+                    )
+                    result = await loop.run_in_executor(None, cam.Connect)
+                    self._vision_cams[dev.id] = cam
+                    dev.status = "connected"
+                    logger.info("VisionCamera connection opened: %s (%s)", dev.id, mac)
+                except Exception as e:
+                    dev.status = "disconnected"
+                    logger.warning("Failed to open VisionCamera %s (%s): %s", dev.id, mac, e)
 
     def close_all_serial_connections(self) -> None:
-        """Close all persistent serial/HKMC connections (called on shutdown)."""
+        """Close all persistent serial/HKMC/VisionCamera connections (called on shutdown)."""
         for device_id in list(self._serial_conns.keys()):
             self._close_serial_conn(device_id)
             logger.info("Serial connection closed: %s", device_id)
@@ -799,6 +881,13 @@ class DeviceManager:
             hkmc.disconnect()
             logger.info("HKMC connection closed: %s", device_id)
         self._hkmc_conns.clear()
+        for device_id, cam in list(self._vision_cams.items()):
+            try:
+                cam.Disconnect()
+            except Exception:
+                pass
+            logger.info("VisionCamera connection closed: %s", device_id)
+        self._vision_cams.clear()
 
     async def send_serial_command(self, device_id: str, data: str, read_timeout: float = 1.0) -> str:
         """Send a command to a serial device and return the response."""

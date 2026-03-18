@@ -380,6 +380,13 @@ class PlaybackService:
                             screen_type=ss_device.get("screen_type", "front_center"), fmt="png"
                         )
                         Path(actual_path).write_bytes(img_bytes)
+                elif ss_device["type"] == "vision_camera":
+                    cam = self.dm.get_vision_camera(ss_device["id"])
+                    if cam:
+                        loop = asyncio.get_event_loop()
+                        saved = await loop.run_in_executor(
+                            None, cam.CaptureToFile, actual_path
+                        )
 
                 actual_rel = f"{scenario_name}/actual/{file_prefix}.png"
                 step_result.actual_image = actual_rel
@@ -704,6 +711,7 @@ class PlaybackService:
         Returns:
             {"type": "adb", "id": serial} or
             {"type": "hkmc6th", "id": device_id, "screen_type": ...} or
+            {"type": "vision_camera", "id": device_id} or
             None (no screenshot possible)
         """
         # 스크린샷 불필요한 경우: serial/module이면서 기대이미지 없음, wait이면서 기대이미지 없음
@@ -720,6 +728,8 @@ class PlaybackService:
             elif dev and dev.type == "hkmc6th":
                 screen_type = step.screen_type or step.params.get("screen_type", "front_center")
                 return {"type": "hkmc6th", "id": dev.id, "screen_type": screen_type}
+            elif dev and dev.type == "vision_camera":
+                return {"type": "vision_camera", "id": dev.id}
             elif dev:
                 # ADB — dev.address가 실제 ADB 시리얼
                 adb_screen = step.screen_type or step.params.get("screen_type")
@@ -736,6 +746,8 @@ class PlaybackService:
             dev = primary[0]
             if dev.type == "hkmc6th":
                 return {"type": "hkmc6th", "id": dev.id, "screen_type": "front_center"}
+            if dev.type == "vision_camera":
+                return {"type": "vision_camera", "id": dev.id}
             return {"type": "adb", "id": dev.id, "serial": dev.address}
         return None
 
