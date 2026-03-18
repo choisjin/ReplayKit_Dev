@@ -101,17 +101,19 @@ function AppContent() {
     }
   };
 
-  /** 웹캠 PiP 열기 + 스트림 준비 대기. 이미 열려있으면 즉시 true */
+  /** 웹캠 PiP 열기 + 실제 비디오 스트림 준비 대기. 이미 스트림 활성이면 즉시 true */
   const ensureWebcamOpen = async (): Promise<boolean> => {
-    if (webcamVisible && webcam.webcamOpen) return true;
+    // 이미 스트림이 준비되어 있으면 즉시 성공
+    if (webcamVisible && webcam.isStreamReady()) return true;
+    // PiP 닫혀있으면 열기
     if (!webcamVisible) {
       webcam.handleWebcamToggle(['webcam']);
       setWebcamVisible(true);
     }
-    // 스트림 준비 대기 (최대 5초)
-    for (let i = 0; i < 25; i++) {
+    // 실제 비디오 스트림이 live 상태가 될 때까지 대기 (최대 15초)
+    for (let i = 0; i < 75; i++) {
       await new Promise(r => setTimeout(r, 200));
-      if (webcam.webcamOpen) return true;
+      if (webcam.isStreamReady()) return true;
     }
     return false;
   };

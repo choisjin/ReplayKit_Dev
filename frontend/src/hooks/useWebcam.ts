@@ -313,5 +313,12 @@ export function useWebcam() {
     setUploadFn,
     startRecordingAuto,
     stopRecordingAuto,
+    /** 스트림이 활성 상태인지 확인 */
+    isStreamReady: useCallback(() => {
+      const stream = webcamStreamRef.current;
+      if (!stream) return false;
+      const tracks = stream.getVideoTracks();
+      return tracks.length > 0 && tracks[0].readyState === 'live';
+    }, []),
   };
 }
