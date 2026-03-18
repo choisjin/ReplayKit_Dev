@@ -162,10 +162,15 @@ class ServerManagerApp:
         self.root.configure(bg=BG)
         self.root.resizable(True, True)
 
+        # 배포 모드: frontend/dist 존재하면 백엔드가 정적 파일 서빙 (프론트엔드 서버 불필요)
+        fe_dist = os.path.join(FRONTEND_DIR, "dist", "index.html")
+        self._production = os.path.exists(fe_dist)
+
+        reload_flag = [] if self._production else ["--reload"]
         self.backend = ServerProcess(
             "백엔드",
             [VENV_PYTHON, "-m", "uvicorn", "backend.app.main:app",
-             "--host", "0.0.0.0", "--port", "8000", "--reload"],
+             "--host", "0.0.0.0", "--port", "8000"] + reload_flag,
             PROJECT_ROOT,
             "http://localhost:8000",
         )
@@ -380,16 +385,15 @@ class ServerManagerApp:
     def _full_restart(self):
         """기존 프로세스 + 포트 점유까지 완전 정리 후 재시작."""
         def _do():
-            # 1) 관리 중인 프로세스 종료
             self.backend.stop(self._log)
-            self.frontend.stop(self._log)
+            if not self._production:
+                self.frontend.stop(self._log)
             time.sleep(1)
-            # 2) 포트에 남은 고아 프로세스 강제 정리
             _kill_existing_servers()
             time.sleep(1)
-            # 3) 재시작
             self.backend.start(self._log)
-            self.frontend.start(self._log)
+            if not self._production:
+                self.frontend.start(self._log)
         threading.Thread(target=_do, daemon=True).start()
 
     # ── 상태 업데이트 (주기적) ──
@@ -441,42 +445,52 @@ class ServerManagerApp:
     def _start_all(self):
         def _do():
             self.backend.start(self._log)
-            self.frontend.start(self._log)
+            if not self._production:
+                self.frontend.start(self._log)
+            else:
+                self._log("[시스템] 프로덕션 모드 — 프론트엔드는 백엔드가 서빙합니다")
         threading.Thread(target=_do, daemon=True).start()
 
     def _open_web(self):
-        webbrowser.open(self.frontend.url)
+        url = self.backend.url if self._production else self.frontend.url
+        webbrowser.open(url)
 
     def _stop_all(self):
         def _do():
             self.backend.stop(self._log)
-            self.frontend.stop(self._log)
+            if not self._production:
+                self.frontend.stop(self._log)
         threading.Thread(target=_do, daemon=True).start()
 
     def _restart_all(self):
         def _do():
             self.backend.stop(self._log)
-            self.frontend.stop(self._log)
+            if not self._production:
+                self.frontend.stop(self._log)
             time.sleep(1)
             self.backend.start(self._log)
-            self.frontend.start(self._log)
+            if not self._production:
+                self.frontend.start(self._log)
         threading.Thread(target=_do, daemon=True).start()
 
     def _sync_and_start(self):
         """동기화 후 서버 시작."""
         def _do():
             self.backend.stop(self._log)
-            self.frontend.stop(self._log)
+            if not self._production:
+                self.frontend.stop(self._log)
             time.sleep(1)
             if self._sync(self._log):
                 self.backend.start(self._log)
-                self.frontend.start(self._log)
+                if not self._production:
+                    self.frontend.start(self._log)
         threading.Thread(target=_do, daemon=True).start()
 
     def _on_close(self):
         if self.backend.running or self.frontend.running:
             self.backend.stop(self._log)
-            self.frontend.stop(self._log)
+            if not self._production:
+                self.frontend.stop(self._log)
         self.root.destroy()
 
     def run(self):

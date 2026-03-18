@@ -78,10 +78,24 @@ recordings_dir = Path(__file__).resolve().parent.parent.parent / "Results" / "Vi
 recordings_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/recordings", StaticFiles(directory=str(recordings_dir)), name="recordings")
 
-
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
+
+
+# 프로덕션: frontend/dist 정적 파일 서빙 (Vite 빌드 결과)
+# 반드시 모든 API 라우트 등록 후 마지막에 추가 (catch-all)
+_frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+if _frontend_dist.is_dir():
+    from starlette.responses import FileResponse as _FR
+
+    @app.get("/{path:path}")
+    async def _serve_frontend(path: str):
+        file = _frontend_dist / path
+        if file.is_file():
+            return _FR(str(file))
+        # SPA fallback: index.html
+        return _FR(str(_frontend_dist / "index.html"))
 
 
 @app.get("/")
