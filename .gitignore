@@ -4,25 +4,35 @@ __pycache__/
 *.pyc
 *.pyo
 *.egg-info/
-dist/
+
+# 빌드 중간 파일 (배포 결과물은 추적)
 build/
+dist/
+*.c
+!backend/app/**/*.c
+_cython_setup.py
+*.spec
 
 # Node
 frontend/node_modules/
-frontend/dist/
 
-# Large binaries (copy manually to work PC)
-*.whl
-*.exe
-*.dll
+# 배포 포함 — 아래는 gitignore하지 않음:
+# - frontend/dist/     (프로덕션 빌드)
+# - backend/**/*.pyd   (컴파일된 바이너리)
+# - *.exe              (서버 실행 파일)
 
-# Runtime data
+# Runtime data (사용자 영역)
 backend/screenshots/
 backend/results/
 backend/scenarios/
 backend/auxiliary_devices.json
+backend/settings.json
+Results/
 
-# Reference files (not used by the application)
+# Large binaries (수동 복사)
+*.whl
+
+# Legacy reference files
 BENCH.py
 CAN.py
 CANAT.py
@@ -30,6 +40,11 @@ IVIQEBenchIOClient.py
 IVIQEBenchIOProtocol.py
 IVIQEBenchIOReceive.py
 procResponse.py
+hkmc6th.py
+IVIHKMC6thAppMemInfo.py
+IVIHKMC6thPlugin.py
+IVIHKMC6thClient.py
+IVIHKMC6thProtocol.py
 
 # OS / IDE
 .env
@@ -40,16 +55,6 @@ Desktop.ini
 .DS_Store
 .claude/settings.json
 .claude/settings.local.json
-DLL_DEBUG/CANatDLLLog_COM7_20260312112233.txt
-hkmc6th.py
-IVIHKMC6thAppMemInfo.py
-IVIHKMC6thPlugin.py
-IVIHKMC6thClient.py
-IVIHKMC6thProtocol.py
-<<<<<<< HEAD
-backend/settings.json
-=======
 .playwright-mcp/
->>>>>>> c628722dd3900523a28305e57eba2b530828a25c
-device-page-screenshot.png
-record-page.png
+DLL_DEBUG/
+*.png

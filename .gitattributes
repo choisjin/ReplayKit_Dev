@@ -1,0 +1,7 @@
+# 바이너리 파일 — diff/merge 시도하지 않음
+*.pyd binary
+*.exe binary
+*.dll binary
+
+# 프론트엔드 빌드 결과물
+frontend/dist/** binary
