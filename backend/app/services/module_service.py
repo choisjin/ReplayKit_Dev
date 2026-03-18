@@ -224,17 +224,57 @@ def get_module_functions(module_name: str) -> list[dict]:
     return functions
 
 
+def _is_connected(instance) -> bool:
+    """Check if a module instance appears to have a live connection."""
+    # Serial: check _conn attribute (e.g. IVIQEBenchIOClient)
+    if hasattr(instance, "_conn"):
+        conn = getattr(instance, "_conn", None)
+        if conn is None:
+            return False
+        is_open = getattr(conn, "is_open", None) or getattr(conn, "isOpen", None)
+        if callable(is_open):
+            return is_open()
+        if isinstance(is_open, bool):
+            return is_open
+        return True
+    # DLL-based: check hdll attribute (e.g. CANAT)
+    if hasattr(instance, "hdll"):
+        return getattr(instance, "hdll", None) is not None
+    # Socket: check _socket or sock attribute
+    sock = getattr(instance, "_socket", None) or getattr(instance, "sock", None)
+    if sock is not None:
+        return True
+    if hasattr(instance, "_socket") or hasattr(instance, "sock"):
+        return False
+    return True  # no known indicator → assume OK
+
+
 def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None) -> Any:
     """Get or create a singleton instance of the module class."""
     # host/port가 변경된 경우 기존 인스턴스 무효화
     if module_name in _instances and constructor_kwargs:
         existing = _instances[module_name]
+        # port 변경 감지
+        existing_port = getattr(existing, "_port", None)
+        new_port = constructor_kwargs.get("port")
+        if new_port and existing_port and str(new_port) != str(existing_port):
+            logger.info("Port changed for %s (%s → %s), recreating instance",
+                        module_name, existing_port, new_port)
+            _instances.pop(module_name, None)
+        # host 변경 감지
         existing_host = getattr(existing, "_host", None) or getattr(existing, "host", None)
         new_host = constructor_kwargs.get("host")
         if new_host and existing_host and new_host != existing_host:
             logger.info("Host changed for %s (%s → %s), recreating instance",
                         module_name, existing_host, new_host)
             _instances.pop(module_name, None)
+
+    # 기존 인스턴스가 연결 끊어진 경우 재생성
+    if module_name in _instances:
+        if not _is_connected(_instances[module_name]):
+            logger.info("Connection lost for %s, recreating instance", module_name)
+            _instances.pop(module_name, None)
+
     if module_name not in _instances:
         cls = _import_module_class(module_name)
         if cls is None:
@@ -260,10 +300,16 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None) -
                             # Only call if it takes no args (besides self)
                             non_self = [p for p in sig.parameters if p != "self"]
                             if len(non_self) == 0:
-                                connect_fn()
-                                logger.info("Auto-called %s.%s()", module_name, method_name)
+                                result = connect_fn()
+                                logger.info("Auto-called %s.%s() → %s", module_name, method_name, result)
+                                # 연결 실패 시 에러 발생
+                                if isinstance(result, str) and result.upper() in ("ERROR", "FAIL", "FAILED"):
+                                    raise ConnectionError(f"{module_name}.{method_name}() returned {result}")
+                        except ConnectionError:
+                            raise
                         except Exception as e:
                             logger.warning("Auto-connect %s.%s() failed: %s", module_name, method_name, e)
+                            raise ConnectionError(f"{module_name}.{method_name}() failed: {e}")
                         break
                 _instances[module_name] = instance
             else:
