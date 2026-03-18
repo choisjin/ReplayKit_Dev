@@ -214,26 +214,16 @@ async def save_export_zip(req: SaveExportZipRequest):
         raise HTTPException(status_code=500, detail=f"ZIP 저장 실패: {e}")
 
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent  # server.py 위치
+_PROJECT_ROOT = Path(os.environ.get("RECORDING_PROJECT_ROOT",
+                     str(Path(__file__).resolve().parent.parent.parent.parent)))
+_RESTART_FLAG = _PROJECT_ROOT / ".restart"
 
 
 @router.post("/server-restart")
 async def server_restart():
-    """서버(백엔드+프론트엔드) 재시작. server.py가 --restart 인자로 재실행됨."""
-    venv_python = _PROJECT_ROOT / "venv" / "Scripts" / "python.exe"
-    if not venv_python.exists():
-        venv_python = _PROJECT_ROOT / "venv" / "bin" / "python"
-    python = str(venv_python) if venv_python.exists() else sys.executable
-    server_script = str(_PROJECT_ROOT / "server.py")
-    logger.info("Server restart requested — launching new server.py and exiting")
-    # 새 프로세스로 server.py 실행 후 현재 프로세스 종료
-    subprocess.Popen(
-        [python, server_script, "--restart"],
-        cwd=str(_PROJECT_ROOT),
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-    )
-    # 현재 서버 종료 (약간의 지연 후)
-    asyncio.get_event_loop().call_later(1.0, lambda: os._exit(0))
+    """서버 재시작 요청. server.py(또는 exe)가 .restart 플래그를 감지하여 재시작."""
+    logger.info("Server restart requested via API")
+    _RESTART_FLAG.write_text("restart", encoding="utf-8")
     return {"status": "restarting"}
 
 
@@ -241,48 +231,38 @@ async def server_restart():
 async def update_and_restart():
     """git pull + 의존성 업데이트 + 서버 재시작."""
     results = {"git": "", "pip": "", "npm": ""}
+    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
+    cwd = str(_PROJECT_ROOT)
+    no_window = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
     try:
         # 1) git pull
-        git_result = subprocess.run(
-            ["git", "pull", "origin", "main"],
-            cwd=str(_PROJECT_ROOT), capture_output=True, text=True, timeout=60,
-        )
-        results["git"] = git_result.stdout.strip() or git_result.stderr.strip()
-        if git_result.returncode != 0:
+        r = subprocess.run(["git", "pull", "origin", "main"],
+                           cwd=cwd, capture_output=True, text=True, timeout=60, creationflags=no_window)
+        results["git"] = (r.stdout.strip() + "\n" + r.stderr.strip()).strip()
+        if r.returncode != 0:
             return {"status": "error", "step": "git pull", "detail": results["git"], "results": results}
 
         # 2) pip install
-        venv_python = _PROJECT_ROOT / "venv" / "Scripts" / "python.exe"
-        if not venv_python.exists():
-            venv_python = _PROJECT_ROOT / "venv" / "bin" / "python"
-        python = str(venv_python) if venv_python.exists() else sys.executable
-        pip_result = subprocess.run(
-            [python, "-m", "pip", "install", "-r", "requirements.txt", "-q"],
-            cwd=str(_PROJECT_ROOT), capture_output=True, text=True, timeout=120,
-        )
-        results["pip"] = pip_result.stdout.strip() or "OK"
+        venv_py = _PROJECT_ROOT / "venv" / "Scripts" / "python.exe"
+        if not venv_py.exists():
+            venv_py = _PROJECT_ROOT / "venv" / "bin" / "python"
+        python = str(venv_py) if venv_py.exists() else sys.executable
+        r = subprocess.run([python, "-m", "pip", "install", "-r", "requirements.txt", "-q"],
+                           cwd=cwd, capture_output=True, text=True, timeout=120, creationflags=no_window)
+        results["pip"] = r.stdout.strip() or "OK"
 
         # 3) npm install
-        npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
-        npm_result = subprocess.run(
-            [npm_cmd, "install", "--silent"],
-            cwd=str(_PROJECT_ROOT / "frontend"), capture_output=True, text=True, timeout=120,
-        )
-        results["npm"] = npm_result.stdout.strip() or "OK"
+        r = subprocess.run([npm_cmd, "install", "--silent"],
+                           cwd=str(_PROJECT_ROOT / "frontend"), capture_output=True, text=True, timeout=120, creationflags=no_window)
+        results["npm"] = r.stdout.strip() or "OK"
 
     except subprocess.TimeoutExpired as e:
         return {"status": "error", "step": "timeout", "detail": str(e), "results": results}
     except Exception as e:
         return {"status": "error", "step": "exception", "detail": str(e), "results": results}
 
-    # 4) 서버 재시작
-    server_script = str(_PROJECT_ROOT / "server.py")
-    logger.info("Update complete — restarting server")
-    subprocess.Popen(
-        [python, server_script, "--restart"],
-        cwd=str(_PROJECT_ROOT),
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-    )
-    asyncio.get_event_loop().call_later(1.0, lambda: os._exit(0))
+    # 4) .restart 플래그로 server.py에 재시작 요청
+    logger.info("Update complete — requesting restart via flag")
+    _RESTART_FLAG.write_text("restart", encoding="utf-8")
     return {"status": "restarting", "results": results}

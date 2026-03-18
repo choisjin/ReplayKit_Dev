@@ -1,4 +1,8 @@
-"""서버 관리 GUI — 백엔드 + 프론트엔드 동시 시작/정지/재시작."""
+"""서버 관리 GUI — 동기화 + 백엔드 + 프론트엔드 동시 관리.
+
+PyInstaller exe로 컴파일 가능:
+  pyinstaller --onefile --noconsole --name RecordingServer server.py
+"""
 
 import re
 import subprocess
@@ -19,12 +23,15 @@ if getattr(sys, "frozen", False):
 else:
     PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
+RESTART_FLAG = os.path.join(PROJECT_ROOT, ".restart")
 
-# Always use the venv Python for backend (not the system Python running this script)
+# Always use the venv Python for backend
 _venv_python = os.path.join(PROJECT_ROOT, "venv", "Scripts", "python.exe")
 if not os.path.exists(_venv_python):
     _venv_python = os.path.join(PROJECT_ROOT, "venv", "bin", "python")
 VENV_PYTHON = _venv_python if os.path.exists(_venv_python) else sys.executable
+
+NPM_CMD = "npm.cmd" if sys.platform == "win32" else "npm"
 
 # ── 색상 테마 ──
 BG = "#1e1e2e"
@@ -37,11 +44,27 @@ YELLOW = "#f9e2af"
 BLUE = "#89b4fa"
 ACCENT = "#cba6f7"
 
-# 로그에서 필터링할 패턴 (스크린샷 폴링 등 너무 빈번한 로그)
+# 로그에서 필터링할 패턴
 _LOG_FILTER_RE = re.compile(
     r'"GET /api/device/screenshot/|'
     r'"GET /api/device/info/'
 )
+
+
+def _run_cmd(cmd, cwd=PROJECT_ROOT, timeout=120):
+    """subprocess 실행 후 (returncode, stdout) 반환."""
+    try:
+        r = subprocess.run(
+            cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        return r.returncode, (r.stdout.strip() + "\n" + r.stderr.strip()).strip()
+    except subprocess.TimeoutExpired:
+        return -1, "Timeout"
+    except FileNotFoundError:
+        return -1, f"Command not found: {cmd[0]}"
+    except Exception as e:
+        return -1, str(e)
 
 
 class ServerProcess:
@@ -66,10 +89,13 @@ class ServerProcess:
         if self.running:
             log_callback(f"[{self.name}] 이미 실행 중입니다")
             return False
+        env = os.environ.copy()
+        env["RECORDING_PROJECT_ROOT"] = PROJECT_ROOT
         try:
             self.proc = subprocess.Popen(
                 self.cmd,
                 cwd=self.cwd,
+                env=env,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW) if sys.platform == "win32" else 0,
@@ -103,11 +129,9 @@ class ServerProcess:
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             log_callback(f"[{self.name}] 이미 정지됨")
         self.proc = None
-        # Kill any orphaned processes still listening on the port
         self._kill_port_listeners(log_callback)
 
     def _kill_port_listeners(self, log_callback) -> None:
-        """Kill any orphaned processes still listening on this server's port."""
         for conn in psutil.net_connections(kind="tcp"):
             if conn.laddr.port == self.port and conn.status == "LISTEN" and conn.pid:
                 try:
@@ -120,7 +144,6 @@ class ServerProcess:
                     pass
 
     def _read_output(self, log_callback) -> None:
-        """stdout/stderr를 읽어서 로그에 출력."""
         try:
             assert self.proc and self.proc.stdout
             for raw_line in self.proc.stdout:
@@ -139,7 +162,6 @@ class ServerManagerApp:
         self.root.configure(bg=BG)
         self.root.resizable(True, True)
 
-        npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
         self.backend = ServerProcess(
             "백엔드",
             [VENV_PYTHON, "-m", "uvicorn", "backend.app.main:app",
@@ -149,26 +171,25 @@ class ServerManagerApp:
         )
         self.frontend = ServerProcess(
             "프론트엔드",
-            [npm_cmd, "run", "dev"],
+            [NPM_CMD, "run", "dev"],
             FRONTEND_DIR,
             "http://localhost:5173",
         )
 
         self._build_ui()
         self._update_status()
+        self._check_restart_flag()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ── UI 구성 ──
 
     def _build_ui(self):
-        # 상단 제목
         title = tk.Label(
             self.root, text="Recording Test Macro — Server",
             bg=BG, fg=ACCENT, font=("Segoe UI", 16, "bold"),
         )
         title.pack(pady=(16, 8))
 
-        # 서버 카드 프레임
         cards_frame = tk.Frame(self.root, bg=BG)
         cards_frame.pack(fill="x", padx=20, pady=(0, 8))
         cards_frame.columnconfigure(0, weight=1)
@@ -177,17 +198,16 @@ class ServerManagerApp:
         self.be_card = self._build_server_card(cards_frame, "백엔드", "FastAPI · :8000", 0)
         self.fe_card = self._build_server_card(cards_frame, "프론트엔드", "Vite · :5173", 1)
 
-        # 전체 제어 버튼
         btn_frame = tk.Frame(self.root, bg=BG)
         btn_frame.pack(fill="x", padx=20, pady=(0, 8))
 
         self._make_btn(btn_frame, "▶  모두 시작", GREEN, self._start_all).pack(side="left", expand=True, fill="x", padx=(0, 4))
         self._make_btn(btn_frame, "■  모두 정지", RED, self._stop_all).pack(side="left", expand=True, fill="x", padx=4)
         self._make_btn(btn_frame, "↻  모두 재시작", YELLOW, self._restart_all).pack(side="left", expand=True, fill="x", padx=4)
-        self._make_btn(btn_frame, "🌐  웹 열기", BLUE, self._open_web).pack(side="left", expand=True, fill="x", padx=(4, 0))
+        self._make_btn(btn_frame, "⟳  동기화+시작", BLUE, self._sync_and_start).pack(side="left", expand=True, fill="x", padx=4)
+        self._make_btn(btn_frame, "🌐  웹 열기", ACCENT, self._open_web).pack(side="left", expand=True, fill="x", padx=(4, 0))
 
-        # ── 로그 탭 영역 ──
-        # ttk 스타일 설정 (다크 테마)
+        # 로그 탭
         style = ttk.Style()
         style.theme_use("default")
         style.configure("Dark.TNotebook", background=BG, borderwidth=0)
@@ -201,7 +221,6 @@ class ServerManagerApp:
         self.log_notebook = ttk.Notebook(self.root, style="Dark.TNotebook")
         self.log_notebook.pack(fill="both", expand=True, padx=20, pady=(8, 12))
 
-        # 탭별 로그 위젯 생성
         self.log_tabs: dict[str, scrolledtext.ScrolledText] = {}
         for tab_name, tab_color in [("전체", FG), ("백엔드", BLUE), ("프론트엔드", ACCENT)]:
             frame = tk.Frame(self.log_notebook, bg="#181825")
@@ -212,7 +231,6 @@ class ServerManagerApp:
                 wrap="word", state="disabled", height=14,
             )
             log_widget.pack(fill="both", expand=True)
-            # 색상 태그
             log_widget.tag_config("ts", foreground=FG_DIM)
             log_widget.tag_config("backend", foreground=BLUE)
             log_widget.tag_config("frontend", foreground=ACCENT)
@@ -222,7 +240,6 @@ class ServerManagerApp:
             self.log_notebook.add(frame, text=tab_name)
             self.log_tabs[tab_name] = log_widget
 
-        # 하단 상태바
         self.statusbar = tk.Label(
             self.root, text="준비", bg=BG_CARD, fg=FG_DIM,
             font=("Segoe UI", 9), anchor="w", padx=12, pady=4,
@@ -233,7 +250,6 @@ class ServerManagerApp:
         card = tk.Frame(parent, bg=BG_CARD, relief="flat", bd=0, padx=16, pady=12)
         card.grid(row=0, column=col, sticky="nsew", padx=(0 if col == 0 else 4, 4 if col == 0 else 0), pady=4)
 
-        # 상태 표시등 + 이름
         top = tk.Frame(card, bg=BG_CARD)
         top.pack(fill="x")
 
@@ -249,26 +265,17 @@ class ServerManagerApp:
         sub = tk.Label(card, text=subtitle, bg=BG_CARD, fg=FG_DIM, font=("Segoe UI", 9))
         sub.pack(anchor="w", pady=(2, 8))
 
-        # 개별 버튼
         btn_row = tk.Frame(card, bg=BG_CARD)
         btn_row.pack(fill="x")
 
-        start_btn = self._make_btn(btn_row, "시작", GREEN,
-                                   lambda n=name: self._start_one(n))
+        start_btn = self._make_btn(btn_row, "시작", GREEN, lambda n=name: self._start_one(n))
         start_btn.pack(side="left", expand=True, fill="x", padx=(0, 3))
-        stop_btn = self._make_btn(btn_row, "정지", RED,
-                                  lambda n=name: self._stop_one(n))
+        stop_btn = self._make_btn(btn_row, "정지", RED, lambda n=name: self._stop_one(n))
         stop_btn.pack(side="left", expand=True, fill="x", padx=(3, 3))
-        restart_btn = self._make_btn(btn_row, "재시작", YELLOW,
-                                     lambda n=name: self._restart_one(n))
+        restart_btn = self._make_btn(btn_row, "재시작", YELLOW, lambda n=name: self._restart_one(n))
         restart_btn.pack(side="left", expand=True, fill="x", padx=(3, 0))
 
-        return {
-            "indicator": indicator,
-            "status_lbl": status_lbl,
-            "start_btn": start_btn,
-            "stop_btn": stop_btn,
-        }
+        return {"indicator": indicator, "status_lbl": status_lbl, "start_btn": start_btn, "stop_btn": stop_btn}
 
     def _make_btn(self, parent, text: str, color: str, command) -> tk.Button:
         btn = tk.Button(
@@ -284,22 +291,20 @@ class ServerManagerApp:
     # ── 로그 ──
 
     def _log(self, msg: str):
-        """스레드 안전하게 로그 추가."""
         self.root.after(0, self._append_log, msg)
+
+    def _set_status(self, text: str):
+        self.root.after(0, lambda: self.statusbar.configure(text=text))
 
     def _append_log(self, msg: str):
         ts = datetime.now().strftime("%H:%M:%S")
-
-        # 로그 출처 판별
         is_backend = "[백엔드]" in msg
         is_frontend = "[프론트엔드]" in msg
         is_error = "error" in msg.lower() or "실패" in msg
 
-        # 백엔드 스크린샷 폴링 로그 필터링
         if is_backend and _LOG_FILTER_RE.search(msg):
             return
 
-        # 색상 태그 결정
         if is_error:
             tag = "error"
         elif is_backend:
@@ -309,7 +314,6 @@ class ServerManagerApp:
         else:
             tag = "system"
 
-        # 대상 탭 결정
         targets = ["전체"]
         if is_backend:
             targets.append("백엔드")
@@ -324,6 +328,70 @@ class ServerManagerApp:
             widget.see("end")
             widget.configure(state="disabled")
 
+    # ── 동기화 (git pull + 의존성) ──
+
+    def _sync(self, log_callback):
+        """git pull + pip install + npm install. 메인 스레드가 아닌 곳에서 호출."""
+        self._set_status("동기화 중...")
+
+        # 1) git pull
+        log_callback("[동기화] git pull origin main ...")
+        code, out = _run_cmd(["git", "pull", "origin", "main"], timeout=60)
+        if out:
+            log_callback(f"[동기화] {out}")
+        if code != 0:
+            log_callback("[동기화] git pull 실패 — 충돌을 확인하세요")
+            self._set_status("동기화 실패")
+            return False
+
+        # 2) pip install
+        log_callback("[동기화] Python 의존성 확인 중...")
+        code, out = _run_cmd([VENV_PYTHON, "-m", "pip", "install", "-r", "requirements.txt", "-q"], timeout=120)
+        if out and code == 0:
+            log_callback(f"[동기화] pip: {out[:200]}")
+        elif code != 0:
+            log_callback(f"[동기화] pip install 실패: {out[:200]}")
+
+        # 3) npm install
+        log_callback("[동기화] Node 의존성 확인 중...")
+        code, out = _run_cmd([NPM_CMD, "install", "--silent"], cwd=FRONTEND_DIR, timeout=120)
+        if out and code == 0:
+            log_callback(f"[동기화] npm: {out[:200]}")
+        elif code != 0:
+            log_callback(f"[동기화] npm install 실패: {out[:200]}")
+
+        log_callback("[동기화] 완료")
+        self._set_status("동기화 완료")
+        return True
+
+    # ── 재시작 플래그 감시 ──
+
+    def _check_restart_flag(self):
+        """백엔드가 .restart 파일을 생성하면 서버를 재시작."""
+        if os.path.exists(RESTART_FLAG):
+            try:
+                os.remove(RESTART_FLAG)
+            except Exception:
+                pass
+            self._log("[시스템] 재시작 요청 감지됨")
+            self._full_restart()
+        self.root.after(2000, self._check_restart_flag)
+
+    def _full_restart(self):
+        """기존 프로세스 + 포트 점유까지 완전 정리 후 재시작."""
+        def _do():
+            # 1) 관리 중인 프로세스 종료
+            self.backend.stop(self._log)
+            self.frontend.stop(self._log)
+            time.sleep(1)
+            # 2) 포트에 남은 고아 프로세스 강제 정리
+            _kill_existing_servers()
+            time.sleep(1)
+            # 3) 재시작
+            self.backend.start(self._log)
+            self.frontend.start(self._log)
+        threading.Thread(target=_do, daemon=True).start()
+
     # ── 상태 업데이트 (주기적) ──
 
     def _update_status(self):
@@ -337,14 +405,17 @@ class ServerManagerApp:
 
         be_run = self.backend.running
         fe_run = self.frontend.running
-        if be_run and fe_run:
-            self.statusbar.configure(text="백엔드 + 프론트엔드 실행 중")
-        elif be_run:
-            self.statusbar.configure(text="백엔드만 실행 중")
-        elif fe_run:
-            self.statusbar.configure(text="프론트엔드만 실행 중")
-        else:
-            self.statusbar.configure(text="모든 서버 정지됨")
+        status = self.statusbar.cget("text")
+        if "동기화" not in status:
+            if be_run and fe_run:
+                self.statusbar.configure(text="백엔드 + 프론트엔드 실행 중")
+            elif be_run:
+                self.statusbar.configure(text="백엔드만 실행 중")
+            elif fe_run:
+                self.statusbar.configure(text="프론트엔드만 실행 중")
+            else:
+                if "완료" not in status and "준비" not in status:
+                    self.statusbar.configure(text="모든 서버 정지됨")
 
         self.root.after(1000, self._update_status)
 
@@ -391,8 +462,18 @@ class ServerManagerApp:
             self.frontend.start(self._log)
         threading.Thread(target=_do, daemon=True).start()
 
+    def _sync_and_start(self):
+        """동기화 후 서버 시작."""
+        def _do():
+            self.backend.stop(self._log)
+            self.frontend.stop(self._log)
+            time.sleep(1)
+            if self._sync(self._log):
+                self.backend.start(self._log)
+                self.frontend.start(self._log)
+        threading.Thread(target=_do, daemon=True).start()
+
     def _on_close(self):
-        """종료 시 서버도 같이 정지."""
         if self.backend.running or self.frontend.running:
             self.backend.stop(self._log)
             self.frontend.stop(self._log)
@@ -424,7 +505,6 @@ def _kill_existing_servers():
                     for child in p.children(recursive=True):
                         child.kill()
                     p.kill()
-                    print(f"포트 {port} 프로세스 종료 (PID {conn.pid})")
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
 
@@ -432,16 +512,27 @@ def _kill_existing_servers():
 if __name__ == "__main__":
     _hide_console()
 
-    # --restart 모드: 기존 서버 정리 후 자동 시작
-    if "--restart" in sys.argv:
-        time.sleep(2)  # 이전 프로세스 종료 대기
+    is_restart = "--restart" in sys.argv
+    do_sync = "--no-sync" not in sys.argv and not is_restart
+
+    if is_restart:
+        time.sleep(2)
         _kill_existing_servers()
         time.sleep(1)
 
     app = ServerManagerApp()
 
-    # --restart 모드: 자동으로 모두 시작
-    if "--restart" in sys.argv:
+    if do_sync:
+        # 일반 시작: 동기화 후 자동 시작
+        def _auto_sync_and_start():
+            if app._sync(app._log):
+                app.backend.start(app._log)
+                app.frontend.start(app._log)
+            else:
+                app._log("[시스템] 동기화 실패 — 수동으로 시작하세요")
+        threading.Thread(target=_auto_sync_and_start, daemon=True).start()
+    elif is_restart:
+        # 재시작: 동기화 없이 바로 시작
         app.root.after(500, app._start_all)
 
     app.run()
