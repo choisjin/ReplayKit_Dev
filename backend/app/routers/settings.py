@@ -237,8 +237,6 @@ async def update_and_restart():
 
     try:
         # 1) 로컬 변경 초기화 + untracked 정리 + git pull
-        subprocess.run(["git", "update-index", "--assume-unchanged", "ReplayKit.exe"],
-                       cwd=cwd, capture_output=True, text=True, timeout=10, creationflags=no_window)
         subprocess.run(["git", "checkout", "--", "."],
                        cwd=cwd, capture_output=True, text=True, timeout=30, creationflags=no_window)
         subprocess.run(["git", "clean", "-fd", "--exclude=ReplayKit.exe"],

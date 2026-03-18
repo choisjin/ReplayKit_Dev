@@ -347,9 +347,8 @@ class ServerManagerApp:
         """git pull + pip install + npm install. 메인 스레드가 아닌 곳에서 호출."""
         self._set_status("동기화 중...")
 
-        # 1) 로컬 변경 초기화 + untracked 정리 + git pull
+        # 1) 로컬 변경 초기화 + git pull
         log_callback("[동기화] git reset + pull ...")
-        _run_cmd(["git", "update-index", "--assume-unchanged", "ReplayKit.exe"], timeout=10)
         _run_cmd(["git", "checkout", "--", "."], timeout=30)
         _run_cmd(["git", "clean", "-fd", "--exclude=ReplayKit.exe"], timeout=30)
         code, out = _run_cmd(["git", "pull", "origin", "main"], timeout=60)

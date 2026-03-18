@@ -43,6 +43,7 @@ SKIP_COMPILE = {"__init__.py", "dependencies.py",
 INCLUDE_ROOT_FILES = [
     "requirements.txt",
     "setup.bat",
+    "server.py",
 ]
 
 # 배포에 포함할 추가 파일/폴더 (모듈 DLL 등)
@@ -262,6 +263,7 @@ def step_package():
     dist_gitignore.write_text("""venv/
 __pycache__/
 *.pyc
+*.exe
 backend/screenshots/
 backend/results/
 backend/scenarios/
@@ -400,10 +402,7 @@ def main():
         print("\n빌드 중단: frontend 빌드 실패")
         return
 
-    ok = step_build_exe()
-    if not ok:
-        print("\n경고: exe 빌드 실패 — server.py를 직접 사용하세요")
-
+    # exe는 사용자 PC에서 setup.bat이 빌드 (배포에서는 server.py 포함)
     step_package()
     clean()
 
