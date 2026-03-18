@@ -1005,7 +1005,7 @@ export default function ScenarioPage() {
           locale={{ emptyText: t('scenario.noScenarios') }}
           renderItem={(name) => (
             <List.Item
-              onClick={() => setSelectedName(name)}
+              onClick={() => setSelectedName(prev => prev === name ? null : name)}
               style={{
                 cursor: 'pointer',
                 padding: '6px 12px',
