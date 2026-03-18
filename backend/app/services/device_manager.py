@@ -606,12 +606,25 @@ class DeviceManager:
             type="module",
             category="auxiliary",
             address=address,
-            status="connected",
+            status="unknown",
             name=display_name,
             info=info,
         )
         self._devices[final_id] = dev
         self._save_auxiliary_devices()
+
+        # 즉시 모듈 인스턴스 생성 + 연결 시도
+        try:
+            from .module_service import _get_instance, _is_connected
+            from ..routers.device import _build_constructor_kwargs
+            ctor_kwargs = _build_constructor_kwargs(dev)
+            loop = asyncio.get_event_loop()
+            instance = await loop.run_in_executor(None, _get_instance, module, ctor_kwargs)
+            dev.status = "connected" if _is_connected(instance) else "disconnected"
+        except Exception as e:
+            dev.status = "disconnected"
+            logger.warning("Module %s init failed on add: %s", module, e)
+
         return dev
 
     async def add_adb_wifi(self, address: str) -> ManagedDevice:
@@ -710,7 +723,7 @@ class DeviceManager:
             conn.close()
 
     async def open_all_serial_connections(self) -> None:
-        """Open persistent serial/HKMC connections for all registered devices."""
+        """Open persistent serial/HKMC/module connections for all registered devices."""
         loop = asyncio.get_event_loop()
         for dev in self._devices.values():
             if dev.type == "serial":
@@ -739,6 +752,27 @@ class DeviceManager:
                 except Exception as e:
                     dev.status = "disconnected"
                     logger.warning("Failed to open HKMC %s (%s:%d): %s", dev.id, dev.address, port, e)
+            elif dev.type == "module":
+                # 모듈 디바이스: 서버 시작 시 인스턴스 생성 + 연결 시도
+                module_name = dev.info.get("module", "")
+                if not module_name:
+                    continue
+                try:
+                    from .module_service import _get_instance, _is_connected
+                    from ..routers.device import _build_constructor_kwargs
+                    ctor_kwargs = _build_constructor_kwargs(dev)
+                    instance = await loop.run_in_executor(
+                        None, _get_instance, module_name, ctor_kwargs,
+                    )
+                    if _is_connected(instance):
+                        dev.status = "connected"
+                        logger.info("Module connection opened: %s (%s on %s)", dev.id, module_name, dev.address)
+                    else:
+                        dev.status = "disconnected"
+                        logger.warning("Module instance created but not connected: %s (%s)", dev.id, module_name)
+                except Exception as e:
+                    dev.status = "disconnected"
+                    logger.warning("Failed to init module %s (%s): %s", dev.id, module_name, e)
 
     def close_all_serial_connections(self) -> None:
         """Close all persistent serial/HKMC connections (called on shutdown)."""
