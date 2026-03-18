@@ -532,23 +532,11 @@ export default function RecordPage() {
   }, [scenarioName, screenshotDeviceId, isScreenHkmc, hasMultiDisplay, screenType, t]);
 
   const openCaptureModal = useCallback(async (stepIdx: number) => {
-    // 항상 현재 화면을 캡처하여 기대이미지로 갱신
-    if (scenarioName && screenshotDeviceId) {
-      try {
-        const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
-        const expectedFilename = res.data.filename;
-        setSteps(prev => prev.map((s, i) => i === stepIdx ? { ...s, expected_image: expectedFilename, _imageVer: Date.now() } : s));
-        captureScreenshotRef.current = `/screenshots/${scenarioName}/${expectedFilename}?t=${Date.now()}`;
-      } catch {
-        message.error(t('record.expectedCaptureFailed'));
-        return;
-      }
-    } else {
-      captureScreenshotRef.current = await snapshotScreenshot();
-    }
+    // 현재 화면 스냅샷만 (저장은 사용자가 크롭 확정 시)
+    captureScreenshotRef.current = await snapshotScreenshot();
     setCaptureStepIndex(stepIdx);
     setCaptureModalOpen(true);
-  }, [snapshotScreenshot, steps, scenarioName]);
+  }, [snapshotScreenshot]);
 
   const testStep = useCallback(async (stepIdx: number) => {
     if (!scenarioName) {
@@ -770,22 +758,10 @@ export default function RecordPage() {
   const openExcludeRoiModal = useCallback(async (index: number) => {
     setExcludeRoiEditingIndex(index);
     setExcludeRoiSelectedIdx(null);
-    // 항상 현재 화면을 캡처하여 기대이미지로 갱신
-    if (scenarioName && screenshotDeviceId) {
-      try {
-        const res = await scenarioApi.captureExpectedImage(scenarioName, index, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
-        const expectedFilename = res.data.filename;
-        setSteps(prev => prev.map((s, i) => i === index ? { ...s, expected_image: expectedFilename, _imageVer: Date.now() } : s));
-        excludeRoiScreenshotRef.current = `/screenshots/${scenarioName}/${expectedFilename}?t=${Date.now()}`;
-      } catch {
-        message.error(t('record.expectedCaptureFailed'));
-        return;
-      }
-    } else {
-      excludeRoiScreenshotRef.current = await snapshotScreenshot();
-    }
+    // 현재 화면 스냅샷만 (저장은 영역 확정 시)
+    excludeRoiScreenshotRef.current = await snapshotScreenshot();
     setExcludeRoiModalOpen(true);
-  }, [snapshotScreenshot, steps, scenarioName, screenshotDeviceId, isScreenHkmc, hasMultiDisplay, screenType, t]);
+  }, [snapshotScreenshot]);
 
   const excludeRoiMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = excludeRoiCanvasRef.current;
@@ -914,22 +890,10 @@ export default function RecordPage() {
   const openMultiCropModal = useCallback(async (stepIdx: number) => {
     setMultiCropEditingIndex(stepIdx);
     setMultiCropSelectedIdx(null);
-    // 항상 현재 화면을 캡처하여 기대이미지로 갱신
-    if (scenarioName && screenshotDeviceId) {
-      try {
-        const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
-        const expectedFilename = res.data.filename;
-        setSteps(prev => prev.map((s, i) => i === stepIdx ? { ...s, expected_image: expectedFilename, _imageVer: Date.now() } : s));
-        multiCropScreenshotRef.current = `/screenshots/${scenarioName}/${expectedFilename}?t=${Date.now()}`;
-      } catch {
-        message.error(t('record.expectedCaptureFailed'));
-        return;
-      }
-    } else {
-      multiCropScreenshotRef.current = await snapshotScreenshot();
-    }
+    // 현재 화면 스냅샷만 (저장은 크롭 확정 시)
+    multiCropScreenshotRef.current = await snapshotScreenshot();
     setMultiCropModalOpen(true);
-  }, [snapshotScreenshot, steps, scenarioName, screenshotDeviceId, isScreenHkmc, hasMultiDisplay, screenType, t]);
+  }, [snapshotScreenshot]);
 
   const multiCropMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = multiCropCanvasRef.current;
