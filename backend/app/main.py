@@ -217,6 +217,21 @@ async def websocket_playback(websocket: WebSocket):
     await websocket.accept()
     logger.info("Playback WebSocket connected")
 
+    # 재생 중 stop 메시지를 수신하기 위한 리스너 태스크
+    stop_listener_task: asyncio.Task | None = None
+
+    async def _listen_for_stop():
+        """재생 중 WebSocket에서 stop 명령을 대기."""
+        try:
+            while True:
+                msg = await websocket.receive_json()
+                if msg.get("action") == "stop":
+                    await playback_service.stop()
+                    logger.info("Stop command received during playback")
+                    return
+        except Exception:
+            pass
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -229,6 +244,9 @@ async def websocket_playback(websocket: WebSocket):
                 device_map_override = data.get("device_map")  # optional override from frontend
                 skip_steps: set[int] = set(data.get("skip_steps", []))
                 try:
+                    playback_service._should_stop = False
+                    stop_listener_task = asyncio.create_task(_listen_for_stop())
+
                     scen = await recording_service.load_scenario(scenario_name)
 
                     # 스킵할 스텝 제거
@@ -299,9 +317,16 @@ async def websocket_playback(websocket: WebSocket):
                         result.status = "pass"
                     result_path = await playback_service._save_result(result)
 
-                    await websocket.send_json({"type": "playback_complete", "result_filename": Path(result_path).name})
+                    if playback_service._should_stop:
+                        await websocket.send_json({"type": "playback_stopped", "result_filename": Path(result_path).name})
+                    else:
+                        await websocket.send_json({"type": "playback_complete", "result_filename": Path(result_path).name})
                 except Exception as e:
                     await websocket.send_json({"type": "error", "message": str(e)})
+                finally:
+                    if stop_listener_task and not stop_listener_task.done():
+                        stop_listener_task.cancel()
+                        stop_listener_task = None
 
             elif action == "play_group":
                 # Play scenarios in a group with conditional jump support
@@ -319,6 +344,9 @@ async def websocket_playback(websocket: WebSocket):
                         entries.append(m)
 
                 try:
+                    playback_service._should_stop = False
+                    stop_listener_task = asyncio.create_task(_listen_for_stop())
+
                     # Preflight: check all scenarios in the group
                     all_preflight_errors: list[str] = []
                     for entry in entries:
@@ -446,11 +474,20 @@ async def websocket_playback(websocket: WebSocket):
 
                         sc_idx = next_idx
 
-                    await websocket.send_json({"type": "playback_complete", "result_filename": saved_result_filenames[-1] if saved_result_filenames else ""})
+                    rf = saved_result_filenames[-1] if saved_result_filenames else ""
+                    if playback_service._should_stop:
+                        await websocket.send_json({"type": "playback_stopped", "result_filename": rf})
+                    else:
+                        await websocket.send_json({"type": "playback_complete", "result_filename": rf})
                 except Exception as e:
                     await websocket.send_json({"type": "error", "message": str(e)})
+                finally:
+                    if stop_listener_task and not stop_listener_task.done():
+                        stop_listener_task.cancel()
+                        stop_listener_task = None
 
             elif action == "stop":
+                # 재생 시작 전 stop이 올 경우 (리스너 태스크 없을 때)
                 await playback_service.stop()
                 await websocket.send_json({"type": "playback_stopped"})
 
