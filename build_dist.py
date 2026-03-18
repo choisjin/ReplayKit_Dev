@@ -32,8 +32,8 @@ PROJECT_ROOT = Path(__file__).parent
 DIST_DIR = PROJECT_ROOT / "dist" / "ReplayKit"
 BUILD_DIR = PROJECT_ROOT / "build"
 
-# backend에서 컴파일 제외할 파일
-SKIP_COMPILE = {"__init__.py"}
+# backend에서 컴파일 제외할 파일 (Cython과 FastAPI 호환 문제)
+SKIP_COMPILE = {"__init__.py", "results.py", "settings.py"}
 
 # 배포에 포함할 루트 파일
 INCLUDE_ROOT_FILES = [
@@ -200,8 +200,12 @@ def step_package():
 
             if f.endswith(".py"):
                 if f == "__init__.py":
-                    dst_file.write_text("", encoding="utf-8")  # 빈 __init__.py
-                # .py 소스는 복사하지 않음 (.pyd가 대체)
+                    dst_file.write_text("", encoding="utf-8")
+                    continue
+                # 컴파일 제외 파일은 .py 원본 복사 (pyd 없음)
+                if f in SKIP_COMPILE:
+                    shutil.copy2(str(src_file), str(dst_file))
+                # 나머지 .py는 복사하지 않음 (.pyd가 대체)
                 continue
             elif f.endswith(".pyd"):
                 shutil.copy2(str(src_file), str(dst_file))
