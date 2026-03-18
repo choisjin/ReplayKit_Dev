@@ -19,6 +19,7 @@ import ScenarioPage from './pages/ScenarioPage';
 import ResultsPage from './pages/ResultsPage';
 import SettingsPage from './pages/SettingsPage';
 import WebcamPip from './components/WebcamPip';
+import { WebcamProvider } from './context/WebcamContext';
 
 const { Sider, Content } = Layout;
 
@@ -109,6 +110,7 @@ function AppContent() {
   const layoutBg = isDark ? undefined : '#d0d0d0';
 
   return (
+    <WebcamProvider webcam={webcam}>
     <ConfigProvider theme={{
       algorithm: themeAlgorithm,
       ...(!isDark ? {
@@ -177,6 +179,7 @@ function AppContent() {
 
       <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
     </ConfigProvider>
+    </WebcamProvider>
   );
 }
 

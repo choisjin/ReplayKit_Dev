@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Card, Col, Descriptions, Image, Modal, Row, Space, Table, Tag, Tooltip, message } from 'antd';
-import { DeleteOutlined, DownloadOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Button, Card, Col, Descriptions, Image, InputNumber, Modal, Row, Space, Table, Tag, Tooltip, message } from 'antd';
+import { DeleteOutlined, DownloadOutlined, EyeOutlined, PlayCircleOutlined, ReloadOutlined, ScissorOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { resultsApi } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from '../i18n';
@@ -146,6 +146,21 @@ export default function ResultsPage() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [compareStep, setCompareStep] = useState<StepResultDetail | null>(null);
 
+  // Webcam recordings
+  const [recordings, setRecordings] = useState<{ filename: string; size: number; url: string }[]>([]);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [trimFile, setTrimFile] = useState<string | null>(null);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const fetchRecordings = async (resultFilename: string) => {
+    try {
+      const res = await resultsApi.listRecordings(resultFilename);
+      setRecordings(res.data.recordings || []);
+    } catch { setRecordings([]); }
+  };
+
   const fetchResults = async () => {
     setLoading(true);
     try {
@@ -163,6 +178,7 @@ export default function ResultsPage() {
       setDetail(res.data);
       setDetailFilename(filename);
       setDetailVisible(true);
+      fetchRecordings(filename);
     } catch {
       message.error(t('results.detailFailed'));
     }
@@ -491,8 +507,90 @@ export default function ResultsPage() {
                 r.status === 'warning' ? 'result-row-warning' : ''
               }
             />
+
+            {/* Webcam recordings */}
+            {recordings.length > 0 && (
+              <Card
+                size="small"
+                title={<Space><VideoCameraOutlined />{t('webcam.recordings')} ({recordings.length})</Space>}
+                style={{ marginTop: 12 }}
+              >
+                {recordings.map((rec) => {
+                  const match = rec.filename.match(/_webcam_r(\d+)\.webm$/);
+                  const repeatIdx = match ? match[1] : '?';
+                  const sizeMB = (rec.size / 1024 / 1024).toFixed(1);
+                  return (
+                    <div key={rec.filename} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
+                      <Tag color="blue">{t('webcam.repeat')} {repeatIdx}</Tag>
+                      <span style={{ flex: 1, fontSize: 12, color: '#888' }}>{sizeMB} MB</span>
+                      <Button size="small" icon={<PlayCircleOutlined />} onClick={() => setVideoUrl(rec.url)}>
+                        {t('webcam.play')}
+                      </Button>
+                      <Button size="small" icon={<ScissorOutlined />} onClick={() => { setTrimFile(rec.filename); setTrimStart(0); setTrimEnd(0); }}>
+                        {t('webcam.trimSave')}
+                      </Button>
+                      <Button size="small" danger icon={<DeleteOutlined />} onClick={() => {
+                        Modal.confirm({
+                          title: t('webcam.deleteConfirm'),
+                          okType: 'danger',
+                          onOk: async () => {
+                            await resultsApi.deleteRecording(rec.filename);
+                            message.success(t('webcam.deleteSuccess'));
+                            fetchRecordings(detailFilename);
+                          },
+                        });
+                      }} />
+                    </div>
+                  );
+                })}
+              </Card>
+            )}
           </>
         )}
+      </Modal>
+
+      {/* Video player modal */}
+      <Modal
+        title={t('webcam.recordings')}
+        open={!!videoUrl}
+        onCancel={() => setVideoUrl(null)}
+        footer={null}
+        width={720}
+      >
+        {videoUrl && (
+          <video ref={videoRef} src={videoUrl} controls autoPlay style={{ width: '100%', borderRadius: 4 }} />
+        )}
+      </Modal>
+
+      {/* Trim modal */}
+      <Modal
+        title={t('webcam.trimSave')}
+        open={!!trimFile}
+        onCancel={() => setTrimFile(null)}
+        onOk={async () => {
+          if (!trimFile || trimEnd <= trimStart) return;
+          try {
+            const res = await resultsApi.trimRecording(trimFile, trimStart, trimEnd);
+            message.success(t('webcam.trimSuccess'));
+            setTrimFile(null);
+            fetchRecordings(detailFilename);
+          } catch (e: any) {
+            message.error(e.response?.data?.detail || t('webcam.trimFailed'));
+          }
+        }}
+        okText={t('webcam.trimSave')}
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <div>
+            <video src={trimFile ? `/recordings/${trimFile}` : undefined} controls style={{ width: '100%', borderRadius: 4 }} />
+          </div>
+          <Space>
+            <span>{t('webcam.trimStart')}:</span>
+            <InputNumber min={0} step={0.1} value={trimStart} onChange={(v) => setTrimStart(v || 0)} style={{ width: 100 }} />
+            <span>{t('webcam.trimEnd')}:</span>
+            <InputNumber min={0} step={0.1} value={trimEnd} onChange={(v) => setTrimEnd(v || 0)} style={{ width: 100 }} />
+          </Space>
+        </Space>
       </Modal>
 
       {/* Image comparison modal */}

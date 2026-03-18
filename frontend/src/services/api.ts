@@ -97,6 +97,24 @@ export const resultsApi = {
   delete: (filename: string) => api.delete(`/results/${filename}`),
   exportExcel: (filename: string) =>
     api.get(`/results/export/${filename}`, { responseType: 'blob' }),
+  // Webcam recordings
+  uploadRecording: (blob: Blob, resultFilename: string, repeatIndex: number) => {
+    const form = new FormData();
+    form.append('file', blob, 'webcam.webm');
+    form.append('result_filename', resultFilename);
+    form.append('repeat_index', String(repeatIndex));
+    return api.post('/results/webcam-upload', form);
+  },
+  listRecordings: (resultFilename: string) =>
+    api.get(`/results/recordings-for/${resultFilename}`),
+  deleteRecording: (filename: string) =>
+    api.delete(`/results/recordings/${filename}`),
+  trimRecording: (filename: string, start: number, end: number) => {
+    const form = new FormData();
+    form.append('start', String(start));
+    form.append('end', String(end));
+    return api.post(`/results/recordings/${filename}/trim`, form);
+  },
 };
 
 export default api;

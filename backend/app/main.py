@@ -74,6 +74,10 @@ screenshots_dir = Path(__file__).resolve().parent.parent / "screenshots"
 screenshots_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/screenshots", StaticFiles(directory=str(screenshots_dir)), name="screenshots")
 
+recordings_dir = Path(__file__).resolve().parent.parent / "recordings"
+recordings_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/recordings", StaticFiles(directory=str(recordings_dir)), name="recordings")
+
 
 @app.get("/api/health")
 async def health_check():
@@ -293,9 +297,9 @@ async def websocket_playback(websocket: WebSocket):
                         result.status = "warning"
                     else:
                         result.status = "pass"
-                    await playback_service._save_result(result)
+                    result_path = await playback_service._save_result(result)
 
-                    await websocket.send_json({"type": "playback_complete"})
+                    await websocket.send_json({"type": "playback_complete", "result_filename": Path(result_path).name})
                 except Exception as e:
                     await websocket.send_json({"type": "error", "message": str(e)})
 
@@ -334,6 +338,7 @@ async def websocket_playback(websocket: WebSocket):
                         })
                         continue
 
+                    saved_result_filenames: list[str] = []
                     sc_idx = 0
                     start_step = 0  # step index to start from within current scenario
                     while sc_idx < len(entries):
@@ -407,7 +412,8 @@ async def websocket_playback(websocket: WebSocket):
                             result.status = "warning"
                         else:
                             result.status = "pass"
-                        await playback_service._save_result(result)
+                        result_path = await playback_service._save_result(result)
+                        saved_result_filenames.append(Path(result_path).name)
 
                         if playback_service._should_stop:
                             break
@@ -440,7 +446,7 @@ async def websocket_playback(websocket: WebSocket):
 
                         sc_idx = next_idx
 
-                    await websocket.send_json({"type": "playback_complete"})
+                    await websocket.send_json({"type": "playback_complete", "result_filename": saved_result_filenames[-1] if saved_result_filenames else ""})
                 except Exception as e:
                     await websocket.send_json({"type": "error", "message": str(e)})
 

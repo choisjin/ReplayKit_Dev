@@ -8,9 +8,11 @@ import {
   DownOutlined, RightOutlined, ClearOutlined, UploadOutlined,
   ExportOutlined, ImportOutlined, CheckCircleOutlined, WarningOutlined,
 } from '@ant-design/icons';
-import { scenarioApi, deviceApi } from '../services/api';
+import { scenarioApi, deviceApi, resultsApi } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from '../i18n';
+import { useWebcamContext } from '../context/WebcamContext';
+import { VideoCameraOutlined } from '@ant-design/icons';
 
 interface ScenarioDetail {
   name: string;
@@ -102,6 +104,7 @@ const formatTime = (iso: string, lang: string = 'ko') => {
 export default function ScenarioPage() {
   const { t, lang } = useTranslation();
   const { settings, saveExportZipToDir } = useSettings();
+  const webcam = useWebcamContext();
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<ScenarioDetail | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
@@ -119,6 +122,11 @@ export default function ScenarioPage() {
   const getRepeatCount = (name: string) => repeatCounts[name] ?? 1;
   const setRepeatCount = (name: string, val: number) =>
     setRepeatCounts((prev) => ({ ...prev, [name]: val }));
+
+  // 웹캠 자동 녹화
+  const [webcamAutoRecord, setWebcamAutoRecord] = useState(false);
+  const webcamBlobsRef = useRef<{ repeatIndex: number; blob: Blob }[]>([]);
+  const webcamRecordingActiveRef = useRef(false);
 
   // 시나리오 스텝 미리보기
   const [previewSteps, setPreviewSteps] = useState<any[]>([]);
@@ -522,12 +530,15 @@ export default function ScenarioPage() {
 
   const startPlayback = (name: string, deviceMap: Record<string, string>) => {
     const repeat = getRepeatCount(name);
+    const doAutoRecord = webcamAutoRecord && webcam.webcamOpen;
     setPlaying(true);
     setPlayingName(name);
     setStepResults([]);
     setCurrentStepId(null);
     setCurrentIteration(1);
     setTotalIterations(repeat);
+    webcamBlobsRef.current = [];
+    webcamRecordingActiveRef.current = false;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws/playback`);
@@ -538,11 +549,22 @@ export default function ScenarioPage() {
       setCurrentStepId(1);
       const skipIds = Array.from(skipStepIds);
       ws.send(JSON.stringify({ action: 'play', scenario: name, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}), ...(skipIds.length > 0 ? { skip_steps: skipIds } : {}) }));
+      // 웹캠 자동 녹화 시작
+      if (doAutoRecord) {
+        webcam.startRecordingAuto().then((ok) => { webcamRecordingActiveRef.current = ok; });
+      }
     };
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'iteration_start') {
         setCurrentIteration(msg.iteration);
+        // 회차별 웹캠 녹화 분리
+        if (doAutoRecord && webcamRecordingActiveRef.current && msg.iteration > 1) {
+          webcam.stopRecordingAuto().then((blob) => {
+            webcamBlobsRef.current.push({ repeatIndex: msg.iteration - 1, blob });
+            webcam.startRecordingAuto().then((ok) => { webcamRecordingActiveRef.current = ok; });
+          });
+        }
       } else if (msg.type === 'step_start') {
         // 스텝 시작: running 상태로 테이블에 추가 + duration 카운트 시작
         const d = msg.data;
@@ -585,6 +607,20 @@ export default function ScenarioPage() {
         setPlaying(false); setCurrentStepId(null);
         message.success(repeat > 1 ? t('scenario.playCompleteRepeat', { count: String(repeat) }) : t('scenario.playComplete'));
         ws.close();
+        // 웹캠 녹화 종료 + 업로드
+        if (doAutoRecord && webcamRecordingActiveRef.current) {
+          const resultFilename = msg.result_filename || '';
+          webcam.stopRecordingAuto().then(async (blob) => {
+            const allBlobs = [...webcamBlobsRef.current, { repeatIndex: repeat > 1 ? repeat : 1, blob }];
+            webcamRecordingActiveRef.current = false;
+            if (resultFilename) {
+              for (const item of allBlobs) {
+                try { await resultsApi.uploadRecording(item.blob, resultFilename, item.repeatIndex); } catch { message.error(t('webcam.uploadFailed')); }
+              }
+            }
+            webcamBlobsRef.current = [];
+          });
+        }
       } else if (msg.type === 'preflight_error') {
         setPlaying(false); setCurrentStepId(null);
         Modal.error({
@@ -602,10 +638,12 @@ export default function ScenarioPage() {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setCurrentStepId(null);
         message.error(msg.message); ws.close();
+        if (doAutoRecord && webcamRecordingActiveRef.current) { webcam.stopRecordingAuto(); webcamRecordingActiveRef.current = false; webcamBlobsRef.current = []; }
       } else if (msg.type === 'playback_stopped') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setCurrentStepId(null);
         message.info(t('scenario.playStopped')); ws.close();
+        if (doAutoRecord && webcamRecordingActiveRef.current) { webcam.stopRecordingAuto(); webcamRecordingActiveRef.current = false; webcamBlobsRef.current = []; }
       }
     };
     ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
@@ -647,6 +685,7 @@ export default function ScenarioPage() {
   const startGroupPlayback = (gName: string, deviceMap: Record<string, string>) => {
     const members = groups[gName] || [];
     const repeat = getRepeatCount(gName);
+    const doAutoRecord = webcamAutoRecord && webcam.webcamOpen;
 
     setPlaying(true);
     setPlayingGroupName(gName);
@@ -659,6 +698,8 @@ export default function ScenarioPage() {
     setGroupScenarioIndex(0);
     setGroupScenarioTotal(members.length);
     setCurrentGroupScenario('');
+    webcamBlobsRef.current = [];
+    webcamRecordingActiveRef.current = false;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}/ws/playback`);
@@ -667,6 +708,9 @@ export default function ScenarioPage() {
     const hasMap = Object.keys(deviceMap).length > 0;
     ws.onopen = () => {
       ws.send(JSON.stringify({ action: 'play_group', scenarios: members, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}) }));
+      if (doAutoRecord) {
+        webcam.startRecordingAuto().then((ok) => { webcamRecordingActiveRef.current = ok; });
+      }
     };
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -716,6 +760,19 @@ export default function ScenarioPage() {
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         message.success(t('scenario.playComplete'));
         ws.close();
+        if (doAutoRecord && webcamRecordingActiveRef.current) {
+          const resultFilename = msg.result_filename || '';
+          webcam.stopRecordingAuto().then(async (blob) => {
+            const allBlobs = [...webcamBlobsRef.current, { repeatIndex: repeat > 1 ? repeat : 1, blob }];
+            webcamRecordingActiveRef.current = false;
+            if (resultFilename) {
+              for (const item of allBlobs) {
+                try { await resultsApi.uploadRecording(item.blob, resultFilename, item.repeatIndex); } catch { message.error(t('webcam.uploadFailed')); }
+              }
+            }
+            webcamBlobsRef.current = [];
+          });
+        }
       } else if (msg.type === 'preflight_error') {
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         Modal.error({
@@ -733,10 +790,12 @@ export default function ScenarioPage() {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         message.error(msg.message); ws.close();
+        if (doAutoRecord && webcamRecordingActiveRef.current) { webcam.stopRecordingAuto(); webcamRecordingActiveRef.current = false; webcamBlobsRef.current = []; }
       } else if (msg.type === 'playback_stopped') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
         message.info(t('scenario.playStopped')); ws.close();
+        if (doAutoRecord && webcamRecordingActiveRef.current) { webcam.stopRecordingAuto(); webcamRecordingActiveRef.current = false; webcamBlobsRef.current = []; }
       }
     };
     ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
@@ -938,6 +997,18 @@ export default function ScenarioPage() {
                 >{t('scenario.play')}</Button>
               </>
             )}
+            <Tooltip title={t('webcam.autoRecordHint')}>
+              <Checkbox
+                checked={webcamAutoRecord}
+                onChange={(e) => {
+                  if (e.target.checked && !webcam.webcamOpen) { message.warning(t('webcam.webcamNotOpen')); return; }
+                  setWebcamAutoRecord(e.target.checked);
+                }}
+                disabled={playing}
+              >
+                <VideoCameraOutlined style={{ color: webcamAutoRecord ? '#ff4d4f' : undefined }} /> {t('webcam.autoRecord')}
+              </Checkbox>
+            </Tooltip>
             <Button danger size="small" icon={<DeleteOutlined />} disabled={playing}
               onClick={() => deleteScenario(selectedName)}>{t('common.delete')}</Button>
 

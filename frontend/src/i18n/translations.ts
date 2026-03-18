@@ -438,6 +438,23 @@ const translations = {
     'results.score': '점수',
     'results.times': '회',
     'results.totalExecTime': '총 실행시간',
+
+    // === Webcam Recording ===
+    'webcam.autoRecord': '웹캠 녹화',
+    'webcam.autoRecordHint': '재생 시 웹캠 자동 녹화',
+    'webcam.webcamNotOpen': '웹캠을 먼저 열어주세요',
+    'webcam.uploadFailed': '녹화 업로드 실패',
+    'webcam.recordings': '웹캠 녹화',
+    'webcam.noRecordings': '녹화 파일 없음',
+    'webcam.repeat': '회차',
+    'webcam.play': '재생',
+    'webcam.trimSave': '구간 저장',
+    'webcam.trimStart': '시작 (초)',
+    'webcam.trimEnd': '종료 (초)',
+    'webcam.trimFailed': '구간 저장 실패',
+    'webcam.trimSuccess': '구간 저장 완료',
+    'webcam.deleteConfirm': '이 녹화를 삭제하시겠습니까?',
+    'webcam.deleteSuccess': '녹화 삭제 완료',
   },
   en: {
     // === Common ===
@@ -878,6 +895,23 @@ const translations = {
     'results.score': 'Score',
     'results.times': 'times',
     'results.totalExecTime': 'Total Time',
+
+    // === Webcam Recording ===
+    'webcam.autoRecord': 'Webcam Rec',
+    'webcam.autoRecordHint': 'Auto-record webcam during playback',
+    'webcam.webcamNotOpen': 'Open the webcam first',
+    'webcam.uploadFailed': 'Recording upload failed',
+    'webcam.recordings': 'Webcam Recordings',
+    'webcam.noRecordings': 'No recordings',
+    'webcam.repeat': 'Repeat',
+    'webcam.play': 'Play',
+    'webcam.trimSave': 'Trim & Save',
+    'webcam.trimStart': 'Start (sec)',
+    'webcam.trimEnd': 'End (sec)',
+    'webcam.trimFailed': 'Trim failed',
+    'webcam.trimSuccess': 'Trim saved',
+    'webcam.deleteConfirm': 'Delete this recording?',
+    'webcam.deleteSuccess': 'Recording deleted',
   },
 } as const;
 

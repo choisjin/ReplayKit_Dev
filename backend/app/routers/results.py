@@ -2,15 +2,18 @@
 
 import json
 import io
+import subprocess
+import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, StreamingResponse
 
 router = APIRouter(prefix="/api/results", tags=["results"])
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent.parent / "results"
 SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent.parent / "screenshots"
+RECORDINGS_DIR = Path(__file__).resolve().parent.parent.parent / "recordings"
 
 
 @router.get("/list")
@@ -211,6 +214,74 @@ async def delete_result(filename: str):
         raise HTTPException(status_code=404, detail="Result not found")
     filepath.unlink()
     return {"status": "deleted"}
+
+
+# --- Webcam recording endpoints ---
+
+@router.post("/webcam-upload")
+async def upload_webcam_recording(
+    file: UploadFile = File(...),
+    result_filename: str = Form(...),
+    repeat_index: int = Form(1),
+):
+    """Upload a webcam recording linked to a test result."""
+    RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+    base = result_filename.replace(".json", "")
+    filename = f"{base}_webcam_r{repeat_index}.webm"
+    filepath = RECORDINGS_DIR / filename
+    content = await file.read()
+    filepath.write_bytes(content)
+    return {"filename": filename, "url": f"/recordings/{filename}"}
+
+
+@router.get("/recordings-for/{result_filename}")
+async def list_recordings_for_result(result_filename: str):
+    """List webcam recordings linked to a test result."""
+    RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
+    base = result_filename.replace(".json", "")
+    recordings = []
+    for f in sorted(RECORDINGS_DIR.glob(f"{base}_webcam_*.webm")):
+        recordings.append({
+            "filename": f.name,
+            "size": f.stat().st_size,
+            "url": f"/recordings/{f.name}",
+        })
+    return {"recordings": recordings}
+
+
+@router.delete("/recordings/{filename}")
+async def delete_recording(filename: str):
+    """Delete a webcam recording."""
+    filepath = RECORDINGS_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Recording not found")
+    filepath.unlink()
+    return {"deleted": filename}
+
+
+@router.post("/recordings/{filename}/trim")
+async def trim_recording(
+    filename: str,
+    start: float = Form(...),
+    end: float = Form(...),
+):
+    """Trim a webcam recording (requires ffmpeg)."""
+    filepath = RECORDINGS_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Recording not found")
+    if shutil.which("ffmpeg") is None:
+        raise HTTPException(status_code=500, detail="ffmpeg not installed")
+    output_name = f"trim_{start:.1f}_{end:.1f}_{filename}"
+    output_path = RECORDINGS_DIR / output_name
+    try:
+        subprocess.run(
+            ["ffmpeg", "-i", str(filepath), "-ss", str(start), "-to", str(end),
+             "-c", "copy", str(output_path), "-y"],
+            check=True, capture_output=True,
+        )
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=500, detail=f"ffmpeg error: {e.stderr.decode()[:200]}")
+    return {"filename": output_name, "url": f"/recordings/{output_name}"}
 
 
 @router.get("/{filename}")

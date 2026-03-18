@@ -142,6 +142,47 @@ export function useWebcam() {
     await startWebcam(webcamIndex, res);
   }, [webcamIndex, startWebcam]);
 
+  // Auto-recording: resolve promise with blob when stopped
+  const autoRecordResolveRef = useRef<((blob: Blob) => void) | null>(null);
+
+  const startRecordingAuto = useCallback(async (): Promise<boolean> => {
+    if (!webcamStreamRef.current) return false;
+    // Stop any existing recording
+    if (webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') {
+      webcamRecorderRef.current.stop();
+    }
+    webcamChunksRef.current = [];
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9' : 'video/webm';
+    const recorder = new MediaRecorder(webcamStreamRef.current, { mimeType });
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) webcamChunksRef.current.push(e.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(webcamChunksRef.current, { type: mimeType });
+      webcamChunksRef.current = [];
+      if (autoRecordResolveRef.current) {
+        autoRecordResolveRef.current(blob);
+        autoRecordResolveRef.current = null;
+      }
+    };
+    recorder.start(1000);
+    webcamRecorderRef.current = recorder;
+    setWebcamRecording(true);
+    return true;
+  }, []);
+
+  const stopRecordingAuto = useCallback((): Promise<Blob> => {
+    return new Promise((resolve) => {
+      autoRecordResolveRef.current = resolve;
+      if (webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') {
+        webcamRecorderRef.current.stop();
+        webcamRecorderRef.current = null;
+      }
+      setWebcamRecording(false);
+    });
+  }, []);
+
   // Optional uploader: set by the consuming component to upload to server
   const uploadFnRef = useRef<((blob: Blob, filename: string) => Promise<string>) | null>(null);
 
@@ -270,5 +311,7 @@ export function useWebcam() {
     applyWebcamSetting,
     stopWebcam,
     setUploadFn,
+    startRecordingAuto,
+    stopRecordingAuto,
   };
 }
