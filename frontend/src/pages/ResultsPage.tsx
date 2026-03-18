@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Button, Card, Col, Descriptions, Image, InputNumber, Modal, Row, Space, Table, Tag, Tooltip, message } from 'antd';
+import { Button, Card, Collapse, Col, Descriptions, Image, InputNumber, Modal, Row, Select, Space, Table, Tag, Tooltip, message } from 'antd';
 import { DeleteOutlined, DownloadOutlined, EyeOutlined, PlayCircleOutlined, ReloadOutlined, ScissorOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { resultsApi } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
@@ -148,17 +148,54 @@ export default function ResultsPage() {
 
   // Webcam recordings
   const [recordings, setRecordings] = useState<{ filename: string; size: number; url: string }[]>([]);
-  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [webcamPanelOpen, setWebcamPanelOpen] = useState(false);
+  const [activeRecUrl, setActiveRecUrl] = useState('');
+  const [activeRecRepeat, setActiveRecRepeat] = useState(1);
+  const detailVideoRef = useRef<HTMLVideoElement>(null);
   const [trimFile, setTrimFile] = useState<string | null>(null);
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   const fetchRecordings = async (resultFilename: string) => {
     try {
       const res = await resultsApi.listRecordings(resultFilename);
-      setRecordings(res.data.recordings || []);
+      const recs = res.data.recordings || [];
+      setRecordings(recs);
+      if (recs.length > 0) {
+        setActiveRecUrl(recs[0].url);
+        const m = recs[0].filename.match(/_webcam_r(\d+)\.webm$/);
+        setActiveRecRepeat(m ? parseInt(m[1]) : 1);
+      } else {
+        setActiveRecUrl('');
+      }
     } catch { setRecordings([]); }
+  };
+
+  const seekToStep = (step: StepResultDetail) => {
+    if (!detail || recordings.length === 0) return;
+    // 패널 열기
+    if (!webcamPanelOpen) setWebcamPanelOpen(true);
+    // 해당 회차 녹화 선택
+    const targetRepeat = step.repeat_index || 1;
+    const rec = recordings.find(r => r.filename.includes(`_webcam_r${targetRepeat}.webm`));
+    const urlChanged = rec && rec.url !== activeRecUrl;
+    if (rec) {
+      setActiveRecUrl(rec.url);
+      setActiveRecRepeat(targetRepeat);
+    }
+    // 같은 회차의 첫 스텝 타임스탬프 기준으로 오프셋 계산
+    const sameRepeatSteps = detail.step_results.filter(s => (s.repeat_index || 1) === targetRepeat);
+    const firstStep = sameRepeatSteps[0];
+    if (!firstStep?.timestamp || !step.timestamp) return;
+    const firstTime = new Date(firstStep.timestamp).getTime();
+    const stepTime = new Date(step.timestamp).getTime();
+    const offsetSec = Math.max(0, (stepTime - firstTime) / 1000 - 2);
+    // 영상 소스 변경 시 약간 대기
+    setTimeout(() => {
+      if (detailVideoRef.current) {
+        detailVideoRef.current.currentTime = offsetSec;
+      }
+    }, urlChanged ? 300 : 50);
   };
 
   const fetchResults = async () => {
@@ -495,70 +532,99 @@ export default function ResultsPage() {
               </Descriptions.Item>
             </Descriptions>
 
-            <Table
-              columns={stepColumns}
-              dataSource={detail.step_results}
-              rowKey="step_id"
-              size="small"
-              pagination={false}
-              rowClassName={(r: StepResultDetail) =>
-                r.status === 'fail' ? 'result-row-fail' :
-                r.status === 'error' ? 'result-row-error' :
-                r.status === 'warning' ? 'result-row-warning' : ''
-              }
-            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              {/* 좌측: 웹캠 녹화 패널 (접힘/펼침) */}
+              {recordings.length > 0 && (
+                <div style={{ width: webcamPanelOpen ? 300 : 36, flexShrink: 0, transition: 'width 0.2s' }}>
+                  {webcamPanelOpen ? (
+                    <Card
+                      size="small"
+                      title={<Space size={4}><VideoCameraOutlined />{t('webcam.recordings')}</Space>}
+                      extra={<Button type="text" size="small" onClick={() => setWebcamPanelOpen(false)} style={{ fontSize: 11 }}>✕</Button>}
+                      bodyStyle={{ padding: 6 }}
+                    >
+                      <video
+                        ref={detailVideoRef}
+                        src={activeRecUrl}
+                        controls
+                        style={{ width: '100%', borderRadius: 4, background: '#000', display: 'block', marginBottom: 6 }}
+                      />
+                      {recordings.length > 1 && (
+                        <Select
+                          size="small"
+                          value={activeRecRepeat}
+                          onChange={(v) => {
+                            const rec = recordings.find(r => r.filename.includes(`_webcam_r${v}.webm`));
+                            if (rec) { setActiveRecUrl(rec.url); setActiveRecRepeat(v); }
+                          }}
+                          style={{ width: '100%', marginBottom: 6 }}
+                          options={recordings.map(r => {
+                            const m = r.filename.match(/_webcam_r(\d+)\.webm$/);
+                            const ri = m ? parseInt(m[1]) : 1;
+                            return { value: ri, label: `${t('webcam.repeat')} ${ri}  (${(r.size / 1024 / 1024).toFixed(1)} MB)` };
+                          })}
+                        />
+                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {recordings.map((rec) => {
+                          const m = rec.filename.match(/_webcam_r(\d+)\.webm$/);
+                          const ri = m ? m[1] : '?';
+                          return (
+                            <div key={rec.filename} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+                              <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>R{ri}</Tag>
+                              <span style={{ flex: 1, color: '#888' }}>{(rec.size / 1024 / 1024).toFixed(1)}MB</span>
+                              <Tooltip title={t('webcam.trimSave')}>
+                                <Button size="small" type="text" icon={<ScissorOutlined />} style={{ padding: '0 4px', height: 20 }}
+                                  onClick={() => { setTrimFile(rec.filename); setTrimStart(0); setTrimEnd(0); }} />
+                              </Tooltip>
+                              <Tooltip title={t('common.delete')}>
+                                <Button size="small" type="text" danger icon={<DeleteOutlined />} style={{ padding: '0 4px', height: 20 }}
+                                  onClick={() => Modal.confirm({
+                                    title: t('webcam.deleteConfirm'), okType: 'danger',
+                                    onOk: async () => { await resultsApi.deleteRecording(rec.filename); message.success(t('webcam.deleteSuccess')); fetchRecordings(detailFilename); },
+                                  })} />
+                              </Tooltip>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </Card>
+                  ) : (
+                    <Tooltip title={t('webcam.recordings')} placement="right">
+                      <Button
+                        type="text"
+                        icon={<VideoCameraOutlined />}
+                        onClick={() => setWebcamPanelOpen(true)}
+                        style={{ writingMode: 'vertical-rl', height: 'auto', padding: '8px 4px', fontSize: 12 }}
+                      >
+                        {t('webcam.recordings')} ({recordings.length})
+                      </Button>
+                    </Tooltip>
+                  )}
+                </div>
+              )}
 
-            {/* Webcam recordings */}
-            {recordings.length > 0 && (
-              <Card
-                size="small"
-                title={<Space><VideoCameraOutlined />{t('webcam.recordings')} ({recordings.length})</Space>}
-                style={{ marginTop: 12 }}
-              >
-                {recordings.map((rec) => {
-                  const match = rec.filename.match(/_webcam_r(\d+)\.webm$/);
-                  const repeatIdx = match ? match[1] : '?';
-                  const sizeMB = (rec.size / 1024 / 1024).toFixed(1);
-                  return (
-                    <div key={rec.filename} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
-                      <Tag color="blue">{t('webcam.repeat')} {repeatIdx}</Tag>
-                      <span style={{ flex: 1, fontSize: 12, color: '#888' }}>{sizeMB} MB</span>
-                      <Button size="small" icon={<PlayCircleOutlined />} onClick={() => setVideoUrl(rec.url)}>
-                        {t('webcam.play')}
-                      </Button>
-                      <Button size="small" icon={<ScissorOutlined />} onClick={() => { setTrimFile(rec.filename); setTrimStart(0); setTrimEnd(0); }}>
-                        {t('webcam.trimSave')}
-                      </Button>
-                      <Button size="small" danger icon={<DeleteOutlined />} onClick={() => {
-                        Modal.confirm({
-                          title: t('webcam.deleteConfirm'),
-                          okType: 'danger',
-                          onOk: async () => {
-                            await resultsApi.deleteRecording(rec.filename);
-                            message.success(t('webcam.deleteSuccess'));
-                            fetchRecordings(detailFilename);
-                          },
-                        });
-                      }} />
-                    </div>
-                  );
-                })}
-              </Card>
-            )}
+              {/* 우측: 스텝 결과 테이블 */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Table
+                  columns={stepColumns}
+                  dataSource={detail.step_results}
+                  rowKey="step_id"
+                  size="small"
+                  pagination={false}
+                  rowClassName={(r: StepResultDetail) =>
+                    r.status === 'fail' ? 'result-row-fail' :
+                    r.status === 'error' ? 'result-row-error' :
+                    r.status === 'warning' ? 'result-row-warning' : ''
+                  }
+                  onRow={(r) => ({
+                    onClick: () => { if (recordings.length > 0) seekToStep(r); },
+                    style: recordings.length > 0 ? { cursor: 'pointer' } : undefined,
+                  })}
+                />
+              </div>
+            </div>
           </>
-        )}
-      </Modal>
-
-      {/* Video player modal */}
-      <Modal
-        title={t('webcam.recordings')}
-        open={!!videoUrl}
-        onCancel={() => setVideoUrl(null)}
-        footer={null}
-        width={720}
-      >
-        {videoUrl && (
-          <video ref={videoRef} src={videoUrl} controls autoPlay style={{ width: '100%', borderRadius: 4 }} />
         )}
       </Modal>
 

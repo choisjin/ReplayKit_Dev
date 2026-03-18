@@ -549,10 +549,6 @@ export default function ScenarioPage() {
       setCurrentStepId(1);
       const skipIds = Array.from(skipStepIds);
       ws.send(JSON.stringify({ action: 'play', scenario: name, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}), ...(skipIds.length > 0 ? { skip_steps: skipIds } : {}) }));
-      // 웹캠 자동 녹화 시작
-      if (doAutoRecord) {
-        webcam.startRecordingAuto().then((ok) => { webcamRecordingActiveRef.current = ok; });
-      }
     };
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -566,6 +562,10 @@ export default function ScenarioPage() {
           });
         }
       } else if (msg.type === 'step_start') {
+        // 첫 스텝 시작 = 디바이스 검사 통과 → 웹캠 녹화 시작
+        if (doAutoRecord && !webcamRecordingActiveRef.current) {
+          webcam.startRecordingAuto().then((ok) => { webcamRecordingActiveRef.current = ok; });
+        }
         // 스텝 시작: running 상태로 테이블에 추가 + duration 카운트 시작
         const d = msg.data;
         const placeholder: StepResultData = {
@@ -708,9 +708,6 @@ export default function ScenarioPage() {
     const hasMap = Object.keys(deviceMap).length > 0;
     ws.onopen = () => {
       ws.send(JSON.stringify({ action: 'play_group', scenarios: members, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}) }));
-      if (doAutoRecord) {
-        webcam.startRecordingAuto().then((ok) => { webcamRecordingActiveRef.current = ok; });
-      }
     };
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
@@ -722,6 +719,10 @@ export default function ScenarioPage() {
       } else if (msg.type === 'iteration_start') {
         setCurrentIteration(msg.iteration);
       } else if (msg.type === 'step_start') {
+        // 첫 스텝 시작 = 디바이스 검사 통과 → 웹캠 녹화 시작
+        if (doAutoRecord && !webcamRecordingActiveRef.current) {
+          webcam.startRecordingAuto().then((ok) => { webcamRecordingActiveRef.current = ok; });
+        }
         const d = msg.data;
         const placeholder: StepResultData = {
           step_id: d.step_id, repeat_index: d.repeat_index,
