@@ -169,33 +169,16 @@ def step_package():
     """배포 패키지 조립 (dist/ReplayKit/)."""
     print("\n=== [4/4] 배포 패키지 생성 ===")
 
-    # .git 폴더 보존 (배포 repo)
-    git_dir = DIST_DIR / ".git"
-    git_backup = None
-    if git_dir.exists():
-        git_backup = PROJECT_ROOT / "build" / "_git_backup"
-        if git_backup.exists():
-            shutil.rmtree(git_backup)
-        shutil.move(str(git_dir), str(git_backup))
-
-    # exe 보존
-    exe_file = DIST_DIR / "ReplayKit.exe"
-    exe_backup = None
-    if exe_file.exists():
-        exe_backup = PROJECT_ROOT / "build" / "ReplayKit.exe"
-        (PROJECT_ROOT / "build").mkdir(parents=True, exist_ok=True)
-        shutil.move(str(exe_file), str(exe_backup))
-
-    # 기존 내용 정리 (git, exe 제외)
-    if DIST_DIR.exists():
-        shutil.rmtree(DIST_DIR)
+    # 기존 내용 정리 (.git, ReplayKit.exe 보존)
     DIST_DIR.mkdir(parents=True, exist_ok=True)
-
-    # git, exe 복원
-    if git_backup and git_backup.exists():
-        shutil.move(str(git_backup), str(git_dir))
-    if exe_backup and exe_backup.exists():
-        shutil.move(str(exe_backup), str(exe_file))
+    _preserve = {".git", ".gitignore", "ReplayKit.exe"}
+    for item in list(DIST_DIR.iterdir()):
+        if item.name in _preserve:
+            continue
+        if item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
 
     # ── backend 복사 (.pyd만, .py 소스 제외) ──
     print("  backend 복사 중 (.pyd + 설정 파일)...")
