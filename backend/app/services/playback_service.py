@@ -736,11 +736,14 @@ class PlaybackService:
             func_args = params.get("args", {})
             # Pass device connection info as constructor kwargs
             ctor_kwargs = None
+            shared_conn = None
             if real_id:
                 dev = self.dm.get_device(real_id)
                 if dev:
                     ctor_kwargs = _build_ctor_kwargs(dev)
-            await execute_module_function(module_name, func_name, func_args, ctor_kwargs)
+                    # device_manager가 이미 열어둔 시리얼 연결 전달
+                    shared_conn = self.dm.get_serial_conn(real_id)
+            await execute_module_function(module_name, func_name, func_args, ctor_kwargs, shared_conn)
         elif step.type == StepType.SERIAL_COMMAND:
             if not real_id:
                 raise ValueError("serial_command requires device_id")

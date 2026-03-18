@@ -619,13 +619,15 @@ class RecordingService:
             module_name = params.get("module", "")
             func_name = params.get("function", "")
             func_args = params.get("args", {})
-            # Pass device connection info as constructor kwargs
+            # Pass device connection info + shared serial connection
             ctor_kwargs = None
+            shared_conn = None
             if device_id:
                 dev = self.dm.get_device(device_id)
                 if dev:
                     ctor_kwargs = _build_ctor_kwargs(dev)
-            await execute_module_function(module_name, func_name, func_args, ctor_kwargs)
+                    shared_conn = self.dm.get_serial_conn(device_id)
+            await execute_module_function(module_name, func_name, func_args, ctor_kwargs, shared_conn)
             return None
         elif step_type == StepType.SERIAL_COMMAND:
             if not device_id:

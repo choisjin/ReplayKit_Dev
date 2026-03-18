@@ -716,6 +716,13 @@ class DeviceManager:
         logger.info("Serial port opened and drained: %s (%s @ %d)", device_id, port, baudrate)
         return conn
 
+    def get_serial_conn(self, device_id: str):
+        """Get an existing open serial connection for a device (if any)."""
+        conn = self._serial_conns.get(device_id)
+        if conn and conn.is_open:
+            return conn
+        return None
+
     def _close_serial_conn(self, device_id: str) -> None:
         """Close a persistent serial connection."""
         conn = self._serial_conns.pop(device_id, None)
@@ -761,8 +768,10 @@ class DeviceManager:
                     from .module_service import _get_instance, _is_connected
                     from ..routers.device import _build_constructor_kwargs
                     ctor_kwargs = _build_constructor_kwargs(dev)
+                    # device_manager가 이미 같은 포트로 열어둔 시리얼 연결이 있으면 전달
+                    shared_conn = self.get_serial_conn(dev.id)
                     instance = await loop.run_in_executor(
-                        None, _get_instance, module_name, ctor_kwargs,
+                        None, functools.partial(_get_instance, module_name, ctor_kwargs, shared_conn),
                     )
                     if _is_connected(instance):
                         dev.status = "connected"

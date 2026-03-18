@@ -252,8 +252,14 @@ def _is_connected(instance) -> bool:
     return True  # no known indicator → assume OK
 
 
-def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None) -> Any:
-    """Get or create a singleton instance of the module class."""
+def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
+                  shared_serial_conn=None) -> Any:
+    """Get or create a singleton instance of the module class.
+
+    Args:
+        shared_serial_conn: device_manager가 이미 열어둔 Serial 객체.
+            전달되면 모듈의 Connect()를 호출하지 않고 _conn에 직접 주입.
+    """
     # host/port가 변경된 경우 기존 인스턴스 무효화
     if module_name in _instances and constructor_kwargs:
         existing = _instances[module_name]
@@ -294,25 +300,31 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None) -
                     ctor_args[pname] = constructor_kwargs[pname]
             if ctor_args:
                 instance = cls(**ctor_args)
-                # Serial modules (e.g. IVIQEBenchIOClient): constructor sets port/bps
-                # but doesn't open the connection — call Connect() afterward
-                for method_name in ("Connect", "connect"):
-                    connect_fn = getattr(instance, method_name, None)
-                    if callable(connect_fn):
-                        try:
-                            sig = inspect.signature(connect_fn)
-                            # Only call if it takes no args (besides self)
-                            non_self = [p for p in sig.parameters if p != "self"]
-                            if len(non_self) == 0:
-                                result = connect_fn()
-                                logger.info("Auto-called %s.%s() → %s", module_name, method_name, result)
-                                if isinstance(result, str) and result.upper() in ("ERROR", "FAIL", "FAILED"):
-                                    logger.warning("Auto-connect %s.%s() returned %s — instance cached but may not work", module_name, method_name, result)
-                                else:
-                                    _auto_connected.add(module_name)
-                        except Exception as e:
-                            logger.warning("Auto-connect %s.%s() failed: %s", module_name, method_name, e)
-                        break
+                if shared_serial_conn and hasattr(instance, "_conn"):
+                    # device_manager가 이미 열어둔 시리얼 연결 주입
+                    instance._conn = shared_serial_conn
+                    _auto_connected.add(module_name)
+                    logger.info("Injected shared serial conn into %s (_conn)", module_name)
+                else:
+                    # Serial modules (e.g. IVIQEBenchIOClient): constructor sets port/bps
+                    # but doesn't open the connection — call Connect() afterward
+                    for method_name in ("Connect", "connect"):
+                        connect_fn = getattr(instance, method_name, None)
+                        if callable(connect_fn):
+                            try:
+                                sig = inspect.signature(connect_fn)
+                                # Only call if it takes no args (besides self)
+                                non_self = [p for p in sig.parameters if p != "self"]
+                                if len(non_self) == 0:
+                                    result = connect_fn()
+                                    logger.info("Auto-called %s.%s() → %s", module_name, method_name, result)
+                                    if isinstance(result, str) and result.upper() in ("ERROR", "FAIL", "FAILED"):
+                                        logger.warning("Auto-connect %s.%s() returned %s — instance cached but may not work", module_name, method_name, result)
+                                    else:
+                                        _auto_connected.add(module_name)
+                            except Exception as e:
+                                logger.warning("Auto-connect %s.%s() failed: %s", module_name, method_name, e)
+                            break
                 _instances[module_name] = instance
             else:
                 # Constructor doesn't accept the provided kwargs (e.g. BENCH)
@@ -332,9 +344,10 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None) -
 
 
 def _execute_sync(module_name: str, function_name: str, args: dict,
-                  constructor_kwargs: Optional[dict] = None) -> Any:
+                  constructor_kwargs: Optional[dict] = None,
+                  shared_serial_conn=None) -> Any:
     """Execute a module function synchronously."""
-    instance = _get_instance(module_name, constructor_kwargs)
+    instance = _get_instance(module_name, constructor_kwargs, shared_serial_conn)
     func = getattr(instance, function_name, None)
     if func is None:
         raise ValueError(f"Function '{function_name}' not found in {module_name}")
@@ -363,6 +376,7 @@ def _execute_sync(module_name: str, function_name: str, args: dict,
 async def execute_module_function(
     module_name: str, function_name: str, args: dict,
     constructor_kwargs: Optional[dict] = None,
+    shared_serial_conn=None,
 ) -> str:
     """Execute a module function asynchronously (runs in thread pool)."""
     loop = asyncio.get_event_loop()
@@ -370,7 +384,7 @@ async def execute_module_function(
         result = await loop.run_in_executor(
             None,
             functools.partial(_execute_sync, module_name, function_name, args,
-                              constructor_kwargs),
+                              constructor_kwargs, shared_serial_conn),
         )
         return str(result) if result is not None else "OK"
     except Exception as e:

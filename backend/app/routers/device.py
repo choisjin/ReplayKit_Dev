@@ -215,7 +215,8 @@ async def device_input(req: InputRequest):
                 raise HTTPException(status_code=400, detail="module and function are required")
             # Pass device connection info as constructor kwargs
             ctor_kwargs = _build_constructor_kwargs(dev) if dev else None
-            response = await execute_module_function(module_name, func_name, func_args, ctor_kwargs)
+            shared_conn = dm.get_serial_conn(req.device_id) if dev else None
+            response = await execute_module_function(module_name, func_name, func_args, ctor_kwargs, shared_conn)
             return {"result": "ok", "response": response}
 
         if req.action == "serial_command":
