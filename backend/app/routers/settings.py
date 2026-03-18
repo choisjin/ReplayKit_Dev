@@ -236,7 +236,11 @@ async def update_and_restart():
     no_window = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
     try:
-        # 1) git pull
+        # 1) 로컬 변경 초기화 + git pull
+        subprocess.run(["git", "update-index", "--assume-unchanged", "ReplayKit.exe"],
+                       cwd=cwd, capture_output=True, text=True, timeout=10, creationflags=no_window)
+        subprocess.run(["git", "checkout", "--", "."],
+                       cwd=cwd, capture_output=True, text=True, timeout=30, creationflags=no_window)
         r = subprocess.run(["git", "pull", "origin", "main"],
                            cwd=cwd, capture_output=True, text=True, timeout=60, creationflags=no_window)
         results["git"] = (r.stdout.strip() + "\n" + r.stderr.strip()).strip()

@@ -347,8 +347,11 @@ class ServerManagerApp:
         """git pull + pip install + npm install. 메인 스레드가 아닌 곳에서 호출."""
         self._set_status("동기화 중...")
 
-        # 1) git pull
-        log_callback("[동기화] git pull origin main ...")
+        # 1) 로컬 변경 초기화 + git pull
+        log_callback("[동기화] git checkout + pull ...")
+        # 실행 중인 exe는 Windows에서 잠김 → git에서 임시 제외 후 복원
+        _run_cmd(["git", "update-index", "--assume-unchanged", "ReplayKit.exe"], timeout=10)
+        _run_cmd(["git", "checkout", "--", "."], timeout=30)
         code, out = _run_cmd(["git", "pull", "origin", "main"], timeout=60)
         if out:
             log_callback(f"[동기화] {out}")

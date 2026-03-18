@@ -717,10 +717,17 @@ class DeviceManager:
         return conn
 
     def get_serial_conn(self, device_id: str):
-        """Get an existing open serial connection for a device (if any)."""
+        """Get an existing open serial connection for a device (by id or address)."""
+        # 1) device_id로 직접 검색
         conn = self._serial_conns.get(device_id)
         if conn and conn.is_open:
             return conn
+        # 2) device_id가 address(COM포트)인 경우 — 해당 address를 가진 디바이스의 연결 검색
+        for did, dev in self._devices.items():
+            if dev.address == device_id and did in self._serial_conns:
+                conn = self._serial_conns[did]
+                if conn and conn.is_open:
+                    return conn
         return None
 
     def _close_serial_conn(self, device_id: str) -> None:
