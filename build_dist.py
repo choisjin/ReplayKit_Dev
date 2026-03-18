@@ -32,8 +32,12 @@ PROJECT_ROOT = Path(__file__).parent
 DIST_DIR = PROJECT_ROOT / "dist" / "ReplayKit"
 BUILD_DIR = PROJECT_ROOT / "build"
 
-# backend에서 컴파일 제외할 파일 (Cython과 FastAPI 호환 문제)
-SKIP_COMPILE = {"__init__.py", "results.py", "settings.py"}
+# backend에서 컴파일 제외할 파일
+# - __init__.py: 패키지 마커
+# - routers/*.py: FastAPI의 File/Form/Query 기본값이 Cython과 호환 불가
+# - dependencies.py: FastAPI 의존성 주입
+SKIP_COMPILE = {"__init__.py", "dependencies.py",
+                "device.py", "scenario.py", "results.py", "settings.py"}
 
 # 배포에 포함할 루트 파일
 INCLUDE_ROOT_FILES = [
@@ -202,9 +206,13 @@ def step_package():
                 if f == "__init__.py":
                     dst_file.write_text("", encoding="utf-8")
                     continue
-                # 컴파일 제외 파일은 .py 원본 복사 (pyd 없음)
+                # 컴파일 제외 파일은 .py 원본 복사 + 기존 .pyd 삭제
                 if f in SKIP_COMPILE:
                     shutil.copy2(str(src_file), str(dst_file))
+                    # 이전 빌드의 .pyd가 남아있으면 삭제 (Python이 .pyd를 우선 로딩하므로)
+                    stem = f[:-3]  # e.g. "results"
+                    for old_pyd in dst_root.glob(f"{stem}.*.pyd"):
+                        old_pyd.unlink()
                 # 나머지 .py는 복사하지 않음 (.pyd가 대체)
                 continue
             elif f.endswith(".pyd"):
@@ -336,16 +344,19 @@ def deploy(commit_msg=None):
 # ── 정리 ──
 
 def clean():
-    """빌드 중간 파일 정리."""
+    """빌드 중간 파일 정리 (.pyd, .c, build/)."""
     print("\n=== 정리 ===")
-    for c_file in (PROJECT_ROOT / "backend").rglob("*.c"):
-        c_file.unlink()
+    count = 0
+    for pattern in ("*.c", "*.pyd"):
+        for f in (PROJECT_ROOT / "backend").rglob(pattern):
+            f.unlink()
+            count += 1
     if BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR)
-    f = PROJECT_ROOT / "_cython_setup.py"
-    if f.exists():
-        f.unlink()
-    print("  완료")
+    for f in [PROJECT_ROOT / "_cython_setup.py"]:
+        if f.exists():
+            f.unlink()
+    print(f"  개발 폴더 빌드 산출물 {count}개 삭제 완료")
 
 
 # ── 메인 ──

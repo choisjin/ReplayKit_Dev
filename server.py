@@ -365,13 +365,14 @@ class ServerManagerApp:
         elif code != 0:
             log_callback(f"[동기화] pip install 실패: {out[:200]}")
 
-        # 3) npm install
-        log_callback("[동기화] Node 의존성 확인 중...")
-        code, out = _run_cmd([NPM_CMD, "install", "--silent"], cwd=FRONTEND_DIR, timeout=120)
-        if out and code == 0:
-            log_callback(f"[동기화] npm: {out[:200]}")
-        elif code != 0:
-            log_callback(f"[동기화] npm install 실패: {out[:200]}")
+        # 3) npm install (개발 모드에서만)
+        if not self._production:
+            log_callback("[동기화] Node 의존성 확인 중...")
+            code, out = _run_cmd([NPM_CMD, "install", "--silent"], cwd=FRONTEND_DIR, timeout=120)
+            if out and code == 0:
+                log_callback(f"[동기화] npm: {out[:200]}")
+            elif code != 0:
+                log_callback(f"[동기화] npm install 실패: {out[:200]}")
 
         log_callback("[동기화] 완료")
         self._set_status("동기화 완료")
