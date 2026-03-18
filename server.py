@@ -25,11 +25,16 @@ else:
 FRONTEND_DIR = os.path.join(PROJECT_ROOT, "frontend")
 RESTART_FLAG = os.path.join(PROJECT_ROOT, ".restart")
 
-# Always use the venv Python for backend
+# Always use the venv Python for backend (절대 자기 자신(exe)을 사용하면 안 됨)
 _venv_python = os.path.join(PROJECT_ROOT, "venv", "Scripts", "python.exe")
 if not os.path.exists(_venv_python):
     _venv_python = os.path.join(PROJECT_ROOT, "venv", "bin", "python")
-VENV_PYTHON = _venv_python if os.path.exists(_venv_python) else sys.executable
+if os.path.exists(_venv_python):
+    VENV_PYTHON = _venv_python
+elif not getattr(sys, "frozen", False):
+    VENV_PYTHON = sys.executable
+else:
+    VENV_PYTHON = None  # exe인데 venv 없음 → 서버 시작 불가
 
 NPM_CMD = "npm.cmd" if sys.platform == "win32" else "npm"
 
@@ -88,6 +93,9 @@ class ServerProcess:
     def start(self, log_callback) -> bool:
         if self.running:
             log_callback(f"[{self.name}] 이미 실행 중입니다")
+            return False
+        if not self.cmd or self.cmd[0] is None:
+            log_callback(f"[{self.name}] venv가 없어 시작할 수 없습니다. setup.bat을 먼저 실행하세요")
             return False
         env = os.environ.copy()
         env["RECORDING_PROJECT_ROOT"] = PROJECT_ROOT
@@ -442,14 +450,16 @@ class ServerManagerApp:
             srv.start(self._log)
         threading.Thread(target=_do, daemon=True).start()
 
+    def _start_all_sync(self):
+        """서버 시작 (현재 스레드에서 실행, 다른 스레드에서 호출할 때 사용)."""
+        self.backend.start(self._log)
+        if not self._production:
+            self.frontend.start(self._log)
+        else:
+            self._log("[시스템] 프로덕션 모드 — 프론트엔드는 백엔드가 서빙합니다")
+
     def _start_all(self):
-        def _do():
-            self.backend.start(self._log)
-            if not self._production:
-                self.frontend.start(self._log)
-            else:
-                self._log("[시스템] 프로덕션 모드 — 프론트엔드는 백엔드가 서빙합니다")
-        threading.Thread(target=_do, daemon=True).start()
+        threading.Thread(target=self._start_all_sync, daemon=True).start()
 
     def _open_web(self):
         url = self.backend.url if self._production else self.frontend.url
@@ -540,8 +550,7 @@ if __name__ == "__main__":
         # 일반 시작: 동기화 후 자동 시작
         def _auto_sync_and_start():
             if app._sync(app._log):
-                app.backend.start(app._log)
-                app.frontend.start(app._log)
+                app._start_all_sync()
             else:
                 app._log("[시스템] 동기화 실패 — 수동으로 시작하세요")
         threading.Thread(target=_auto_sync_and_start, daemon=True).start()
