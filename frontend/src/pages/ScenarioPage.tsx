@@ -104,7 +104,7 @@ const formatTime = (iso: string, lang: string = 'ko') => {
 export default function ScenarioPage() {
   const { t, lang } = useTranslation();
   const { settings, saveExportZipToDir } = useSettings();
-  const webcam = useWebcamContext();
+  const { webcam, ensureWebcamOpen } = useWebcamContext();
   const [scenarios, setScenarios] = useState<string[]>([]);
   const [selectedScenario, setSelectedScenario] = useState<ScenarioDetail | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
@@ -528,9 +528,18 @@ export default function ScenarioPage() {
     startPlayback(name, {});
   };
 
-  const startPlayback = (name: string, deviceMap: Record<string, string>) => {
+  const startPlayback = async (name: string, deviceMap: Record<string, string>) => {
     const repeat = getRepeatCount(name);
-    const doAutoRecord = webcamAutoRecord && webcam.webcamOpen;
+    // 웹캠 자동녹화: 웹캠 열기 + 연결 확인
+    let doAutoRecord = false;
+    if (webcamAutoRecord) {
+      const ready = await ensureWebcamOpen();
+      if (!ready) {
+        message.error(t('webcam.webcamNotOpen'));
+        return;
+      }
+      doAutoRecord = true;
+    }
     setPlaying(true);
     setPlayingName(name);
     setStepResults([]);
@@ -682,10 +691,19 @@ export default function ScenarioPage() {
     startGroupPlayback(gName, {});
   };
 
-  const startGroupPlayback = (gName: string, deviceMap: Record<string, string>) => {
+  const startGroupPlayback = async (gName: string, deviceMap: Record<string, string>) => {
     const members = groups[gName] || [];
     const repeat = getRepeatCount(gName);
-    const doAutoRecord = webcamAutoRecord && webcam.webcamOpen;
+    // 웹캠 자동녹화: 웹캠 열기 + 연결 확인
+    let doAutoRecord = false;
+    if (webcamAutoRecord) {
+      const ready = await ensureWebcamOpen();
+      if (!ready) {
+        message.error(t('webcam.webcamNotOpen'));
+        return;
+      }
+      doAutoRecord = true;
+    }
 
     setPlaying(true);
     setPlayingGroupName(gName);
@@ -1001,10 +1019,7 @@ export default function ScenarioPage() {
             <Tooltip title={t('webcam.autoRecordHint')}>
               <Checkbox
                 checked={webcamAutoRecord}
-                onChange={(e) => {
-                  if (e.target.checked && !webcam.webcamOpen) { message.warning(t('webcam.webcamNotOpen')); return; }
-                  setWebcamAutoRecord(e.target.checked);
-                }}
+                onChange={(e) => setWebcamAutoRecord(e.target.checked)}
                 disabled={playing}
               >
                 <VideoCameraOutlined style={{ color: webcamAutoRecord ? '#ff4d4f' : undefined }} /> {t('webcam.autoRecord')}

@@ -101,6 +101,21 @@ function AppContent() {
     }
   };
 
+  /** 웹캠 PiP 열기 + 스트림 준비 대기. 이미 열려있으면 즉시 true */
+  const ensureWebcamOpen = async (): Promise<boolean> => {
+    if (webcamVisible && webcam.webcamOpen) return true;
+    if (!webcamVisible) {
+      webcam.handleWebcamToggle(['webcam']);
+      setWebcamVisible(true);
+    }
+    // 스트림 준비 대기 (최대 5초)
+    for (let i = 0; i < 25; i++) {
+      await new Promise(r => setTimeout(r, 200));
+      if (webcam.webcamOpen) return true;
+    }
+    return false;
+  };
+
   const pages = pageKeys.map(p => ({ ...p, label: t(p.labelKey) }));
   const menuItems = pages.map(({ key, icon, label }) => ({ key, icon, label }));
 
@@ -110,7 +125,7 @@ function AppContent() {
   const layoutBg = isDark ? undefined : '#d0d0d0';
 
   return (
-    <WebcamProvider webcam={webcam}>
+    <WebcamProvider webcam={webcam} webcamVisible={webcamVisible} ensureWebcamOpen={ensureWebcamOpen}>
     <ConfigProvider theme={{
       algorithm: themeAlgorithm,
       ...(!isDark ? {

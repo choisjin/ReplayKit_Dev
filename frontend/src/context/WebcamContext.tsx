@@ -3,10 +3,26 @@ import { useWebcam } from '../hooks/useWebcam';
 
 type WebcamInstance = ReturnType<typeof useWebcam>;
 
-const WebcamContext = createContext<WebcamInstance | null>(null);
+interface WebcamContextType {
+  webcam: WebcamInstance;
+  webcamVisible: boolean;
+  /** 웹캠 PiP를 열고 스트림이 준비될 때까지 대기. 실패 시 false 반환 */
+  ensureWebcamOpen: () => Promise<boolean>;
+}
 
-export function WebcamProvider({ webcam, children }: { webcam: WebcamInstance; children: ReactNode }) {
-  return <WebcamContext.Provider value={webcam}>{children}</WebcamContext.Provider>;
+const WebcamContext = createContext<WebcamContextType | null>(null);
+
+export function WebcamProvider({ webcam, webcamVisible, ensureWebcamOpen, children }: {
+  webcam: WebcamInstance;
+  webcamVisible: boolean;
+  ensureWebcamOpen: () => Promise<boolean>;
+  children: ReactNode;
+}) {
+  return (
+    <WebcamContext.Provider value={{ webcam, webcamVisible, ensureWebcamOpen }}>
+      {children}
+    </WebcamContext.Provider>
+  );
 }
 
 export function useWebcamContext() {
