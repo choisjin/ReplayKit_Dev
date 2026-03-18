@@ -103,21 +103,22 @@ import os
 from setuptools import setup, Extension
 from Cython.Build import cythonize
 
-py_files = {py_files!r}
-extensions = []
-for py_file in py_files:
-    rel = os.path.relpath(py_file, r"{PROJECT_ROOT}")
-    mod_name = rel.replace(os.sep, ".").replace("/", ".")[:-3]
-    extensions.append(Extension(mod_name, [py_file]))
+if __name__ == '__main__':
+    py_files = {py_files!r}
+    extensions = []
+    for py_file in py_files:
+        rel = os.path.relpath(py_file, r"{PROJECT_ROOT}")
+        mod_name = rel.replace(os.sep, ".").replace("/", ".")[:-3]
+        extensions.append(Extension(mod_name, [py_file]))
 
-setup(
-    ext_modules=cythonize(
-        extensions,
-        compiler_directives={{'language_level': 3}},
-        nthreads=os.cpu_count() or 4,
-    ),
-    script_args=["build_ext", "--inplace"],
-)
+    setup(
+        ext_modules=cythonize(
+            extensions,
+            compiler_directives={{'language_level': 3}},
+            nthreads=0,
+        ),
+        script_args=["build_ext", "--inplace"],
+    )
 """
     setup_file = PROJECT_ROOT / "_cython_setup.py"
     setup_file.write_text(setup_content, encoding="utf-8")

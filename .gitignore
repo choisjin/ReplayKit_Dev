@@ -5,10 +5,11 @@ __pycache__/
 *.pyo
 *.egg-info/
 
-# 빌드 중간 파일
+# 빌드 산출물/중간 파일
 build/
 dist/
 *.c
+*.pyd
 _cython_setup.py
 *.spec
 
