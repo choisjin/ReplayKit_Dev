@@ -402,6 +402,46 @@ class ServerManagerApp:
         self.root.mainloop()
 
 
+def _hide_console():
+    """콘솔 창 숨기기 (Windows)."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+            if hwnd:
+                ctypes.windll.user32.ShowWindow(hwnd, 0)  # SW_HIDE
+        except Exception:
+            pass
+
+
+def _kill_existing_servers():
+    """기존 백엔드/프론트엔드 포트를 점유한 프로세스 종료."""
+    for port in (8000, 5173):
+        for conn in psutil.net_connections(kind="tcp"):
+            if conn.laddr.port == port and conn.status == "LISTEN" and conn.pid:
+                try:
+                    p = psutil.Process(conn.pid)
+                    for child in p.children(recursive=True):
+                        child.kill()
+                    p.kill()
+                    print(f"포트 {port} 프로세스 종료 (PID {conn.pid})")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+
+
 if __name__ == "__main__":
+    _hide_console()
+
+    # --restart 모드: 기존 서버 정리 후 자동 시작
+    if "--restart" in sys.argv:
+        time.sleep(2)  # 이전 프로세스 종료 대기
+        _kill_existing_servers()
+        time.sleep(1)
+
     app = ServerManagerApp()
+
+    # --restart 모드: 자동으로 모두 시작
+    if "--restart" in sys.argv:
+        app.root.after(500, app._start_all)
+
     app.run()

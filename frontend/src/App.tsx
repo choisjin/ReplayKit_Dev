@@ -1,14 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { App as AntdApp, Button, ConfigProvider, Layout, Menu, Spin, Tooltip, theme } from 'antd';
+import { App as AntdApp, Button, ConfigProvider, Layout, Menu, Modal, Spin, Tooltip, message, theme } from 'antd';
 import {
   BarChartOutlined,
+  CloudSyncOutlined,
   DesktopOutlined,
   LoadingOutlined,
   PlayCircleOutlined,
+  ReloadOutlined,
   SettingOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
+import { serverApi } from './services/api';
 import { DeviceProvider } from './context/DeviceContext';
 import { SettingsProvider, useSettings } from './context/SettingsContext';
 import { useTranslation } from './i18n';
@@ -152,7 +155,7 @@ function AppContent() {
             onClick={({ key }) => { setActiveKey(key); window.dispatchEvent(new CustomEvent('tab-change', { detail: key })); }}
             style={isDark ? undefined : { background: '#f0f0f0' }}
           />
-          <div style={{ padding: '12px 16px' }}>
+          <div style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <Tooltip title={t('webcam.title')} placement="right">
               <Button
                 block
@@ -162,6 +165,51 @@ function AppContent() {
                 style={webcamVisible && webcam.webcamRecording ? { animation: 'blink 1s infinite' } : undefined}
               >
                 {t('webcam.title')}
+              </Button>
+            </Tooltip>
+            <Tooltip title={t('server.update')} placement="right">
+              <Button
+                block
+                icon={<CloudSyncOutlined />}
+                onClick={() => {
+                  Modal.confirm({
+                    title: t('server.updateConfirm'),
+                    content: t('server.updateDesc'),
+                    okText: t('server.update'),
+                    onOk: async () => {
+                      message.loading({ content: t('server.updating'), key: 'update', duration: 0 });
+                      try {
+                        await serverApi.updateAndRestart();
+                        message.success({ content: t('server.updateSuccess'), key: 'update' });
+                        setTimeout(() => window.location.reload(), 5000);
+                      } catch {
+                        message.error({ content: t('server.updateFailed'), key: 'update' });
+                      }
+                    },
+                  });
+                }}
+              >
+                {t('server.update')}
+              </Button>
+            </Tooltip>
+            <Tooltip title={t('server.restart')} placement="right">
+              <Button
+                block
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  Modal.confirm({
+                    title: t('server.restartConfirm'),
+                    onOk: async () => {
+                      try {
+                        await serverApi.restart();
+                        message.info(t('server.restarting'));
+                        setTimeout(() => window.location.reload(), 5000);
+                      } catch { /* server is shutting down */ }
+                    },
+                  });
+                }}
+              >
+                {t('server.restart')}
               </Button>
             </Tooltip>
           </div>

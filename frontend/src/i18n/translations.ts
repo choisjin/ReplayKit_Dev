@@ -41,6 +41,17 @@ const translations = {
     'common.default': '기본',
     'common.backendConnecting': '서버 연결 중...',
 
+    // === Server ===
+    'server.update': '업데이트',
+    'server.updateConfirm': '서버를 업데이트하시겠습니까?',
+    'server.updateDesc': 'git pull + 의존성 설치 후 서버가 재시작됩니다.',
+    'server.updating': '업데이트 중...',
+    'server.updateSuccess': '업데이트 완료. 새로고침 중...',
+    'server.updateFailed': '업데이트 실패',
+    'server.restart': '서버 재시작',
+    'server.restartConfirm': '서버를 재시작하시겠습니까?',
+    'server.restarting': '서버 재시작 중...',
+
     // === Nav ===
     'nav.device': '디바이스',
     'nav.record': '녹화',
@@ -497,6 +508,17 @@ const translations = {
     'common.required': 'Required',
     'common.default': 'Default',
     'common.backendConnecting': 'Connecting to server...',
+
+    // === Server ===
+    'server.update': 'Update',
+    'server.updateConfirm': 'Update the server?',
+    'server.updateDesc': 'Runs git pull + dependency install, then restarts the server.',
+    'server.updating': 'Updating...',
+    'server.updateSuccess': 'Update complete. Refreshing...',
+    'server.updateFailed': 'Update failed',
+    'server.restart': 'Restart Server',
+    'server.restartConfirm': 'Restart the server?',
+    'server.restarting': 'Server restarting...',
 
     // === Nav ===
     'nav.device': 'Devices',

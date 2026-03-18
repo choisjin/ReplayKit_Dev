@@ -119,4 +119,10 @@ export const resultsApi = {
     api.post(`/results/export-bundle/${filename}`),
 };
 
+// Server management APIs
+export const serverApi = {
+  restart: () => api.post('/settings/server-restart'),
+  updateAndRestart: () => api.post('/settings/update-and-restart'),
+};
+
 export default api;
