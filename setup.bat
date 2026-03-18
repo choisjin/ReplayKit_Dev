@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ============================================
-echo   Recording Test - 초기 환경 설정
+echo   ReplayKit - 초기 환경 설정
 echo ============================================
 echo.
 

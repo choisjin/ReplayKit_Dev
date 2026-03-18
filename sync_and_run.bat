@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ============================================
-echo   Recording Test - 동기화 및 실행
+echo   ReplayKit - 동기화 및 실행
 echo ============================================
 echo.
 

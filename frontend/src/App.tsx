@@ -145,7 +145,7 @@ function AppContent() {
       <Layout style={{ minHeight: '100vh' }}>
         <Sider collapsible style={isDark ? undefined : { background: '#f0f0f0' }}>
           <div style={{ height: 40, margin: 16, color: isDark ? '#fff' : '#222', fontSize: 14, fontWeight: 'bold', textAlign: 'center', lineHeight: '40px' }}>
-            Menu
+            ReplayKit
           </div>
           <Menu
             theme={isDark ? 'dark' : 'light'}

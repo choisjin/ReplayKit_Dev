@@ -205,7 +205,7 @@ async def save_export_zip(req: SaveExportZipRequest):
 
     from datetime import datetime, timezone
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    zip_name = f"recording_export_{ts}.zip"
+    zip_name = f"replaykit_export_{ts}.zip"
     dest = dirpath / zip_name
     try:
         dest.write_bytes(zip_bytes)

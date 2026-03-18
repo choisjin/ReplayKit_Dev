@@ -1,4 +1,4 @@
-"""Android System Auto Test Recording — FastAPI Backend."""
+"""ReplayKit — FastAPI Backend."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Android System Auto Test Recording",
+    title="ReplayKit",
     description="녹화(Record) → 재생(Playback) → 검증(Verify) 웹 기반 자동화 도구",
     version="0.1.0",
     lifespan=lifespan,
@@ -101,7 +101,7 @@ if _frontend_dist.is_dir():
 @app.get("/")
 async def root():
     return {
-        "app": "Android System Auto Test Recording",
+        "app": "ReplayKit",
         "version": "0.1.0",
         "docs": "/docs",
     }

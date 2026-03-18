@@ -1,7 +1,7 @@
 """서버 관리 GUI — 동기화 + 백엔드 + 프론트엔드 동시 관리.
 
 PyInstaller exe로 컴파일 가능:
-  pyinstaller --onefile --noconsole --name RecordingServer server.py
+  pyinstaller --onefile --noconsole --name ReplayKit server.py
 """
 
 import re
@@ -157,7 +157,7 @@ class ServerProcess:
 class ServerManagerApp:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("Auto Test — 서버 관리")
+        self.root.title("ReplayKit — 서버 관리")
         self.root.geometry("780x560")
         self.root.configure(bg=BG)
         self.root.resizable(True, True)
@@ -190,7 +190,7 @@ class ServerManagerApp:
 
     def _build_ui(self):
         title = tk.Label(
-            self.root, text="Recording Test Macro — Server",
+            self.root, text="ReplayKit — Server",
             bg=BG, fg=ACCENT, font=("Segoe UI", 16, "bold"),
         )
         title.pack(pady=(16, 8))

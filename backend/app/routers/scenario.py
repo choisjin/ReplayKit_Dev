@@ -633,7 +633,7 @@ async def export_scenarios(req: ExportRequest):
     return Response(
         content=zip_bytes,
         media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="recording_export_{ts}.zip"'},
+        headers={"Content-Disposition": f'attachment; filename="replaykit_export_{ts}.zip"'},
     )
 
 

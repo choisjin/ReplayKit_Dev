@@ -9,9 +9,17 @@ frontend를 빌드하고, server.py를 exe로 컴파일하여
   Visual Studio Build Tools (Windows C 컴파일러)
 
 사용법:
-  python build_dist.py           # 전체 빌드
-  python build_dist.py --backend # 백엔드만 컴파일
-  python build_dist.py --exe     # server.exe만 빌드
+  python build_dist.py                    # 전체 빌드 + 패키징
+  python build_dist.py --deploy           # 빌드 + 배포 repo에 commit & push
+  python build_dist.py --deploy-only      # 빌드 없이 기존 dist를 push만
+  python build_dist.py --backend          # 백엔드만 컴파일
+  python build_dist.py --exe             # server.exe만 빌드
+  python build_dist.py --init-deploy      # 배포 repo 최초 설정
+
+배포 repo 설정:
+  1. GitHub/GitLab에 배포용 private repo 생성
+  2. python build_dist.py --init-deploy
+  3. 배포 repo URL 입력
 """
 
 import os
@@ -21,34 +29,37 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent
-DIST_DIR = PROJECT_ROOT / "dist" / "RecordingTest"
+DIST_DIR = PROJECT_ROOT / "dist" / "ReplayKit"
 BUILD_DIR = PROJECT_ROOT / "build"
 
-# 배포에 포함할 루트 레벨 파일/폴더
+# backend에서 컴파일 제외할 파일
+SKIP_COMPILE = {"__init__.py"}
+
+# 배포에 포함할 루트 파일
 INCLUDE_ROOT_FILES = [
     "requirements.txt",
     "setup.bat",
+    "server.py",
 ]
 
-# backend에서 컴파일 제외할 파일 (빈 __init__.py 등)
-SKIP_COMPILE = {"__init__.py"}
+# 배포에 포함할 추가 파일/폴더 (모듈 DLL 등)
+INCLUDE_EXTRA = [
+    "CANatTransportProcDll.dll",
+    "CCIC_DEFINITION_LIBRARY.py",
+]
 
-# 배포에 포함하지 않을 폴더/파일
-EXCLUDE_PATTERNS = {
-    "__pycache__", ".git", ".gitignore", "node_modules",
-    ".env", "build", "dist", "*.egg-info",
-    "build_dist.py", "sync_and_run.bat",
-}
+NPM_CMD = "npm.cmd" if sys.platform == "win32" else "npm"
 
 
-def _run(cmd, cwd=None, check=True):
-    """subprocess 실행."""
-    print(f"  > {' '.join(cmd)}")
+def _run(cmd, cwd=None, check=True, timeout=180):
+    print(f"  > {' '.join(str(c) for c in cmd)}")
     return subprocess.run(
-        cmd, cwd=cwd or str(PROJECT_ROOT),
-        check=check, capture_output=True, text=True,
+        cmd, cwd=str(cwd or PROJECT_ROOT),
+        check=check, capture_output=True, text=True, timeout=timeout,
     )
 
+
+# ── 빌드 단계 ──
 
 def step_compile_backend():
     """backend/**/*.py → .pyd 컴파일 (Cython)."""
@@ -58,10 +69,9 @@ def step_compile_backend():
         import Cython
         print(f"  Cython {Cython.__version__}")
     except ImportError:
-        print("  ERROR: Cython이 설치되어 있지 않습니다. pip install cython")
+        print("  ERROR: pip install cython 필요")
         return False
 
-    # 컴파일할 .py 파일 수집
     py_files = []
     for root, dirs, files in os.walk(PROJECT_ROOT / "backend" / "app"):
         for f in files:
@@ -69,24 +79,21 @@ def step_compile_backend():
                 py_files.append(os.path.join(root, f))
 
     if not py_files:
-        print("  컴파일할 파일이 없습니다")
+        print("  컴파일할 파일 없음")
         return True
 
     print(f"  {len(py_files)}개 파일 컴파일 중...")
 
-    # setup.py를 동적으로 생성하여 cythonize
     setup_content = f"""
-import os, sys
+import os
 from setuptools import setup, Extension
 from Cython.Build import cythonize
 
 py_files = {py_files!r}
-
 extensions = []
 for py_file in py_files:
-    # 모듈 이름 생성: backend/app/main.py → backend.app.main
     rel = os.path.relpath(py_file, r"{PROJECT_ROOT}")
-    mod_name = rel.replace(os.sep, ".").replace("/", ".")[:-3]  # .py 제거
+    mod_name = rel.replace(os.sep, ".").replace("/", ".")[:-3]
     extensions.append(Extension(mod_name, [py_file]))
 
 setup(
@@ -100,7 +107,6 @@ setup(
 """
     setup_file = PROJECT_ROOT / "_cython_setup.py"
     setup_file.write_text(setup_content, encoding="utf-8")
-
     try:
         result = _run([sys.executable, str(setup_file)], check=False)
         if result.returncode != 0:
@@ -115,8 +121,7 @@ setup(
 def step_build_frontend():
     """frontend npm build."""
     print("\n=== [2/4] Frontend 빌드 ===")
-    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
-    result = _run([npm_cmd, "run", "build"], cwd=str(PROJECT_ROOT / "frontend"), check=False)
+    result = _run([NPM_CMD, "run", "build"], cwd=PROJECT_ROOT / "frontend", check=False)
     if result.returncode != 0:
         print(f"  빌드 에러:\n{result.stderr[:500]}")
         return False
@@ -125,12 +130,13 @@ def step_build_frontend():
 
 
 def step_build_exe():
-    """server.py → server.exe (PyInstaller)."""
+    """server.py → ReplayKit.exe."""
     print("\n=== [3/4] server.py → exe 컴파일 ===")
+    exe_dest = DIST_DIR / "ReplayKit.exe"
     result = _run([
         sys.executable, "-m", "PyInstaller",
         "--onefile", "--noconsole",
-        "--name", "RecordingServer",
+        "--name", "ReplayKit",
         "--distpath", str(DIST_DIR),
         "--workpath", str(BUILD_DIR / "pyinstaller"),
         "--specpath", str(BUILD_DIR),
@@ -139,30 +145,50 @@ def step_build_exe():
     if result.returncode != 0:
         print(f"  PyInstaller 에러:\n{result.stderr[:500]}")
         return False
-    print("  exe 빌드 완료")
+    if exe_dest.exists():
+        print(f"  exe 빌드 완료: {exe_dest}")
     return True
 
 
 def step_package():
-    """배포 패키지 조립."""
+    """배포 패키지 조립 (dist/ReplayKit/)."""
     print("\n=== [4/4] 배포 패키지 생성 ===")
 
+    # .git 폴더 보존 (배포 repo)
+    git_dir = DIST_DIR / ".git"
+    git_backup = None
+    if git_dir.exists():
+        git_backup = PROJECT_ROOT / "build" / "_git_backup"
+        if git_backup.exists():
+            shutil.rmtree(git_backup)
+        shutil.move(str(git_dir), str(git_backup))
+
+    # exe 보존
+    exe_file = DIST_DIR / "ReplayKit.exe"
+    exe_backup = None
+    if exe_file.exists():
+        exe_backup = PROJECT_ROOT / "build" / "ReplayKit.exe"
+        (PROJECT_ROOT / "build").mkdir(parents=True, exist_ok=True)
+        shutil.move(str(exe_file), str(exe_backup))
+
+    # 기존 내용 정리 (git, exe 제외)
     if DIST_DIR.exists():
-        # exe는 이미 있을 수 있으니 backend/frontend만 정리
-        for d in ["backend", "frontend"]:
-            target = DIST_DIR / d
-            if target.exists():
-                shutil.rmtree(target)
+        shutil.rmtree(DIST_DIR)
     DIST_DIR.mkdir(parents=True, exist_ok=True)
 
-    # backend 복사 (.pyd만, .py 소스 제외)
-    print("  backend 복사 중 (.pyd + 필수 파일)...")
+    # git, exe 복원
+    if git_backup and git_backup.exists():
+        shutil.move(str(git_backup), str(git_dir))
+    if exe_backup and exe_backup.exists():
+        shutil.move(str(exe_backup), str(exe_file))
+
+    # ── backend 복사 (.pyd만, .py 소스 제외) ──
+    print("  backend 복사 중 (.pyd + 설정 파일)...")
     src_backend = PROJECT_ROOT / "backend"
     dst_backend = DIST_DIR / "backend"
 
     for root, dirs, files in os.walk(src_backend):
-        # __pycache__ 제외
-        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        dirs[:] = [d for d in dirs if d not in ("__pycache__", "scenarios", "results", "screenshots")]
         rel_root = Path(root).relative_to(src_backend)
         dst_root = dst_backend / rel_root
         dst_root.mkdir(parents=True, exist_ok=True)
@@ -171,81 +197,167 @@ def step_package():
             src_file = Path(root) / f
             dst_file = dst_root / f
 
-            # .py 파일: __init__.py만 복사 (빈 파일로), 나머지는 .pyd가 대체
             if f.endswith(".py"):
                 if f == "__init__.py":
-                    dst_file.write_text("", encoding="utf-8")
-                # .pyd가 있으면 .py는 건너뜀
+                    dst_file.write_text("", encoding="utf-8")  # 빈 __init__.py
+                # .py 소스는 복사하지 않음 (.pyd가 대체)
                 continue
-            # .pyd 파일 복사
             elif f.endswith(".pyd"):
                 shutil.copy2(str(src_file), str(dst_file))
-            # .c 파일 건너뜀 (Cython 중간 파일)
             elif f.endswith(".c"):
-                continue
-            # 기타 파일 (json, txt 등) 복사
+                continue  # Cython 중간 파일 건너뜀
             else:
                 shutil.copy2(str(src_file), str(dst_file))
 
-    # backend/__init__.py 보장
     (dst_backend / "__init__.py").touch()
 
-    # frontend/dist 복사
-    print("  frontend 복사 중 (빌드 결과)...")
+    # plugins 폴더는 .py 포함 (사용자 플러그인)
+    plugins_src = src_backend / "app" / "plugins"
+    plugins_dst = dst_backend / "app" / "plugins"
+    if plugins_src.is_dir():
+        plugins_dst.mkdir(parents=True, exist_ok=True)
+        for f in plugins_src.iterdir():
+            if f.is_file():
+                shutil.copy2(str(f), str(plugins_dst / f.name))
+
+    # ── frontend/dist 복사 ──
+    print("  frontend 복사 중...")
     src_fe_dist = PROJECT_ROOT / "frontend" / "dist"
     dst_fe = DIST_DIR / "frontend" / "dist"
     if src_fe_dist.exists():
-        if dst_fe.exists():
-            shutil.rmtree(dst_fe)
         shutil.copytree(str(src_fe_dist), str(dst_fe))
 
-    # frontend/package.json + node_modules는 dev 서버용이므로 배포에 불필요
-    # 대신 빌드된 정적 파일을 백엔드가 서빙
-
-    # 루트 파일 복사
+    # ── 루트 파일 ──
     print("  루트 파일 복사 중...")
     for f in INCLUDE_ROOT_FILES:
         src = PROJECT_ROOT / f
         if src.exists():
             shutil.copy2(str(src), str(DIST_DIR / f))
 
-    # 빈 디렉토리 생성 (사용자 데이터 영역)
+    for f in INCLUDE_EXTRA:
+        src = PROJECT_ROOT / f
+        if src.exists():
+            shutil.copy2(str(src), str(DIST_DIR / f))
+
+    # ── 빈 디렉토리 (사용자 데이터) ──
     for d in ["backend/scenarios", "backend/results", "backend/screenshots",
               "backend/app/plugins", "Results/Video"]:
         (DIST_DIR / d).mkdir(parents=True, exist_ok=True)
 
-    # venv는 포함하지 않음 — setup.bat으로 현장에서 생성
-    print(f"\n  배포 패키지 생성 완료: {DIST_DIR}")
+    # ── .gitignore (배포 repo용) ──
+    dist_gitignore = DIST_DIR / ".gitignore"
+    dist_gitignore.write_text("""venv/
+__pycache__/
+*.pyc
+backend/screenshots/
+backend/results/
+backend/scenarios/
+backend/auxiliary_devices.json
+backend/settings.json
+Results/
+DLL_DEBUG/
+.env
+""", encoding="utf-8")
 
-    # 파일 수 카운트
+    # 통계
     total = sum(1 for _ in DIST_DIR.rglob("*") if _.is_file())
     pyd_count = sum(1 for _ in DIST_DIR.rglob("*.pyd"))
-    print(f"  총 {total}개 파일 (컴파일된 .pyd: {pyd_count}개)")
+    py_count = sum(1 for _ in DIST_DIR.rglob("*.py"))
+    print(f"\n  패키지 완료: {DIST_DIR}")
+    print(f"  총 {total}개 파일 (.pyd: {pyd_count}, .py: {py_count} — __init__ + server + plugins만)")
     return True
 
+
+# ── 배포 repo 관리 ──
+
+def init_deploy():
+    """배포 repo 최초 설정."""
+    print("\n=== 배포 repo 초기화 ===")
+    DIST_DIR.mkdir(parents=True, exist_ok=True)
+
+    if (DIST_DIR / ".git").exists():
+        print(f"  이미 git repo 존재: {DIST_DIR}")
+        return
+
+    url = input("  배포 repo URL 입력 (예: https://github.com/user/recording-test-dist.git): ").strip()
+    if not url:
+        print("  취소됨")
+        return
+
+    _run(["git", "init"], cwd=DIST_DIR)
+    _run(["git", "remote", "add", "origin", url], cwd=DIST_DIR)
+    print(f"  배포 repo 설정 완료: {url}")
+    print(f"  빌드 후 --deploy 로 push 하세요")
+
+
+def deploy(commit_msg=None):
+    """배포 repo에 commit + push."""
+    print("\n=== 배포 repo push ===")
+    if not (DIST_DIR / ".git").exists():
+        print("  ERROR: 배포 repo 미설정. --init-deploy 먼저 실행하세요")
+        return False
+
+    if not commit_msg:
+        # 개발 repo의 최신 커밋 메시지 가져오기
+        try:
+            r = _run(["git", "log", "-1", "--format=%s"], check=False)
+            dev_msg = r.stdout.strip()
+        except Exception:
+            dev_msg = ""
+        commit_msg = dev_msg or "Update build"
+
+    _run(["git", "add", "-A"], cwd=DIST_DIR)
+
+    # 변경사항 확인
+    r = _run(["git", "status", "--porcelain"], cwd=DIST_DIR, check=False)
+    if not r.stdout.strip():
+        print("  변경사항 없음 — push 건너뜀")
+        return True
+
+    _run(["git", "commit", "-m", commit_msg], cwd=DIST_DIR, check=False)
+    result = _run(["git", "push", "-u", "origin", "main"], cwd=DIST_DIR, check=False)
+    if result.returncode != 0:
+        # 최초 push 시 main 브랜치가 없을 수 있음
+        _run(["git", "branch", "-M", "main"], cwd=DIST_DIR, check=False)
+        result = _run(["git", "push", "-u", "origin", "main"], cwd=DIST_DIR, check=False)
+        if result.returncode != 0:
+            print(f"  push 실패:\n{result.stderr[:300]}")
+            return False
+
+    print("  push 완료")
+    return True
+
+
+# ── 정리 ──
 
 def clean():
     """빌드 중간 파일 정리."""
     print("\n=== 정리 ===")
-    # Cython 중간 파일 (.c) 삭제
     for c_file in (PROJECT_ROOT / "backend").rglob("*.c"):
         c_file.unlink()
-        print(f"  삭제: {c_file.relative_to(PROJECT_ROOT)}")
-    # build 폴더
     if BUILD_DIR.exists():
         shutil.rmtree(BUILD_DIR)
-        print(f"  삭제: build/")
-    # _cython_setup.py
     f = PROJECT_ROOT / "_cython_setup.py"
     if f.exists():
         f.unlink()
+    print("  완료")
 
+
+# ── 메인 ──
 
 def main():
     args = set(sys.argv[1:])
 
     if "--clean" in args:
         clean()
+        return
+
+    if "--init-deploy" in args:
+        init_deploy()
+        return
+
+    if "--deploy-only" in args:
+        deploy()
         return
 
     if "--backend" in args:
@@ -259,7 +371,7 @@ def main():
 
     # 전체 빌드
     print("=" * 50)
-    print("  Recording Test — 배포 빌드")
+    print("  ReplayKit — 배포 빌드")
     print("=" * 50)
 
     ok = step_compile_backend()
@@ -283,6 +395,9 @@ def main():
     print("  빌드 완료!")
     print(f"  배포 폴더: {DIST_DIR}")
     print("=" * 50)
+
+    if "--deploy" in args:
+        deploy()
 
 
 if __name__ == "__main__":
