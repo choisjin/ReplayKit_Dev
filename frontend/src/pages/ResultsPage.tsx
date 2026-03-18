@@ -182,11 +182,8 @@ export default function ResultsPage() {
     // 해당 회차 녹화 선택
     const targetRepeat = step.repeat_index || 1;
     const rec = recordings.find(r => r.filename.includes(`_webcam_r${targetRepeat}.webm`));
-    const urlChanged = rec && rec.url !== activeRecUrl;
-    if (rec) {
-      setActiveRecUrl(rec.url);
-      setActiveRecRepeat(targetRepeat);
-    }
+    if (!rec) return;
+
     // 같은 회차의 첫 스텝 타임스탬프 기준으로 오프셋 계산
     const sameRepeatSteps = detail.step_results.filter(s => (s.repeat_index || 1) === targetRepeat);
     const firstStep = sameRepeatSteps[0];
@@ -194,12 +191,31 @@ export default function ResultsPage() {
     const firstTime = new Date(firstStep.timestamp).getTime();
     const stepTime = new Date(step.timestamp).getTime();
     const offsetSec = Math.max(0, (stepTime - firstTime) / 1000 - 2);
-    // 영상 소스 변경 시 약간 대기
-    setTimeout(() => {
-      if (detailVideoRef.current) {
-        detailVideoRef.current.currentTime = offsetSec;
+
+    const doSeek = () => {
+      const video = detailVideoRef.current;
+      if (!video) return;
+      const applySeek = () => {
+        video.currentTime = offsetSec;
+      };
+      // 비디오가 로드되어 있으면 즉시, 아니면 로드 후 seek
+      if (video.readyState >= 2) {
+        applySeek();
+      } else {
+        video.addEventListener('loadeddata', applySeek, { once: true });
       }
-    }, urlChanged ? 300 : 50);
+    };
+
+    const urlChanged = rec.url !== activeRecUrl;
+    setActiveRecUrl(rec.url);
+    setActiveRecRepeat(targetRepeat);
+
+    if (urlChanged) {
+      // 소스 변경 → React 렌더링 후 seek
+      setTimeout(doSeek, 100);
+    } else {
+      doSeek();
+    }
   };
 
   const fetchResults = async () => {
