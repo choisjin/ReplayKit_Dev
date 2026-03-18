@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 # Cache: module_name -> class instance
 _instances: dict[str, Any] = {}
 
+# Tracks modules that went through auto-connect successfully
+_auto_connected: set[str] = set()
+
 # Cache: module_name -> list of function info
 _module_functions_cache: dict[str, list[dict]] = {}
 
@@ -269,11 +272,12 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None) -
                         module_name, existing_host, new_host)
             _instances.pop(module_name, None)
 
-    # 기존 인스턴스가 연결 끊어진 경우 재생성
-    if module_name in _instances:
+    # 기존 인스턴스가 연결 끊어진 경우에만 재생성 (auto-connect된 모듈만 검사)
+    if module_name in _instances and module_name in _auto_connected:
         if not _is_connected(_instances[module_name]):
             logger.info("Connection lost for %s, recreating instance", module_name)
             _instances.pop(module_name, None)
+            _auto_connected.discard(module_name)
 
     if module_name not in _instances:
         cls = _import_module_class(module_name)
@@ -302,14 +306,12 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None) -
                             if len(non_self) == 0:
                                 result = connect_fn()
                                 logger.info("Auto-called %s.%s() → %s", module_name, method_name, result)
-                                # 연결 실패 시 에러 발생
                                 if isinstance(result, str) and result.upper() in ("ERROR", "FAIL", "FAILED"):
-                                    raise ConnectionError(f"{module_name}.{method_name}() returned {result}")
-                        except ConnectionError:
-                            raise
+                                    logger.warning("Auto-connect %s.%s() returned %s — instance cached but may not work", module_name, method_name, result)
+                                else:
+                                    _auto_connected.add(module_name)
                         except Exception as e:
                             logger.warning("Auto-connect %s.%s() failed: %s", module_name, method_name, e)
-                            raise ConnectionError(f"{module_name}.{method_name}() failed: {e}")
                         break
                 _instances[module_name] = instance
             else:
@@ -379,3 +381,4 @@ async def execute_module_function(
 def reset_instance(module_name: str) -> None:
     """Remove cached instance (e.g. on device disconnect)."""
     _instances.pop(module_name, None)
+    _auto_connected.discard(module_name)

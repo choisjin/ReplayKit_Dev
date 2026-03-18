@@ -292,6 +292,7 @@ class PlaybackService:
         # File prefix includes cycle number to avoid overwriting across repeats
         file_prefix = f"c{repeat_index}_step_{step.id:03d}"
 
+        t0 = t1 = t2 = t3 = t4 = start_time
         try:
             # 1) 액션 실행 전: 해당 스텝의 디바이스 연결 확인
             if self._should_stop:
