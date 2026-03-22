@@ -1,144 +1,107 @@
 # -*- coding: utf-8 -*-
-"""VisionCamera 클라이언트 — harvesters + Vimba GenTL 기반.
+"""VisionCamera 클라이언트 — MATVisionLib.dll 기반.
 
-백그라운드 스레드에서 지속적으로 프레임을 캡처하여
-최신 프레임을 즉시 반환하는 방식으로 동작.
+DLL을 통해 카메라 연결/캡처를 수행하고,
+백그라운드 스레드에서 주기적으로 캡처하여 최신 프레임을 유지.
 """
 
 import io
 import os
-import glob
 import logging
+import tempfile
 import threading
 import time
-import numpy as np
+from ctypes import cdll, c_wchar_p
 from pathlib import Path
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
 
-def _find_cti_files() -> list[str]:
-    """Vimba X GenTL producer (.cti) 파일을 자동 탐색."""
+def _find_dll() -> str:
+    """MATVisionLib.dll 경로 탐색."""
     search_dirs = [
-        r"C:\Program Files\Allied Vision\Vimba X\cti",
-        r"C:\Program Files\Allied Vision\VimbaX\cti",
-        r"C:\Program Files (x86)\Allied Vision\Vimba X\cti",
+        Path(__file__).parent,                          # plugins/
+        Path(__file__).parent.parent / "modules",       # app/modules/
+        Path(__file__).parent.parent.parent / "modules", # backend/modules/
     ]
-    for var in ("VIMBA_X_HOME", "VIMBA_HOME"):
-        val = os.environ.get(var, "")
-        if val:
-            search_dirs.append(os.path.join(val, "cti"))
-    gentl = os.environ.get("GENICAM_GENTL64_PATH", "")
-    if gentl:
-        search_dirs.extend(gentl.split(os.pathsep))
-
-    cti_files = []
     for d in search_dirs:
-        if os.path.isdir(d):
-            cti_files.extend(glob.glob(os.path.join(d, "*.cti")))
-    return list(set(cti_files))
-
-
-def _component_to_pil(comp) -> Image.Image:
-    """harvesters component → PIL Image (RGB)."""
-    data = comp.data
-    w, h = comp.width, comp.height
-
-    if data.ndim == 1:
-        if w * h == len(data):
-            img_arr = data.reshape(h, w)
-        else:
-            channels = len(data) // (w * h)
-            img_arr = data.reshape(h, w, channels)
-    else:
-        img_arr = data
-
-    if img_arr.ndim == 2:
-        return Image.fromarray(img_arr, 'L').convert('RGB')
-    elif img_arr.shape[2] == 1:
-        return Image.fromarray(img_arr[:, :, 0], 'L').convert('RGB')
-    elif img_arr.shape[2] == 3:
-        return Image.fromarray(img_arr, 'RGB')
-    else:
-        return Image.fromarray(img_arr[:, :, :3], 'RGB')
+        dll = d / "MATVisionLib.dll"
+        if dll.exists():
+            return str(dll)
+    raise FileNotFoundError(
+        "MATVisionLib.dll을 찾을 수 없습니다. "
+        "backend/app/plugins/ 또는 backend/app/modules/에 배치하세요."
+    )
 
 
 class VisionCameraClient:
-    """harvesters 기반 GigE Vision 카메라 제어.
+    """MATVisionLib.dll 기반 비전 카메라 제어.
 
-    백그라운드 스레드에서 지속 캡처 → 최신 프레임 즉시 반환.
+    백그라운드 스레드에서 주기적 캡처 → 최신 프레임 즉시 반환.
     """
 
     def __init__(self, model: str, port: dict, context=None):
         self._device = model
         self._isConnected = False
         self._macaddress = port.get("MACAddress", "")
-        self._device_id = f"DEV_{self._macaddress}"
 
-        self._harvester = None
-        self._ia = None
+        # DLL 로드 (원본 디렉토리에서 직접 로드 — 의존 DLL 경로 유지)
+        dll_path = _find_dll()
+        dll_dir = os.path.dirname(dll_path)
+        # 의존 DLL 검색 경로 추가 (Python 3.8+)
+        if hasattr(os, 'add_dll_directory'):
+            os.add_dll_directory(dll_dir)
+        self._dll = cdll.LoadLibrary(dll_path)
 
         # 백그라운드 프레임 캡처
         self._frame_thread = None
         self._frame_stop = threading.Event()
         self._frame_lock = threading.Lock()
-        self._latest_frame: Image.Image | None = None  # 최신 PIL Image (RGB)
+        self._latest_frame: Image.Image | None = None
+        self._tmp_dir = Path(tempfile.gettempdir()) / "vision_camera" / self._macaddress
+        self._tmp_dir.mkdir(parents=True, exist_ok=True)
 
-        self._cti_files = _find_cti_files()
-        if not self._cti_files:
-            raise FileNotFoundError(
-                "GenTL producer (.cti) 파일을 찾을 수 없습니다. "
-                "Vimba X SDK가 설치되어 있는지 확인하세요."
-            )
-        logger.info("VisionCameraClient: mac=%s, CTI files=%d",
-                     self._macaddress, len(self._cti_files))
+        logger.info("VisionCameraClient: mac=%s, DLL=%s", self._macaddress, dll_path)
 
     # ------------------------------------------------------------------
     # 백그라운드 프레임 캡처 스레드
     # ------------------------------------------------------------------
 
     def _frame_loop(self):
-        """백그라운드에서 지속적으로 프레임을 fetch하여 _latest_frame 갱신."""
-        logger.info("VisionCamera frame loop started, starting acquisition...")
-        try:
-            self._ia.start()
-            logger.info("VisionCamera acquisition started in frame thread")
-        except Exception as e:
-            logger.error("VisionCamera acquisition start failed: %s", e)
-            return
-
+        """백그라운드에서 주기적으로 DLL 캡처 → _latest_frame 갱신."""
+        logger.info("VisionCamera frame loop started")
+        tmp_path = str(self._tmp_dir / "latest.bmp")
         error_count = 0
         frame_count = 0
+
         while not self._frame_stop.is_set():
             try:
-                # try_fetch는 non-blocking — fetch와 달리 무한 블로킹 방지
-                buffer = self._ia.try_fetch(timeout=3)
-                if buffer is None:
-                    error_count += 1
-                    if error_count <= 3 or error_count % 30 == 0:
-                        logger.warning("VisionCamera fetch timeout (%d): no buffer returned", error_count)
-                    time.sleep(0.1)
-                    continue
-                with buffer:
-                    comp = buffer.payload.components[0]
-                    img = _component_to_pil(comp)
+                result = self._dll.Vision_Capture(c_wchar_p(tmp_path))
+                if result == 0 and os.path.exists(tmp_path):
+                    img = Image.open(tmp_path).convert("RGB")
                     with self._frame_lock:
                         self._latest_frame = img
                     frame_count += 1
                     if frame_count == 1:
                         logger.info("VisionCamera first frame received")
                     error_count = 0
+                else:
+                    error_count += 1
+                    if error_count <= 3 or error_count % 30 == 0:
+                        logger.warning("VisionCamera capture failed (count=%d, code=%d)",
+                                       error_count, result)
+                    time.sleep(0.1)
+                    continue
             except Exception as e:
                 error_count += 1
                 if error_count <= 3 or error_count % 30 == 0:
-                    logger.warning("VisionCamera fetch error (%d): %s", error_count, e)
+                    logger.warning("VisionCamera frame error (%d): %s", error_count, e)
                 time.sleep(0.1)
 
-        try:
-            self._ia.stop()
-        except Exception:
-            pass
+            # 캡처 간격 (~30fps 상한)
+            time.sleep(0.033)
+
         logger.info("VisionCamera frame loop stopped (total frames: %d)", frame_count)
 
     # ------------------------------------------------------------------
@@ -147,63 +110,13 @@ class VisionCameraClient:
 
     def md_VisionConnect(self) -> tuple[bool, str]:
         """카메라 연결 + 백그라운드 캡처 시작."""
-        if self._isConnected and self._ia:
+        if self._isConnected:
             return True, "[VisionCamera] Already connected"
 
         try:
-            from harvesters.core import Harvester
-
-            self._harvester = Harvester()
-            for cti in self._cti_files:
-                self._harvester.add_file(cti)
-            self._harvester.update()
-
-            # MAC 주소로 카메라 찾기
-            idx = None
-            for i, info in enumerate(self._harvester.device_info_list):
-                if self._device_id in info.id_ or self._macaddress in info.id_:
-                    idx = i
-                    break
-
-            if idx is None:
-                cam_list = [info.id_ for info in self._harvester.device_info_list]
-                self._harvester.reset()
-                self._harvester = None
-                return False, (
-                    f"[VisionCamera] 카메라 {self._device_id} 를 찾을 수 없습니다. "
-                    f"검색된 카메라: {cam_list}"
-                )
-
-            self._ia = self._harvester.create(idx)
-
-            # 카메라 노드맵 설정 (free-run 모드 보장)
-            try:
-                nm = self._ia.remote_device.node_map
-                # 트리거 모드 해제 → continuous (free-run) 스트리밍
-                if hasattr(nm, 'TriggerMode'):
-                    nm.TriggerMode.value = 'Off'
-                    logger.info("VisionCamera: TriggerMode set to Off")
-                # AcquisitionMode를 Continuous로 설정
-                if hasattr(nm, 'AcquisitionMode'):
-                    nm.AcquisitionMode.value = 'Continuous'
-                    logger.info("VisionCamera: AcquisitionMode set to Continuous")
-                # GigE Vision 패킷 크기 — 표준 MTU(1500)에 맞춤
-                # 점보 프레임 미지원 NIC에서 스트림 패킷이 드롭되는 것을 방지
-                if hasattr(nm, 'GevSCPSPacketSize'):
-                    current = nm.GevSCPSPacketSize.value
-                    logger.info("VisionCamera: GevSCPSPacketSize current=%d", current)
-                    if current > 1500:
-                        nm.GevSCPSPacketSize.value = 1500
-                        logger.info("VisionCamera: GevSCPSPacketSize set to 1500")
-                # 픽셀 포맷 로그
-                if hasattr(nm, 'PixelFormat'):
-                    logger.info("VisionCamera: PixelFormat=%s", nm.PixelFormat.value)
-                # 디버그: 해상도 확인
-                if hasattr(nm, 'Width') and hasattr(nm, 'Height'):
-                    logger.info("VisionCamera: Resolution=%dx%d",
-                                nm.Width.value, nm.Height.value)
-            except Exception as e:
-                logger.warning("VisionCamera: node map config failed (non-fatal): %s", e)
+            result = self._dll.Vision_Connect(c_wchar_p(self._macaddress))
+            if result != 0:
+                return False, f"[VisionCamera] Connect fail (code={result})"
 
             self._isConnected = True
 
@@ -214,11 +127,11 @@ class VisionCameraClient:
             )
             self._frame_thread.start()
 
-            logger.info("VisionCamera connected: %s", self._device_id)
-            return True, f"[VisionCamera] Connect OK ({self._device_id})"
+            logger.info("VisionCamera connected: %s", self._macaddress)
+            return True, f"[VisionCamera] Connect OK ({self._macaddress})"
 
         except Exception as e:
-            self._cleanup()
+            self._isConnected = False
             return False, f"[VisionCamera] Connect fail: {e}"
 
     def md_VisionDisconnect(self) -> tuple[bool, str]:
@@ -231,9 +144,16 @@ class VisionCameraClient:
             return False, f"[VisionCamera] Disconnect fail: {e}"
 
     def md_IsConnect(self) -> tuple[bool, str]:
-        if self._isConnected and self._ia:
-            return True, "[VisionCamera] Connected"
-        return False, "[VisionCamera] Not connected"
+        if not self._isConnected:
+            return False, "[VisionCamera] Not connected"
+        try:
+            result = self._dll.isConnect()
+            if result == 0:
+                return True, "[VisionCamera] Connected"
+            self._isConnected = False
+            return False, f"[VisionCamera] Connection lost (code={result})"
+        except Exception:
+            return False, "[VisionCamera] Not connected"
 
     # ------------------------------------------------------------------
     # Capture — 최신 프레임 즉시 반환 (블로킹 없음)
@@ -285,26 +205,19 @@ class VisionCameraClient:
 
     def _cleanup(self):
         """리소스 정리."""
-        self._isConnected = False
         # 프레임 스레드 중지
         self._frame_stop.set()
         if self._frame_thread and self._frame_thread.is_alive():
             self._frame_thread.join(timeout=5)
         self._frame_thread = None
         self._latest_frame = None
-        # harvesters 정리 (stop은 프레임 스레드에서 수행됨)
-        if self._ia:
+        # DLL disconnect
+        if self._isConnected:
             try:
-                self._ia.destroy()
+                self._dll.Vision_Disconnect()
             except Exception:
                 pass
-            self._ia = None
-        if self._harvester:
-            try:
-                self._harvester.reset()
-            except Exception:
-                pass
-            self._harvester = None
+        self._isConnected = False
 
     def dispose(self):
         self._cleanup()
