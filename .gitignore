@@ -26,6 +26,7 @@ Results/
 
 # Large binaries (수동 복사)
 *.whl
+*.exe
 
 # OS / IDE
 .env
