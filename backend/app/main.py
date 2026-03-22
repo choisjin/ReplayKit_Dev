@@ -181,8 +181,11 @@ async def websocket_screen_mirror(websocket: WebSocket):
                             )
                             logger.debug("VisionCam frame: %d bytes", len(jpeg_bytes))
                             await websocket.send_bytes(jpeg_bytes)
-                        except Exception as ve:
-                            logger.error("VisionCamera capture error: %s", ve)
+                        except RuntimeError as ve:
+                            if "No frame available" in str(ve):
+                                logger.debug("VisionCamera: waiting for first frame...")
+                            else:
+                                logger.error("VisionCamera capture error: %s", ve)
                             await asyncio.sleep(1)
                             continue
                     else:
