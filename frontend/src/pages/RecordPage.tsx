@@ -832,7 +832,7 @@ export default function RecordPage() {
     });
   }, [drawExcludeRoiCanvas]);
 
-  const excludeRoiMouseUp = useCallback(() => {
+  const excludeRoiMouseUp = useCallback(async () => {
     if (!excludeRoiDragRef.current.active) return;
     excludeRoiDragRef.current.active = false;
     const { startX, startY, curX, curY } = excludeRoiDragRef.current;
@@ -841,6 +841,17 @@ export default function RecordPage() {
     const rw = Math.abs(curX - startX);
     const rh = Math.abs(curY - startY);
     if (rw > 10 && rh > 10 && excludeRoiEditingIndex != null) {
+      // 기대 이미지가 없으면 자동 캡처
+      const step = steps[excludeRoiEditingIndex];
+      if (!step?.expected_image && scenarioName && screenshotDeviceId) {
+        try {
+          const capRes = await scenarioApi.captureExpectedImage(scenarioName, excludeRoiEditingIndex, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
+          setSteps(prev => prev.map((s, i) => i === excludeRoiEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now() } : s));
+        } catch (e: any) {
+          message.error(e.response?.data?.detail || t('record.cropSaveFailed'));
+          return;
+        }
+      }
       const newRoi = { x: rx, y: ry, width: rw, height: rh };
       if (excludeRoiSelectedIdx != null) {
         // Replace selected region
@@ -863,7 +874,7 @@ export default function RecordPage() {
       // Redraw canvas with updated regions after state update
       setTimeout(() => drawExcludeRoiCanvas(), 50);
     }
-  }, [excludeRoiEditingIndex, excludeRoiSelectedIdx, drawExcludeRoiCanvas]);
+  }, [excludeRoiEditingIndex, excludeRoiSelectedIdx, drawExcludeRoiCanvas, steps, scenarioName, screenshotDeviceId, isScreenHkmc, hasMultiDisplay, screenType]);
 
   const removeExcludeRoi = useCallback((stepIdx: number, roiIdx: number) => {
     setSteps(prev => prev.map((s, i) => {
