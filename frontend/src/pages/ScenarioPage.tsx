@@ -124,6 +124,55 @@ export default function ScenarioPage() {
   const setRepeatCount = (name: string, val: number) =>
     setRepeatCounts((prev) => ({ ...prev, [name]: val }));
 
+  // 백그라운드 CMD 폴링
+  const bgPollTimers = useRef<ReturnType<typeof setInterval>[]>([]);
+  const startBgPolling = (results: StepResultData[]) => {
+    bgPollTimers.current.forEach(t => clearInterval(t));
+    bgPollTimers.current = [];
+    results.forEach((sr, idx) => {
+      const m = sr.message?.match?.(/\[BG_TASK:(bg_\d+)\]/);
+      if (!m) return;
+      const taskId = m[1];
+      // 즉시 실행 중 표시
+      setStepResults(prev => {
+        const u = [...prev];
+        u[idx] = { ...u[idx], message: `⏳ 백그라운드 명령 실행 중...` };
+        return u;
+      });
+      const poll = setInterval(async () => {
+        try {
+          const r = await scenarioApi.getCmdResult(taskId);
+          if (r.data.status === 'running') return;
+          clearInterval(poll);
+          const stdout = r.data.stdout || '';
+          setStepResults(prev => {
+            const u = [...prev];
+            const step = u[idx];
+            const cmd = step.command || '';
+            if (cmd.startsWith('cmd_check:')) {
+              const em = cmd.match(/\(expect(?:\[(\w+)\])?:\s*(.*)\)$/);
+              const matchMode = em?.[1] || 'contains';
+              const expected = em?.[2] || '';
+              const passed = matchMode === 'exact' ? stdout.trim() === expected.trim() : stdout.includes(expected);
+              u[idx] = { ...step, message: `[CMD_CHECK]\nexpected(${matchMode}): ${expected}\n---\n${stdout}`, status: passed ? step.status : 'fail' };
+            } else {
+              u[idx] = { ...step, message: stdout || `완료 (rc: ${r.data.rc})` };
+            }
+            return u;
+          });
+        } catch {
+          clearInterval(poll);
+          setStepResults(prev => {
+            const u = [...prev];
+            u[idx] = { ...u[idx], message: `[BG_TASK:${taskId}] 결과 소실` };
+            return u;
+          });
+        }
+      }, 1000);
+      bgPollTimers.current.push(poll);
+    });
+  };
+
   // 웹캠 자동 녹화
   const [webcamAutoRecord, setWebcamAutoRecord] = useState(false);
   const webcamBlobsRef = useRef<{ repeatIndex: number; blob: Blob }[]>([]);
@@ -263,7 +312,7 @@ export default function ScenarioPage() {
       }
     };
     window.addEventListener('tab-change', onTabChange);
-    return () => { if (wsRef.current) wsRef.current.close(); window.removeEventListener('tab-change', onTabChange); };
+    return () => { if (wsRef.current) wsRef.current.close(); window.removeEventListener('tab-change', onTabChange); bgPollTimers.current.forEach(t => clearInterval(t)); };
   }, []);
 
   // --- Scenario CRUD ---
@@ -625,6 +674,8 @@ export default function ScenarioPage() {
         setPlaying(false); setPaused(false); setCurrentStepId(null);
         message.success(repeat > 1 ? t('scenario.playCompleteRepeat', { count: String(repeat) }) : t('scenario.playComplete'));
         ws.close();
+        // 백그라운드 CMD 결과 폴링 시작
+        setStepResults(prev => { startBgPolling(prev); return prev; });
         // 웹캠 녹화 종료 + 업로드
         if (doAutoRecord && webcamRecordingActiveRef.current) {
           const resultFilename = msg.result_filename || '';
@@ -793,6 +844,8 @@ export default function ScenarioPage() {
         setPlaying(false); setPaused(false); setPlayingGroupName(null); setCurrentStepId(null);
         message.success(t('scenario.playComplete'));
         ws.close();
+        // 백그라운드 CMD 결과 폴링 시작
+        setStepResults(prev => { startBgPolling(prev); return prev; });
         if (doAutoRecord && webcamRecordingActiveRef.current) {
           const resultFilename = msg.result_filename || '';
           webcam.stopRecordingAuto().then(async (blob) => {
@@ -896,7 +949,14 @@ export default function ScenarioPage() {
     { title: <div>Status<br /><span style={{ fontSize: 11, color: '#888' }}>{t('common.result')}</span></div>, dataIndex: 'status', key: 'status', width: 90, align: 'center' as const, render: (s: string) => s === 'running' ? <Tag color="processing">RUNNING</Tag> : <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
     { title: <div>Delay<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colSetting')}</span></div>, dataIndex: 'delay_ms', key: 'delay', width: 80, align: 'center' as const, render: (ms: number) => ms ? formatDuration(ms) : '-' },
     { title: <div>Duration<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colActual')}</span></div>, dataIndex: 'execution_time_ms', key: 'duration', width: 90, align: 'center' as const, render: (ms: number, r: StepResultData) => r.status === 'running' ? <span style={{ color: '#1677ff' }}>{formatDuration(liveDuration)}</span> : formatDuration(ms) },
-    { title: t('scenario.compare'), key: 'compare', width: 70, align: 'center' as const, render: (_: any, r: StepResultData) => r.status === 'running' ? '-' : (r.expected_image || r.actual_image) ? <Button size="small" onClick={() => setCompareStep(r)}>{t('scenario.compare')}</Button> : '-' },
+    { title: t('scenario.compare'), key: 'compare', width: 70, align: 'center' as const, render: (_: any, r: StepResultData) => {
+      if (r.status === 'running') return '-';
+      const hasCmdMsg = (r.command?.startsWith('cmd_send:') || r.command?.startsWith('cmd_check:')) && r.message;
+      if (r.expected_image || r.actual_image || hasCmdMsg) {
+        return <Button size="small" onClick={() => setCompareStep(r)}>{hasCmdMsg && !r.expected_image ? 'CMD' : t('scenario.compare')}</Button>;
+      }
+      return '-';
+    }},
   ];
 
   const totalTime = (steps: StepResultData[]) => steps.reduce((sum, s) => sum + (s.execution_time_ms || 0), 0);
@@ -1411,73 +1471,154 @@ export default function ScenarioPage() {
         )}
       </Modal>
 
-      {/* ===== 이미지 비교 모달 ===== */}
+      {/* ===== 이미지 비교 / CMD 결과 모달 ===== */}
       <Modal title={t('scenario.stepCompare', { id: String(compareStep?.step_id) })} open={!!compareStep} onCancel={() => setCompareStep(null)} width={1100} footer={null} zIndex={1100}>
-        {compareStep && (
-          <>
-            <Space style={{ marginBottom: 8 }} wrap>
-              <Tag color={statusColor(compareStep.status)}>{compareStep.status.toUpperCase()}</Tag>
-              {compareStep.compare_mode && compareStep.compare_mode !== 'full' && (
-                <Tag color="purple">
-                  {compareStep.compare_mode === 'single_crop' ? t('scenario.singleCrop') : compareStep.compare_mode === 'full_exclude' ? t('scenario.excludeArea') : compareStep.compare_mode === 'multi_crop' ? t('scenario.multiCrop') : compareStep.compare_mode}
-                </Tag>
+        {compareStep && (() => {
+          const _isCmdStep = compareStep.command?.startsWith('cmd_send:') || compareStep.command?.startsWith('cmd_check:');
+          const _msg = compareStep.message || '';
+          const _isCmdCheck = _msg.startsWith('[CMD_CHECK]');
+
+          // CMD 결과 렌더링 함수
+          const renderCmdResult = () => {
+            if (!_isCmdStep || !_msg) return null;
+            if (_isCmdCheck) {
+              const simIdx = _msg.indexOf('\n[SIMILARITY]\n');
+              const cmdPart = simIdx >= 0 ? _msg.substring(0, simIdx) : _msg;
+              const lines = cmdPart.split('\n');
+              const expectLine = lines[1] || '';
+              const sepIdx = lines.indexOf('---');
+              const output = lines.slice(sepIdx + 1).join('\n');
+              const em = expectLine.match(/expected\((.*?)\):\s*(.*)/);
+              const matchMode = em?.[1] || 'contains';
+              const expectedVal = em?.[2] || '';
+              const cmdPassed = matchMode === 'exact' ? output.trim() === expectedVal.trim() : output.includes(expectedVal);
+              // 하이라이트
+              const parts: React.ReactNode[] = [];
+              if (expectedVal && output) {
+                let rem = output; let k = 0;
+                while (rem.length > 0) {
+                  const fi = rem.indexOf(expectedVal);
+                  if (fi === -1) { parts.push(<span key={k}>{rem}</span>); break; }
+                  if (fi > 0) parts.push(<span key={k++}>{rem.substring(0, fi)}</span>);
+                  parts.push(<span key={k++} style={{ background: '#faad14', color: '#000', fontWeight: 'bold', padding: '0 2px', borderRadius: 2 }}>{expectedVal}</span>);
+                  rem = rem.substring(fi + expectedVal.length);
+                }
+              } else { parts.push(<span key={0}>{output}</span>); }
+              return (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ marginBottom: 4, fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Tag color={cmdPassed ? 'green' : 'red'} style={{ margin: 0 }}>CMD {cmdPassed ? 'PASS' : 'FAIL'}</Tag>
+                    <span style={{ color: '#888' }}>{matchMode === 'exact' ? 'Exact' : 'Contains'}:</span>
+                    <strong style={{ color: cmdPassed ? '#52c41a' : '#ff4d4f' }}>{expectedVal}</strong>
+                  </div>
+                  <div style={{
+                    padding: '8px 10px', borderRadius: 4, fontSize: 12, fontFamily: 'monospace',
+                    background: cmdPassed ? '#122010' : '#2a1215',
+                    border: `1px solid ${cmdPassed ? '#274916' : '#5c2024'}`,
+                    color: '#d9d9d9', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 400, overflow: 'auto',
+                  }}>{parts}</div>
+                </div>
+              );
+            }
+            // CMD_SEND 결과
+            return (
+              <div style={{
+                marginBottom: 12, padding: '8px 10px', borderRadius: 4, fontSize: 13, fontFamily: 'monospace',
+                background: '#122010', border: '1px solid #274916', color: '#95de64',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 400, overflow: 'auto',
+              }}>{_msg}</div>
+            );
+          };
+
+          // CMD 전용 (이미지 없음)
+          if (_isCmdStep && _msg && !compareStep.expected_image && !compareStep.actual_image) {
+            return (
+              <>
+                <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Tag color={statusColor(compareStep.status)} style={{ fontSize: 14 }}>{compareStep.status.toUpperCase()}</Tag>
+                  <span style={{ color: '#888', marginLeft: 'auto' }}>Duration: {formatDuration(compareStep.execution_time_ms)}</span>
+                </div>
+                {compareStep.command && (
+                  <div style={{ marginBottom: 8, padding: '6px 10px', background: '#1a1a2e', borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}>
+                    <span style={{ color: '#888' }}>$ </span><span style={{ color: '#e0e0e0' }}>{compareStep.command}</span>
+                  </div>
+                )}
+                {renderCmdResult()}
+              </>
+            );
+          }
+
+          // 이미지 비교 (+ CMD 결과 겸용)
+          return (
+            <>
+              <Space style={{ marginBottom: 8 }} wrap>
+                <Tag color={statusColor(compareStep.status)}>{compareStep.status.toUpperCase()}</Tag>
+                {compareStep.compare_mode && compareStep.compare_mode !== 'full' && (
+                  <Tag color="purple">
+                    {compareStep.compare_mode === 'single_crop' ? t('scenario.singleCrop') : compareStep.compare_mode === 'full_exclude' ? t('scenario.excludeArea') : compareStep.compare_mode === 'multi_crop' ? t('scenario.multiCrop') : compareStep.compare_mode}
+                  </Tag>
+                )}
+                {compareStep.similarity_score != null && <span>{t('scenario.similarity')}: {(compareStep.similarity_score * 100).toFixed(2)}%</span>}
+                {compareStep.match_location && <Tag color="blue">{t('scenario.matchLocation')}: ({compareStep.match_location.x},{compareStep.match_location.y}) {compareStep.match_location.width}x{compareStep.match_location.height}</Tag>}
+                <span style={{ color: '#888' }}>Duration: {formatDuration(compareStep.execution_time_ms)}</span>
+              </Space>
+              {/* CMD 결과 (이미지 비교와 함께 있는 경우) */}
+              {_isCmdStep && _msg && (
+                <div style={{ marginBottom: 8 }}>
+                  <div style={{ marginBottom: 4, padding: '6px 10px', background: '#1a1a2e', borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}>
+                    <span style={{ color: '#888' }}>$ </span><span style={{ color: '#e0e0e0' }}>{compareStep.command}</span>
+                  </div>
+                  {renderCmdResult()}
+                </div>
               )}
-              {compareStep.similarity_score != null && <span>{t('scenario.similarity')}: {(compareStep.similarity_score * 100).toFixed(2)}%</span>}
-              {compareStep.match_location && <Tag color="blue">{t('scenario.matchLocation')}: ({compareStep.match_location.x},{compareStep.match_location.y}) {compareStep.match_location.width}x{compareStep.match_location.height}</Tag>}
-              <span style={{ color: '#888' }}>Duration: {formatDuration(compareStep.execution_time_ms)}</span>
-            </Space>
-            <Row gutter={16}>
-              <Col span={12}>
-                <Card size="small" title={
-                  compareStep.compare_mode === 'full_exclude' ? t('scenario.expectedExclude')
-                  : compareStep.compare_mode === 'multi_crop' ? t('scenario.expectedCrop')
-                  : t('scenario.expectedImage2')
-                }>
-                  {compareStep.expected_image ? (
-                    <Image
-                      src={`${imageUrl(compareStep.expected_annotated_image || compareStep.expected_image)!}?t=${Date.now()}`}
-                      alt="Expected"
-                      style={{ width: '100%' }}
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Card size="small" title={
+                    compareStep.compare_mode === 'full_exclude' ? t('scenario.expectedExclude')
+                    : compareStep.compare_mode === 'multi_crop' ? t('scenario.expectedCrop')
+                    : t('scenario.expectedImage2')
+                  }>
+                    {compareStep.expected_image ? (
+                      <Image
+                        src={`${imageUrl(compareStep.expected_annotated_image || compareStep.expected_image)!}?t=${Date.now()}`}
+                        alt="Expected"
+                        style={{ width: '100%' }}
+                      />
+                    ) : <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>{t('scenario.noImage')}</div>}
+                  </Card>
+                </Col>
+                <Col span={12}>
+                  <Card size="small" title={t('scenario.actualImage')}>
+                    {compareStep.actual_annotated_image ? <Image src={`${imageUrl(compareStep.actual_annotated_image)!}?t=${Date.now()}`} alt="Actual (annotated)" style={{ width: '100%' }} /> : compareStep.actual_image ? <CompareImage src={imageUrl(compareStep.actual_image)!} roi={compareStep.roi} alt="Actual" /> : <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>{t('scenario.noImage')}</div>}
+                  </Card>
+                </Col>
+              </Row>
+              {compareStep.compare_mode === 'multi_crop' && compareStep.sub_results?.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <Card size="small" title={t('scenario.cropDetailResult')}>
+                    <Table
+                      dataSource={compareStep.sub_results}
+                      rowKey={(_r, idx) => `sub-${idx}`}
+                      size="small"
+                      pagination={false}
+                      columns={[
+                        { title: t('scenario.label'), dataIndex: 'label', key: 'label', render: (v: string) => v || '-' },
+                        { title: t('scenario.score'), dataIndex: 'score', key: 'score', width: 100, render: (v: number) => `${(v * 100).toFixed(2)}%` },
+                        { title: t('common.status'), dataIndex: 'status', key: 'status', width: 80, render: (s: string) => <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
+                        { title: t('scenario.matchLocation'), key: 'loc', width: 200, render: (_: any, r: SubResultData) => r.match_location ? `(${r.match_location.x},${r.match_location.y}) ${r.match_location.width}x${r.match_location.height}` : '-' },
+                      ]}
                     />
-                  ) : <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>{t('scenario.noImage')}</div>}
-                </Card>
-              </Col>
-              <Col span={12}>
-                <Card size="small" title={t('scenario.actualImage')}>
-                  {compareStep.actual_annotated_image ? <Image src={`${imageUrl(compareStep.actual_annotated_image)!}?t=${Date.now()}`} alt="Actual (annotated)" style={{ width: '100%' }} /> : compareStep.actual_image ? <CompareImage src={imageUrl(compareStep.actual_image)!} roi={compareStep.roi} alt="Actual" /> : <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>{t('scenario.noImage')}</div>}
-                </Card>
-              </Col>
-            </Row>
-            {compareStep.diff_image && (
-              <div style={{ marginTop: 12 }}>
-                <Card size="small" title={t('scenario.diffHeatmap')}><Image src={`${imageUrl(compareStep.diff_image)!}?t=${Date.now()}`} alt="Diff" style={{ width: '100%' }} /></Card>
-              </div>
-            )}
-            {compareStep.compare_mode === 'multi_crop' && compareStep.sub_results?.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <Card size="small" title={t('scenario.cropDetailResult')}>
-                  <Table
-                    dataSource={compareStep.sub_results}
-                    rowKey={(_r, idx) => `sub-${idx}`}
-                    size="small"
-                    pagination={false}
-                    columns={[
-                      { title: t('scenario.label'), dataIndex: 'label', key: 'label', render: (v: string) => v || '-' },
-                      { title: t('scenario.score'), dataIndex: 'score', key: 'score', width: 100, render: (v: number) => `${(v * 100).toFixed(2)}%` },
-                      { title: t('common.status'), dataIndex: 'status', key: 'status', width: 80, render: (s: string) => <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
-                      { title: t('scenario.matchLocation'), key: 'loc', width: 200, render: (_: any, r: SubResultData) => r.match_location ? `(${r.match_location.x},${r.match_location.y}) ${r.match_location.width}x${r.match_location.height}` : '-' },
-                    ]}
-                  />
-                </Card>
-              </div>
-            )}
-            {compareStep.compare_mode === 'full_exclude' && (
-              <div style={{ marginTop: 12 }}>
-                <Card size="small"><span style={{ color: '#888' }}>{t('scenario.excludeAreaDescription')}</span></Card>
-              </div>
-            )}
-          </>
-        )}
+                  </Card>
+                </div>
+              )}
+              {compareStep.compare_mode === 'full_exclude' && (
+                <div style={{ marginTop: 12 }}>
+                  <Card size="small"><span style={{ color: '#888' }}>{t('scenario.excludeAreaDescription')}</span></Card>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </Modal>
 
       {/* ===== 디바이스 매핑 모달 ===== */}

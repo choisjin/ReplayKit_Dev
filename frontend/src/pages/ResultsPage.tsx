@@ -892,17 +892,6 @@ export default function ResultsPage() {
                 </Card>
               </Col>
             </Row>
-            {compareStep.diff_image && (
-              <div style={{ marginTop: 12 }}>
-                <Card size="small" title={t('results.diffHeatmap')}>
-                  <Image
-                    src={`${imageUrl(compareStep.diff_image)!}?t=${Date.now()}`}
-                    alt="Diff"
-                    style={{ width: '100%' }}
-                  />
-                </Card>
-              </div>
-            )}
             {compareStep.compare_mode === 'full_exclude' && (
               <div style={{ marginTop: 12 }}>
                 <Card size="small" title={t('results.excludeAreaCompare')}>
