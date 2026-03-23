@@ -2,6 +2,7 @@ const translations = {
   ko: {
     // === Common ===
     'common.refresh': '새로고침',
+    'common.reset': '초기화',
     'common.save': '저장',
     'common.delete': '삭제',
     'common.cancel': '취소',
@@ -300,6 +301,8 @@ const translations = {
     'record.expectedImageLabel': '기대 이미지',
     'record.actualResult': '실제 결과',
     'record.matchLocation': '매칭 위치',
+    'record.cropResults': '크롭 비교 결과',
+    'record.label': '라벨',
     'record.diffHeatmap': '차이 히트맵',
     'record.noExpectedImage': '기대이미지가 없어 비교 없이 실행만 완료되었습니다.',
 
@@ -488,6 +491,7 @@ const translations = {
   en: {
     // === Common ===
     'common.refresh': 'Refresh',
+    'common.reset': 'Reset',
     'common.save': 'Save',
     'common.delete': 'Delete',
     'common.cancel': 'Cancel',
@@ -786,6 +790,8 @@ const translations = {
     'record.expectedImageLabel': 'Expected Image',
     'record.actualResult': 'Actual Result',
     'record.matchLocation': 'Match Location',
+    'record.cropResults': 'Crop Comparison Results',
+    'record.label': 'Label',
     'record.diffHeatmap': 'Diff Heatmap',
     'record.noExpectedImage': 'No expected image — executed without comparison.',
 

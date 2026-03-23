@@ -1065,7 +1065,11 @@ export default function ScenarioPage() {
           locale={{ emptyText: t('scenario.noScenarios') }}
           renderItem={(name) => (
             <List.Item
-              onClick={() => setSelectedName(prev => prev === name ? null : name)}
+              onClick={() => {
+                setSelectedName(prev => prev === name ? null : name);
+                // 재생 완료 결과를 초기화하여 선택한 시나리오의 미리보기 표시
+                if (!playing) { setStepResults([]); setPlaybackScenario(null); }
+              }}
               style={{
                 cursor: 'pointer',
                 padding: '6px 12px',

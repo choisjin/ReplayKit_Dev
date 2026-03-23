@@ -19,7 +19,15 @@ const JumpEditorInner = React.memo(({ step, index, steps, onUpdate, t }: {
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
 }) => (
   <Space direction="vertical" size={4} style={{ padding: 4 }}>
-    <div style={{ fontSize: 12, fontWeight: 600 }}>{t('record.conditionalJumpTitle', { index: String(index + 1) })}</div>
+    <div style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+      {t('record.conditionalJumpTitle', { index: String(index + 1) })}
+      {(step.on_pass_goto != null || step.on_fail_goto != null) && (
+        <Button size="small" type="link" danger style={{ padding: 0, fontSize: 11, height: 'auto' }}
+          onClick={() => { onUpdate(index, 'on_pass_goto', null); onUpdate(index, 'on_fail_goto', null); }}>
+          {t('common.reset')}
+        </Button>
+      )}
+    </div>
     <Space size={4}>
       <Tag color="green" style={{ margin: 0 }}>Pass →</Tag>
       <Select
@@ -2758,13 +2766,36 @@ export default function RecordPage() {
                 </Col>
               )}
             </Row>
-            {testResult.diff_image && (
+            {/* Multi-crop sub_results 테이블 */}
+            {testResult.compare_mode === 'multi_crop' && testResult.sub_results?.length > 0 && (
               <div style={{ marginTop: 12 }}>
-                <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>{t('record.diffHeatmap')}</div>
-                <Image
-                  src={`/screenshots/${testResult.diff_image}?t=${Date.now()}`}
-                  style={{ width: '100%', borderRadius: 4, border: '1px solid #333' }}
-                />
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{t('record.cropResults')}</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #303030' }}>
+                      <th style={{ padding: '4px 8px', textAlign: 'left' }}>#</th>
+                      <th style={{ padding: '4px 8px', textAlign: 'left' }}>{t('record.label')}</th>
+                      <th style={{ padding: '4px 8px', textAlign: 'center' }}>{t('common.status')}</th>
+                      <th style={{ padding: '4px 8px', textAlign: 'right' }}>{t('record.similarityLabel')}</th>
+                      <th style={{ padding: '4px 8px', textAlign: 'right' }}>{t('record.matchLocation')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {testResult.sub_results.map((sr: any, si: number) => (
+                      <tr key={si} style={{ borderBottom: '1px solid #222' }}>
+                        <td style={{ padding: '4px 8px' }}>{si + 1}</td>
+                        <td style={{ padding: '4px 8px' }}>{sr.label || '-'}</td>
+                        <td style={{ padding: '4px 8px', textAlign: 'center' }}>
+                          <Tag color={sr.status === 'pass' ? 'green' : sr.status === 'warning' ? 'orange' : 'red'}>{sr.status.toUpperCase()}</Tag>
+                        </td>
+                        <td style={{ padding: '4px 8px', textAlign: 'right' }}>{(sr.score * 100).toFixed(2)}%</td>
+                        <td style={{ padding: '4px 8px', textAlign: 'right' }}>
+                          {sr.match_location ? `(${sr.match_location.x},${sr.match_location.y}) ${sr.match_location.width}×${sr.match_location.height}` : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
             {!testResult.expected_image && !testResult.actual_image && (
