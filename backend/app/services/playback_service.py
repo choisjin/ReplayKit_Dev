@@ -349,6 +349,26 @@ class PlaybackService:
             await self._run_action(step)
             t2 = time.time()
 
+            # CMD 결과 반영
+            if step.type == StepType.CMD_SEND and hasattr(self, '_last_cmd_result'):
+                stdout, _, _ = self._last_cmd_result
+                step_result.message = stdout[:500] if stdout else ""
+                del self._last_cmd_result
+            elif step.type == StepType.CMD_CHECK and hasattr(self, '_last_cmd_result'):
+                stdout, _, _ = self._last_cmd_result
+                del self._last_cmd_result
+                actual = stdout.strip()
+                expected = step.params.get("expected", "")
+                match_mode = step.params.get("match_mode", "contains")
+                if match_mode == "exact":
+                    passed = actual == expected.strip()
+                else:
+                    passed = expected.strip() in actual
+                step_result.message = f"actual: {actual[:300]}"
+                if not passed:
+                    step_result.status = "fail"
+                    step_result.message += f" | expected({match_mode}): {expected}"
+
             # Wait (중단 가능)
             if await self._interruptible_sleep(step.delay_after_ms / 1000.0):
                 step_result.status = "error"
@@ -846,6 +866,19 @@ class PlaybackService:
                     )
         elif step.type == StepType.WAIT:
             await self._interruptible_sleep(params.get("duration_ms", 1000) / 1000.0)
+        elif step.type in (StepType.CMD_SEND, StepType.CMD_CHECK):
+            cmd = params.get("command", "")
+            background = params.get("background", False)
+            if background:
+                subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                logger.info("[%s] background: %s", step.type.value, cmd)
+            else:
+                timeout = params.get("timeout", 30)
+                loop = asyncio.get_event_loop()
+                stdout, stderr, rc = await loop.run_in_executor(None, _cmd_run_sync, cmd, timeout)
+                logger.info("[%s] rc=%d: %s", step.type.value, rc, cmd)
+                # CMD_CHECK 결과는 _execute_step에서 step_result에 반영
+                self._last_cmd_result = (stdout, stderr, rc)
         else:
             # ADB actions — real_id를 ADB 시리얼(dev.address)로 변환
             adb_serial = real_id
@@ -884,46 +917,6 @@ class PlaybackService:
                 await self.adb.key_event(params["keycode"], serial=adb_serial, display_id=adb_display_id)
             elif step.type == StepType.ADB_COMMAND:
                 await self.adb.run_shell_command(params["command"], serial=adb_serial)
-
-            elif step.type == StepType.CMD_SEND:
-                cmd = params.get("command", "")
-                background = params.get("background", False)
-                if background:
-                    import subprocess as _sp
-                    _sp.Popen(cmd, shell=True, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
-                    logger.info("[CMD_SEND] background: %s", cmd)
-                else:
-                    import subprocess as _sp
-                    loop = asyncio.get_event_loop()
-                    stdout, _, rc = await loop.run_in_executor(
-                        None, lambda: _cmd_run_sync(cmd, timeout=params.get("timeout", 30))
-                    )
-                    logger.info("[CMD_SEND] rc=%d: %s", rc, cmd)
-                    step_result.notes = stdout[:500] if stdout else ""
-
-            elif step.type == StepType.CMD_CHECK:
-                cmd = params.get("command", "")
-                expected = params.get("expected", "")
-                match_mode = params.get("match_mode", "contains")  # "contains" | "exact"
-                background = params.get("background", False)
-                timeout = params.get("timeout", 30)
-                loop = asyncio.get_event_loop()
-                stdout, stderr, rc = await loop.run_in_executor(
-                    None, lambda: _cmd_run_sync(cmd, timeout=timeout)
-                )
-                actual = stdout.strip()
-                if match_mode == "exact":
-                    passed = actual == expected.strip()
-                else:
-                    passed = expected.strip() in actual
-                step_result.notes = f"actual: {actual[:300]}"
-                if not passed:
-                    step_result.status = "fail"
-                    step_result.notes += f" | expected({match_mode}): {expected}"
-                    logger.warning("[CMD_CHECK] FAIL: expected(%s)='%s', actual='%s'",
-                                   match_mode, expected, actual[:200])
-                else:
-                    logger.info("[CMD_CHECK] PASS: %s", cmd)
 
     async def _save_result(self, result: ScenarioResult) -> str:
         """Save execution result to JSON."""
