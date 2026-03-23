@@ -74,9 +74,11 @@ interface Step {
   on_pass_goto?: number | null;
   on_fail_goto?: number | null;
   roi?: ROI | null;
+  similarity_threshold?: number;
   compare_mode?: 'full' | 'single_crop' | 'full_exclude' | 'multi_crop';
   exclude_rois?: ROI[];
   expected_images?: CropItem[];
+  screenshot_device_id?: string | null;
   _imageVer?: number; // 미리보기 캐시 버스팅용 (프론트엔드 전용)
 }
 
@@ -524,7 +526,7 @@ export default function RecordPage() {
     if (!scenarioName || !screenshotDeviceId) return;
     try {
       const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
-      setSteps(prev => prev.map((s, i) => i === stepIdx ? { ...s, expected_image: res.data.filename, _imageVer: Date.now() } : s));
+      setSteps(prev => prev.map((s, i) => i === stepIdx ? { ...s, expected_image: res.data.filename, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now() } : s));
       message.success(t('record.expectedSaved', { index: stepIdx + 1 }));
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('record.expectedImageSaveFailed'));
@@ -629,7 +631,7 @@ export default function RecordPage() {
         const res = await scenarioApi.captureExpectedImage(
           scenarioName, captureStepIndex, screenshotDeviceId, crop, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined,
         );
-        setSteps(prev => prev.map((s, i) => i === captureStepIndex ? { ...s, expected_image: res.data.filename, roi: crop, _imageVer: Date.now() } : s));
+        setSteps(prev => prev.map((s, i) => i === captureStepIndex ? { ...s, expected_image: res.data.filename, roi: crop, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now() } : s));
         message.success(t('record.cropExpectedSaved', { index: captureStepIndex + 1, size: `${rw}×${rh}` }));
         setCaptureModalOpen(false);
         setCaptureStepIndex(null);
@@ -758,7 +760,6 @@ export default function RecordPage() {
   const openExcludeRoiModal = useCallback(async (index: number) => {
     setExcludeRoiEditingIndex(index);
     setExcludeRoiSelectedIdx(null);
-    // 현재 화면 스냅샷만 (저장은 영역 확정 시)
     excludeRoiScreenshotRef.current = await snapshotScreenshot();
     setExcludeRoiModalOpen(true);
   }, [snapshotScreenshot]);
@@ -890,7 +891,6 @@ export default function RecordPage() {
   const openMultiCropModal = useCallback(async (stepIdx: number) => {
     setMultiCropEditingIndex(stepIdx);
     setMultiCropSelectedIdx(null);
-    // 현재 화면 스냅샷만 (저장은 크롭 확정 시)
     multiCropScreenshotRef.current = await snapshotScreenshot();
     setMultiCropModalOpen(true);
   }, [snapshotScreenshot]);
@@ -932,9 +932,12 @@ export default function RecordPage() {
     const ry = Math.min(startY, curY);
     const rw = Math.abs(curX - startX);
     const rh = Math.abs(curY - startY);
-    if (rw > 10 && rh > 10 && multiCropEditingIndex != null && scenarioName) {
+    if (rw > 10 && rh > 10 && multiCropEditingIndex != null && scenarioName && screenshotDeviceId) {
       const crop = { x: rx, y: ry, width: rw, height: rh };
       try {
+        // 현재 화면으로 기대이미지 갱신 (모달 스냅샷과 좌표 일치 보장)
+        const capRes = await scenarioApi.captureExpectedImage(scenarioName, multiCropEditingIndex, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
+        setSteps(prev => prev.map((s, i) => i === multiCropEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now() } : s));
         const replaceIdx = multiCropSelectedIdx ?? undefined;
         const res = await scenarioApi.cropFromExpected(scenarioName, multiCropEditingIndex, crop, '', replaceIdx);
         const roi: ROI = res.data.roi;
@@ -960,7 +963,7 @@ export default function RecordPage() {
         message.error(e.response?.data?.detail || t('record.cropSaveFailed'));
       }
     }
-  }, [multiCropEditingIndex, multiCropSelectedIdx, scenarioName, drawMultiCropCanvas]);
+  }, [multiCropEditingIndex, multiCropSelectedIdx, scenarioName, screenshotDeviceId, isScreenHkmc, hasMultiDisplay, screenType, drawMultiCropCanvas]);
 
   const removeMultiCropItem = useCallback((cropIdx: number) => {
     if (multiCropEditingIndex == null) return;
@@ -1185,7 +1188,8 @@ export default function RecordPage() {
         description,
         steps: reindexed,
       });
-      setSteps(reindexed);
+      // _imageVer 복원 (캐시 버스팅 유지)
+      setSteps(reindexed.map((s, i) => ({ ...s, _imageVer: steps[i]?._imageVer })));
       setScenarioName(newName);
       message.success(t('common.saveComplete'));
       fetchSavedScenarios();

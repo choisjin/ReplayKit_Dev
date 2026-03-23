@@ -719,6 +719,22 @@ class PlaybackService:
             return None
         if step.type == StepType.WAIT and not step.expected_image:
             return None
+
+        # screenshot_device_id가 저장되어 있으면 해당 디바이스 우선 사용
+        if step.screenshot_device_id:
+            ss_dev = self.dm.get_device(step.screenshot_device_id)
+            if ss_dev:
+                if ss_dev.type == "hkmc6th":
+                    screen_type = step.screen_type or "front_center"
+                    return {"type": "hkmc6th", "id": ss_dev.id, "screen_type": screen_type}
+                if ss_dev.type == "vision_camera":
+                    return {"type": "vision_camera", "id": ss_dev.id}
+                if ss_dev.type == "adb":
+                    result = {"type": "adb", "id": ss_dev.id, "serial": ss_dev.address}
+                    if step.screen_type:
+                        result["screen_type"] = step.screen_type
+                    return result
+
         real_id = self._resolve_real_device_id(step)
         if real_id:
             dev = self.dm.get_device(real_id)

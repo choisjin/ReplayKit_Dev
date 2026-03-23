@@ -93,6 +93,7 @@ class Step(BaseModel):
     compare_mode: CompareMode = CompareMode.FULL
     exclude_rois: list[ROI] = Field(default_factory=list)  # regions to exclude (full_exclude mode)
     expected_images: list[CropItem] = Field(default_factory=list)  # multi_crop mode
+    screenshot_device_id: Optional[str] = None  # 이미지 비교용 디바이스 (wait 등 디바이스 비종속 스텝에서 사용)
 
 
 class Scenario(BaseModel):

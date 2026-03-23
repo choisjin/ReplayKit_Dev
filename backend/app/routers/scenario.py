@@ -246,6 +246,13 @@ async def capture_expected_image(req: CaptureExpectedImageRequest):
             if not hkmc:
                 raise HTTPException(status_code=400, detail=f"HKMC device {req.device_id} not connected")
             png_bytes = await hkmc.async_screencap_bytes(screen_type=req.screen_type, fmt="png")
+        elif dev and dev.type == "vision_camera":
+            cam = dm.get_vision_camera(req.device_id)
+            if not cam or not cam.IsConnected():
+                raise HTTPException(status_code=400, detail=f"VisionCamera {req.device_id} not connected")
+            import asyncio
+            loop = asyncio.get_event_loop()
+            png_bytes = await loop.run_in_executor(None, cam.CaptureBytes, "png")
         else:
             adb_serial = dev.address if dev else req.device_id
             # screen_type → SF display ID 변환
@@ -257,6 +264,8 @@ async def capture_expected_image(req: CaptureExpectedImageRequest):
                 pass
             sf_did = resolve_sf_display_id(dev.info if dev else None, adb_did)
             png_bytes = await adb_svc.screencap_bytes(serial=adb_serial, sf_display_id=sf_did)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Screenshot failed: {e}")
 
@@ -286,8 +295,15 @@ async def capture_expected_image(req: CaptureExpectedImageRequest):
                        width=int(req.crop["width"]), height=int(req.crop["height"])) if req.crop else None
         step.expected_images.append(CropItem(image=filename, label=req.crop_label, roi=crop_roi))
     else:
-        # Single image (full or single_crop)
-        filename = f"{scenario_name}_step_{step.id:03d}.png"
+        # Single image (full or single_crop) — 타임스탬프 포함으로 캐시 충돌 방지
+        import time as _time
+        ts = int(_time.time() * 1000) % 1000000
+        filename = f"{scenario_name}_step_{step.id:03d}_{ts}.png"
+        # 이전 기대이미지 파일 삭제
+        if step.expected_image and step.expected_image != filename:
+            old_file = save_dir / step.expected_image
+            if old_file.exists():
+                old_file.unlink(missing_ok=True)
         (save_dir / filename).write_bytes(png_bytes)
         step.expected_image = filename
         if req.crop:
@@ -295,6 +311,9 @@ async def capture_expected_image(req: CaptureExpectedImageRequest):
                            width=int(req.crop["width"]), height=int(req.crop["height"]))
         else:
             step.roi = None
+
+    # 스크린샷 디바이스 기록 (재생/테스트 시 동일 디바이스로 캡처)
+    step.screenshot_device_id = req.device_id
 
     await recording_svc.save_scenario(scenario)
     return {"status": "ok", "filename": filename, "step_id": step.id}
@@ -357,8 +376,16 @@ async def crop_from_expected(req: CropFromExpectedRequest):
     if img is None:
         raise HTTPException(status_code=400, detail="Cannot read expected image")
 
+    img_h, img_w = img.shape[:2]
     x, y = int(req.crop["x"]), int(req.crop["y"])
     w, h = int(req.crop["width"]), int(req.crop["height"])
+    # 범위 클램핑
+    x = max(0, min(x, img_w - 1))
+    y = max(0, min(y, img_h - 1))
+    w = min(w, img_w - x)
+    h = min(h, img_h - y)
+    if w <= 0 or h <= 0:
+        raise HTTPException(status_code=400, detail=f"Crop region out of bounds (image: {img_w}x{img_h}, crop: x={x} y={y} w={w} h={h})")
     cropped = img[y:y + h, x:x + w]
 
     save_dir = SCREENSHOTS_DIR / req.scenario_name
