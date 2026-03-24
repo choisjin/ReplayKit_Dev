@@ -393,6 +393,11 @@ class ServerManagerApp:
         # 1) 로컬 변경 초기화 + git pull (git 저장소인 경우만)
         git_dir = os.path.join(PROJECT_ROOT, ".git")
         if os.path.isdir(git_dir):
+            # 로컬 변경 초기화 (빌드 산출물 .pyd 등이 pull과 충돌하는 것 방지)
+            log_callback("[동기화] 로컬 변경 초기화...")
+            _run_cmd(["git", "checkout", "--", "."], timeout=15)
+            _run_cmd(["git", "clean", "-fd", "frontend/dist/assets/"], timeout=15)
+
             log_callback("[동기화] git pull ...")
             code, out = _run_cmd(["git", "pull", "--ff-only", "origin", "main"], timeout=60)
             if out:

@@ -358,6 +358,17 @@ def step_package():
         if src.exists():
             shutil.copy2(str(src), str(DIST_DIR / f))
 
+    # ── DLT Viewer SDK 복사 ──
+    src_dlt = PROJECT_ROOT / "DltViewerSDK_21.1.3_ver"
+    dst_dlt = DIST_DIR / "DltViewerSDK_21.1.3_ver"
+    if src_dlt.is_dir():
+        if dst_dlt.exists():
+            shutil.rmtree(str(dst_dlt))
+        shutil.copytree(str(src_dlt), str(dst_dlt))
+        print(f"  DltViewerSDK 복사 완료")
+    else:
+        print(f"  [Note] DltViewerSDK not found - skipped")
+
     # ── docs 복사 ──
     src_docs = PROJECT_ROOT / "docs"
     dst_docs = DIST_DIR / "docs"

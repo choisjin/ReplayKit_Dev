@@ -31,12 +31,13 @@ Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Types]
-Name: "standard"; Description: "Standard"
-Name: "full"; Description: "Full (+ Vision Camera)"
+Name: "standard"; Description: "Standard (+ DLT Viewer)"
+Name: "full"; Description: "Full (+ DLT Viewer + Vision Camera)"
 Name: "custom"; Description: "Custom"; Flags: iscustom
 
 [Components]
 Name: "main"; Description: "ReplayKit Core"; Types: standard full custom; Flags: fixed
+Name: "dltsdk"; Description: "DLT Viewer SDK (DLT log monitoring)"; Types: standard full
 Name: "vimbax"; Description: "Vimba X SDK (Vision Camera support)"; Types: full
 
 [Files]
@@ -44,6 +45,8 @@ Name: "vimbax"; Description: "Vimba X SDK (Vision Camera support)"; Types: full
 Source: "{#DistDir}\*"; DestDir: "{app}"; Excludes: "node-*.msi,VimbaX_Setup*,python-3.10.4-amd64.exe"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: main
 ; VC++ Runtime (temp)
 Source: "{#DistDir}\vcredist_x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
+; DLT Viewer SDK (directory copy, only if component selected)
+Source: "{#DistDir}\DltViewerSDK_21.1.3_ver\*"; DestDir: "{app}\DltViewerSDK_21.1.3_ver"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: dltsdk
 ; Vimba X SDK installer (temp, only if component selected)
 Source: "{#DistDir}\VimbaX_Setup*.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Components: vimbax
 

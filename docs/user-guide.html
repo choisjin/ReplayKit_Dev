@@ -527,12 +527,13 @@
 <table>
   <tr><th>항목</th><th>요구사항</th></tr>
   <tr><td>운영체제</td><td>Windows 10 이상 (64bit)</td></tr>
-  <tr><td>Python</td><td>3.10 이상 (미설치 시 설치 안내 제공)</td></tr>
+  <tr><td>Python</td><td>내장 Python 포함 (별도 설치 불필요)</td></tr>
   <tr><td>Git</td><td>미설치 시 설치 안내 제공 (자동 업데이트에 필요)</td></tr>
-  <tr><td>Node.js</td><td>v18 이상 (개발 모드에서만 필요, 미설치 시 안내 제공)</td></tr>
+  <tr><td>Node.js</td><td>개발 모드에서만 필요 (배포판에서는 불필요)</td></tr>
   <tr><td>브라우저</td><td>Chrome, Edge 등 최신 브라우저</td></tr>
-  <tr><td>디바이스</td><td>USB 디버깅이 켜진 Android 기기, HKMC IVI, 또는 GigE Vision 카메라</td></tr>
+  <tr><td>디바이스</td><td>USB 디버깅이 켜진 Android 기기, HKMC IVI, GigE Vision 카메라, 또는 DLT 지원 ECU</td></tr>
   <tr><td>Vimba X SDK</td><td>Vision Camera 사용 시 필요 (설치 프로그램에서 선택 가능)</td></tr>
+  <tr><td>DLT Viewer SDK</td><td>DLT 로그 GUI 뷰어 사용 시 필요 (설치 프로그램에서 선택 가능)</td></tr>
 </table>
 
 <h3 id="install-setup">설치 방법</h3>
@@ -543,17 +544,13 @@
   <li>설치 경로 확인 (기본: <code>C:\ReplayKit</code>)</li>
   <li><strong>구성 요소 선택</strong>:
     <ul>
-      <li><strong>ReplayKit Core</strong> — 기본 (필수)</li>
-      <li><strong>Vimba X SDK</strong> — Vision Camera를 사용하는 경우 체크</li>
+      <li><strong>ReplayKit Core</strong> — 기본 (필수, 내장 Python 포함)</li>
+      <li><strong>DLT Viewer SDK</strong> — DLT 로그 뷰어 GUI를 사용하는 경우 체크 (Standard에 기본 포함)</li>
+      <li><strong>Vimba X SDK</strong> — Vision Camera를 사용하는 경우 체크 (Full 선택 시 포함)</li>
     </ul>
   </li>
   <li>파일 복사가 완료되면 <strong>환경 설정 창</strong>(setup.bat)이 자동으로 열립니다</li>
-  <li><strong>Python 3.10이 없는 경우</strong> — 설치 프로그램이 자동으로 실행됩니다:
-    <ul>
-      <li>Python 설치 화면에서 <strong>"Add Python to PATH"를 반드시 체크</strong>하세요</li>
-      <li>설치를 완료한 뒤 <strong>아무 키를 눌러</strong> 다음 단계로 진행합니다</li>
-    </ul>
-  </li>
+  <li>Python은 내장(Embedded) 방식으로 포함되어 있어 <strong>별도 설치가 필요 없습니다</strong></li>
   <li><strong>Git이 없는 경우</strong> — Git 설치 프로그램이 자동으로 실행됩니다:
     <ul>
       <li>기본 설정 그대로 Next를 클릭하여 설치하세요</li>
@@ -564,27 +561,31 @@
   <li>설치 완료 후 ReplayKit을 실행합니다</li>
 </ol>
 
-<div class="callout callout-warning">
-  <strong>⚠️ "Add Python to PATH" 필수</strong>
-  Python 설치 시 하단의 <strong>"Add Python 3.10 to PATH"</strong> 체크박스를 반드시 선택하세요.
-  이 옵션이 빠지면 ReplayKit이 Python을 찾지 못합니다.
+<div class="callout callout-info">
+  <strong>💡 내장 Python (Embedded Python)</strong>
+  배포판은 Python 3.10 Embedded를 포함하고 있어 시스템에 Python을 따로 설치할 필요가 없습니다.
+  setup.bat 실행 시 자동으로 내장 Python에 pip 및 필요 패키지를 설치합니다.
+  개발 환경에서는 시스템 Python 3.10 + venv를 사용할 수도 있습니다.
 </div>
 
 <h4>방법 2: 수동 설치 (개발 환경)</h4>
 <pre><code># 프로젝트 폴더에서 초기 설정 (최초 1회)
 setup.bat
 
-# 이 명령이 venv 생성, Python 패키지, Node 패키지를 모두 설치합니다</code></pre>
+# 내장 Python이 없으면 시스템 Python 3.10 + venv를 자동 생성합니다
+# venv 생성, Python 패키지, Node 패키지를 모두 설치합니다</code></pre>
 
 <h3 id="install-run">실행 방법</h3>
 
-<h4>방법 1: 서버 관리 GUI (권장)</h4>
-<pre><code># 프로젝트 폴더에서 실행
-python server.py</code></pre>
+<h4>배포판 실행</h4>
+<p><code>ReplayKit.bat</code>을 더블클릭하면 서버 관리 GUI가 실행됩니다.</p>
+
+<h4>개발 환경: 서버 관리 GUI</h4>
+<pre><code>python server.py</code></pre>
 <p>Tkinter 기반 GUI 창이 열리며, 백엔드와 프론트엔드를 동시에 관리할 수 있습니다.
 서버가 준비되면 <strong>브라우저가 자동으로 열립니다.</strong></p>
 
-<h4>방법 2: 수동 실행</h4>
+<h4>개발 환경: 수동 실행</h4>
 <pre><code># 터미널 1: 백엔드
 venv\Scripts\activate
 python -m uvicorn backend.app.main:app --reload --port 8000
@@ -603,6 +604,7 @@ npm run dev</code></pre>
 <h3 id="install-update">업데이트</h3>
 <p>ReplayKit은 Git 기반 자동 업데이트를 지원합니다. 서버 관리 GUI의 <strong>동기화+시작</strong> 버튼을 클릭하면:</p>
 <ol>
+  <li>로컬 변경사항 자동 초기화 (빌드 파일 충돌 방지)</li>
   <li>Git으로 최신 코드를 자동 다운로드 (git pull)</li>
   <li>변경된 Python 패키지 자동 설치</li>
   <li>서버 자동 재시작 후 브라우저 오픈</li>

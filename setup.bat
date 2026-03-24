@@ -151,6 +151,12 @@ if defined VMBPY_WHL (
 ) else (
     echo       [Note] Vimba X SDK not found - VisionCamera IP features unavailable
 )
+:: DLT Viewer SDK
+if exist "DltViewerSDK_21.1.3_ver\dlt-viewer.exe" (
+    echo       DLT Viewer SDK found
+) else (
+    echo       [Note] DLT Viewer SDK not found - DLT Viewer GUI unavailable
+)
 
 :: -------------------------------------------------------
 :: [4/5] Node.js (dev mode only)
