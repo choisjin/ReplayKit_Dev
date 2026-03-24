@@ -263,6 +263,9 @@ if not exist "git_remote.txt" goto :git_done
 echo [5/5] Setting up git repository...
 set /p GIT_REMOTE=<git_remote.txt
 git init -b main
+:: 관리자 설치 → 일반 사용자 실행 시 dubious ownership 방지
+set "SAFE_DIR=%CD:\=/%"
+git config --global --add safe.directory "%SAFE_DIR%"
 git remote add origin "%GIT_REMOTE%"
 git fetch --depth 1 origin main
 git branch --set-upstream-to=origin/main main
