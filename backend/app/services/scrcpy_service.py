@@ -324,8 +324,10 @@ class ScrcpyStream:
                     self._video_width, self._video_height = w, h
                     logger.info("scrcpy v1 connected: %s (%dx%d)", device_name, w, h)
 
-            # PyAV codec context
-            codec = av.CodecContext.create("h264", "r")
+            # PyAV codec context (JPEG 생성용, 없으면 H.264 raw만 전송)
+            codec = None
+            if HAS_AV:
+                codec = av.CodecContext.create("h264", "r")
 
             while self._running:
                 # 프레임 메타: PTS_FLAGS(8) + SIZE(4)
@@ -352,26 +354,21 @@ class ScrcpyStream:
                     except (asyncio.QueueFull, RuntimeError):
                         pass  # 소비자가 느리면 프레임 드롭
 
-                # 디코딩
-                try:
-                    packet = av.Packet(h264_data)
-                    frames = codec.decode(packet)
-                    for frame in frames:
-                        # 해상도 기록 (첫 프레임)
-                        if not self._video_width:
-                            self._video_width = frame.width
-                            self._video_height = frame.height
-                        # frame → PIL Image → JPEG bytes
-                        img = frame.to_image()
-                        buf = io.BytesIO()
-                        img.save(buf, format="JPEG", quality=80)
-                        self._set_frame(buf.getvalue())
-                except av.error.InvalidDataError:
-                    # 디코더가 아직 키프레임을 받지 못한 경우
-                    continue
-                except Exception as e:
-                    logger.debug("Decode error: %s", e)
-                    continue
+                # PyAV 디코딩 → JPEG (있을 때만, screencap 폴백용)
+                if codec:
+                    try:
+                        packet = av.Packet(h264_data)
+                        frames = codec.decode(packet)
+                        for frame in frames:
+                            if not self._video_width:
+                                self._video_width = frame.width
+                                self._video_height = frame.height
+                            img = frame.to_image()
+                            buf = io.BytesIO()
+                            img.save(buf, format="JPEG", quality=80)
+                            self._set_frame(buf.getvalue())
+                    except Exception:
+                        continue
         except Exception as e:
             if self._running:
                 logger.error("scrcpy decode loop error: %s", e)
@@ -451,9 +448,7 @@ class ScrcpyManager:
         self._lock = threading.Lock()
 
     def is_available(self) -> bool:
-        """scrcpy 사용 가능 여부 (PyAV + scrcpy-server 존재)."""
-        if not HAS_AV:
-            return False
+        """scrcpy 사용 가능 여부 (scrcpy-server 존재, PyAV 없어도 H.264 raw 전송 가능)."""
         return _find_scrcpy_server() is not None
 
     async def acquire_stream(self, serial: str, display_id: int = 0,
@@ -483,9 +478,11 @@ class ScrcpyManager:
         # Lock 밖에서 시작 (블로킹 방지)
         stream.start(loop)
 
-        # 첫 프레임 대기 (최대 5초)
+        # 첫 데이터 대기 (최대 5초) — JPEG 또는 H.264 큐
         for _ in range(50):
             if stream.get_latest_frame() is not None:
+                return stream
+            if stream._h264_queue and not stream._h264_queue.empty():
                 return stream
             if not stream.is_running:
                 # 시작 실패
@@ -495,7 +492,7 @@ class ScrcpyManager:
                 return None
             await asyncio.sleep(0.1)
 
-        # 5초 내 프레임 미수신 — 실패 처리
+        # 5초 내 데이터 미수신 — 실패 처리
         logger.warning("scrcpy stream for %s:%d timed out waiting for first frame", serial, display_id)
         stream.stop()
         with self._lock:
