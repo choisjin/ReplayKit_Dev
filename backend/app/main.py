@@ -281,6 +281,8 @@ async def websocket_screen_mirror(websocket: WebSocket):
                         from PIL import Image as _PILImage
                         import io as _io
                         img = _PILImage.open(_io.BytesIO(png_bytes))
+                        if img.mode == "RGBA":
+                            img = img.convert("RGB")
                         buf = _io.BytesIO()
                         img.save(buf, format="JPEG", quality=85)
                         await websocket.send_bytes(buf.getvalue())

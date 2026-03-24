@@ -314,15 +314,27 @@ class ScrcpyStream:
             else:
                 logger.warning("scrcpy control socket failed for %s — touch injection disabled", self.serial)
 
+            # 디바이스 이름 (v1/v2 공통: 64바이트, null 패딩)
+            name_data = self._recv_exact(sock, 64)
+            device_name = name_data.rstrip(b'\x00').decode(errors='replace') if name_data else "unknown"
+
             if is_v1:
-                # v1: 디바이스 이름 64바이트 + 해상도 4바이트(width 2 + height 2)
-                name_data = self._recv_exact(sock, 64)
+                # v1: 해상도 4바이트(width uint16 + height uint16)
                 size_data = self._recv_exact(sock, 4)
-                if name_data and size_data:
+                if size_data:
                     w, h = struct.unpack(">HH", size_data)
-                    device_name = name_data.rstrip(b'\x00').decode(errors='replace')
                     self._video_width, self._video_height = w, h
                     logger.info("scrcpy v1 connected: %s (%dx%d)", device_name, w, h)
+            else:
+                # v2: codec ID(4B) + width(4B) + height(4B) = 12바이트
+                v2_header = self._recv_exact(sock, 12)
+                if v2_header:
+                    codec_id = v2_header[:4]
+                    w = struct.unpack(">I", v2_header[4:8])[0]
+                    h = struct.unpack(">I", v2_header[8:12])[0]
+                    self._video_width, self._video_height = w, h
+                    logger.info("scrcpy v2 connected: %s codec=%s (%dx%d)",
+                                device_name, codec_id.decode(errors='replace'), w, h)
 
             # PyAV codec context (JPEG 생성용, 없으면 H.264 raw만 전송)
             codec = None
