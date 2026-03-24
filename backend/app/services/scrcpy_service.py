@@ -108,6 +108,10 @@ class ScrcpyStream:
         self._scid = random.randint(1, 0x7FFFFFFF)
         self._port = 0
         self._server_proc = None
+        self._control_sock: Optional[socket.socket] = None
+        self._h264_queue: Optional[asyncio.Queue] = None
+        self._video_width: int = 0
+        self._video_height: int = 0
 
     @property
     def is_running(self) -> bool:
@@ -127,11 +131,21 @@ class ScrcpyStream:
             pass
         return self.get_latest_frame()
 
+    async def async_get_h264_frame(self, timeout: float = 0.1) -> Optional[bytes]:
+        """H.264 raw NAL 유닛을 큐에서 꺼내 반환."""
+        if not self._h264_queue:
+            return None
+        try:
+            return await asyncio.wait_for(self._h264_queue.get(), timeout=timeout)
+        except asyncio.TimeoutError:
+            return None
+
     def start(self, loop: asyncio.AbstractEventLoop) -> None:
         """scrcpy 서버 시작 및 수신 스레드 실행."""
         if self._running:
             return
         self._loop = loop
+        self._h264_queue = asyncio.Queue(maxsize=120)
         self._running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -139,6 +153,12 @@ class ScrcpyStream:
     def stop(self) -> None:
         """스트림 종료."""
         self._running = False
+        if self._control_sock:
+            try:
+                self._control_sock.close()
+            except Exception:
+                pass
+            self._control_sock = None
         if self._server_proc:
             try:
                 self._server_proc.kill()
@@ -217,7 +237,7 @@ class ScrcpyStream:
             f"CLASSPATH=/data/local/tmp/scrcpy-server "
             f"app_process / com.genymobile.scrcpy.Server 2.7 "
             f"tunnel_forward=true scid={scid_hex} "
-            f"audio=false control=false cleanup=false power_off_on_close=false "
+            f"audio=false control=true cleanup=false power_off_on_close=false "
             f"display_id={self.display_id} max_fps={self.max_fps} "
             f"video_bit_rate={self.bit_rate} video_codec=h264 "
             f"max_size={self.max_size} "
@@ -256,7 +276,7 @@ class ScrcpyStream:
             f"app_process / com.genymobile.scrcpy.Server "
             f"1.25 0 {self.max_size} {self.bit_rate} {self.max_fps} "
             f"-1 true tunnel_forward=true "
-            f"control=false"
+            f"control=true"
         )
         self._server_proc = subprocess.Popen(
             v1_cmd, shell=True,
@@ -286,6 +306,14 @@ class ScrcpyStream:
             if not dummy:
                 raise RuntimeError("No dummy byte received")
 
+            # 컨트롤 소켓 연결 (control=true)
+            ctrl = self._connect_video_socket(retries=5, delay=0.3)
+            if ctrl:
+                self._control_sock = ctrl
+                logger.info("scrcpy control socket connected for %s", self.serial)
+            else:
+                logger.warning("scrcpy control socket failed for %s — touch injection disabled", self.serial)
+
             if is_v1:
                 # v1: 디바이스 이름 64바이트 + 해상도 4바이트(width 2 + height 2)
                 name_data = self._recv_exact(sock, 64)
@@ -293,6 +321,7 @@ class ScrcpyStream:
                 if name_data and size_data:
                     w, h = struct.unpack(">HH", size_data)
                     device_name = name_data.rstrip(b'\x00').decode(errors='replace')
+                    self._video_width, self._video_height = w, h
                     logger.info("scrcpy v1 connected: %s (%dx%d)", device_name, w, h)
 
             # PyAV codec context
@@ -314,11 +343,24 @@ class ScrcpyStream:
                 if not h264_data:
                     break
 
+                # H.264 raw 데이터 큐 (브라우저 직접 디코딩용)
+                if self._h264_queue and self._loop and not self._loop.is_closed():
+                    try:
+                        self._loop.call_soon_threadsafe(
+                            self._h264_queue.put_nowait, h264_data
+                        )
+                    except (asyncio.QueueFull, RuntimeError):
+                        pass  # 소비자가 느리면 프레임 드롭
+
                 # 디코딩
                 try:
                     packet = av.Packet(h264_data)
                     frames = codec.decode(packet)
                     for frame in frames:
+                        # 해상도 기록 (첫 프레임)
+                        if not self._video_width:
+                            self._video_width = frame.width
+                            self._video_height = frame.height
                         # frame → PIL Image → JPEG bytes
                         img = frame.to_image()
                         buf = io.BytesIO()
@@ -335,6 +377,52 @@ class ScrcpyStream:
                 logger.error("scrcpy decode loop error: %s", e)
         finally:
             sock.close()
+            if self._control_sock:
+                try:
+                    self._control_sock.close()
+                except Exception:
+                    pass
+                self._control_sock = None
+
+    def inject_touch(self, action: int, x: int, y: int,
+                     width: int, height: int) -> bool:
+        """scrcpy 컨트롤 소켓으로 터치 이벤트 전송.
+
+        action: 0=DOWN, 1=UP, 2=MOVE
+        x, y: 터치 좌표 (디바이스 해상도 기준)
+        width, height: 디바이스 화면 크기
+        """
+        if not self._control_sock:
+            return False
+        try:
+            # INJECT_TOUCH_EVENT (type=2)
+            msg = struct.pack('>BBqIIHHHII',
+                2, action, -1,           # type, action, pointer_id
+                int(x), int(y),          # position
+                int(width), int(height), # screen size
+                0xFFFF, 1, 1,            # pressure, action_button, buttons
+            )
+            self._control_sock.sendall(msg)
+            return True
+        except Exception as e:
+            logger.debug("inject_touch error: %s", e)
+            return False
+
+    def inject_keycode(self, keycode: int, action: int = 0,
+                       repeat: int = 0, metastate: int = 0) -> bool:
+        """키코드 이벤트 전송. action: 0=DOWN, 1=UP"""
+        if not self._control_sock:
+            return False
+        try:
+            # INJECT_KEYCODE (type=0)
+            msg = struct.pack('>BBIII',
+                0, action, keycode, repeat, metastate,
+            )
+            self._control_sock.sendall(msg)
+            return True
+        except Exception as e:
+            logger.debug("inject_keycode error: %s", e)
+            return False
 
     @staticmethod
     def _recv_exact(sock: socket.socket, n: int) -> Optional[bytes]:

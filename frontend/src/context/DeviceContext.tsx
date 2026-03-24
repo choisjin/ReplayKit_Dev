@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode, useCallback } from 'react';
+import JMuxer from 'jmuxer';
 import { deviceApi } from '../services/api';
 
 export interface ManagedDevice {
@@ -32,6 +33,11 @@ interface DeviceContextType {
   refreshScreenshot: () => void;
   // Screen streaming alive indicator (true = frames arriving)
   screenAlive: boolean;
+  // H.264 direct streaming mode
+  h264Mode: boolean;
+  h264Size: { width: number; height: number };
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  sendControl: (msg: object) => void;
 }
 
 const DeviceContext = createContext<DeviceContextType | null>(null);
@@ -45,6 +51,11 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [pollInterval, setPollInterval] = useState(500);
   const [screenType, setScreenType] = useState('front_center');
   const [screenAlive, setScreenAlive] = useState(false);
+  const [h264Mode, setH264Mode] = useState(false);
+  const [h264Size, setH264Size] = useState({ width: 1080, height: 1920 });
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const h264ModeRef = useRef(false);
+  const jmuxerRef = useRef<JMuxer | null>(null);
   const screenAliveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Frame arrived → mark alive, reset 3s timeout
@@ -122,6 +133,12 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
 
   // --- WebSocket cleanup helper ---
   const closeWs = useCallback(() => {
+    if (jmuxerRef.current) {
+      try { jmuxerRef.current.destroy(); } catch { /* ignore */ }
+      jmuxerRef.current = null;
+    }
+    h264ModeRef.current = false;
+    setH264Mode(false);
     if (wsRef.current) {
       // 이전 WebSocket의 이벤트 핸들러 제거 (close 완료 전 프레임 수신 방지)
       wsRef.current.onmessage = null;
@@ -148,11 +165,19 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     return dev?.type === 'adb' && (dev.info?.displays?.length ?? 0) > 1;
   }, [primaryDevices]);
 
-  // --- WebSocket screen streaming (HKMC) ---
+  // --- sendControl: WebSocket으로 터치/키 컨트롤 전송 ---
+  const sendControl = useCallback((msg: object) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(msg));
+    }
+  }, []);
+
+  // --- WebSocket screen streaming (H.264 / JPEG) ---
   const startWsStream = useCallback((deviceId: string, st: string) => {
     closeWs();
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${wsProto}//${window.location.host}/ws/screen`);
+    ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -160,22 +185,30 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     };
 
     ws.onmessage = (event) => {
-      if (event.data instanceof Blob) {
-        // 바이너리 JPEG 프레임
-        if (prevBlobUrlRef.current) {
-          URL.revokeObjectURL(prevBlobUrlRef.current);
-        }
-        const url = URL.createObjectURL(event.data);
-        prevBlobUrlRef.current = url;
-        if (screenshotDeviceIdRef.current === deviceId) {
-          setScreenshot(url);
-          markFrameAlive();
-        }
-      } else {
-        // JSON 메시지 (에러 등)
+      if (typeof event.data === 'string') {
+        // JSON 메시지: 모드 협상 또는 에러
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === 'frame' && msg.image) {
+          if (msg.mode === 'h264') {
+            h264ModeRef.current = true;
+            setH264Mode(true);
+            setH264Size({ width: msg.width || 1080, height: msg.height || 1920 });
+            // JMuxer 초기화 (video 엘리먼트 바인딩)
+            setTimeout(() => {
+              if (videoRef.current && !jmuxerRef.current) {
+                jmuxerRef.current = new JMuxer({
+                  node: videoRef.current,
+                  mode: 'video',
+                  flushingTime: 0,
+                  fps: 30,
+                  debug: false,
+                });
+              }
+            }, 100);
+          } else if (msg.mode === 'jpeg') {
+            h264ModeRef.current = false;
+            setH264Mode(false);
+          } else if (msg.type === 'frame' && msg.image) {
             const mime = msg.format === 'jpeg' ? 'image/jpeg' : 'image/png';
             if (screenshotDeviceIdRef.current === deviceId) {
               setScreenshot(`data:${mime};base64,${msg.image}`);
@@ -183,6 +216,24 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
             }
           }
         } catch { /* ignore */ }
+      } else if (event.data instanceof ArrayBuffer) {
+        if (h264ModeRef.current && jmuxerRef.current) {
+          // H.264 NAL 데이터 → JMuxer → <video>
+          jmuxerRef.current.feed({ video: new Uint8Array(event.data) });
+          markFrameAlive();
+        } else {
+          // JPEG 바이너리 → Blob URL → <img>/<canvas>
+          const blob = new Blob([event.data], { type: 'image/jpeg' });
+          if (prevBlobUrlRef.current) {
+            URL.revokeObjectURL(prevBlobUrlRef.current);
+          }
+          const url = URL.createObjectURL(blob);
+          prevBlobUrlRef.current = url;
+          if (screenshotDeviceIdRef.current === deviceId) {
+            setScreenshot(url);
+            markFrameAlive();
+          }
+        }
       }
     };
 
@@ -194,7 +245,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     ws.onclose = () => {
       wsRef.current = null;
     };
-  }, [closeWs]);
+  }, [closeWs, markFrameAlive]);
 
   // Prevent overlapping poll requests
   const pollInFlightRef = useRef(false);
@@ -273,6 +324,10 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       setScreenType,
       refreshScreenshot,
       screenAlive,
+      h264Mode,
+      h264Size,
+      videoRef,
+      sendControl,
     }}>
       {children}
     </DeviceContext.Provider>

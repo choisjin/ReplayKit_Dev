@@ -166,6 +166,7 @@ export default function RecordPage() {
   const {
     primaryDevices, auxiliaryDevices, fetchDevices,
     screenshotDeviceId, setScreenshotDeviceId, screenshot,
+    h264Mode, h264Size, videoRef, sendControl,
     pollInterval, setPollInterval, screenType, setScreenType, refreshScreenshot,
     screenAlive,
   } = useDevice();
@@ -405,12 +406,13 @@ export default function RecordPage() {
     };
   }, []);
 
-  // Helper: convert canvas coords to device coords
-  const toDeviceCoords = (canvas: HTMLCanvasElement, clientX: number, clientY: number) => {
-    const rect = canvas.getBoundingClientRect();
-    // Use canvas internal resolution (= actual image size) for accurate scaling
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+  // Helper: convert element coords to device coords (canvas 또는 video)
+  const toDeviceCoords = (el: HTMLCanvasElement | HTMLVideoElement, clientX: number, clientY: number) => {
+    const rect = el.getBoundingClientRect();
+    const naturalW = el instanceof HTMLVideoElement ? (el.videoWidth || h264Size.width) : el.width;
+    const naturalH = el instanceof HTMLVideoElement ? (el.videoHeight || h264Size.height) : el.height;
+    const scaleX = naturalW / rect.width;
+    const scaleY = naturalH / rect.height;
     return {
       x: Math.round((clientX - rect.left) * scaleX),
       y: Math.round((clientY - rect.top) * scaleY),
@@ -456,6 +458,9 @@ export default function RecordPage() {
     const resolvedAction = resolveAction(action, targetDevice);
     const resolvedParams = resolveParams(resolvedAction, params, targetDevice);
 
+    // H.264 모드에서 화면 제스처는 scrcpy 컨트롤로 이미 실행됨 → ADB 중복 실행 방지
+    const alreadyExecuted = h264Mode && isScreenAction;
+
     if (recording) {
       // Optimistic UI: show step immediately
       const tempId = steps.length + 1;
@@ -465,12 +470,14 @@ export default function RecordPage() {
       };
       setSteps((prev) => [...prev, optimisticStep]);
 
-      // Execute on device immediately for fast response
-      deviceApi.input(targetDevice, resolvedAction, resolvedParams).then(() => {
-        refreshScreenshot();
-      }).catch((e: any) => {
-        message.error(e.response?.data?.detail || t('record.inputFailed'));
-      });
+      if (!alreadyExecuted) {
+        // Execute on device immediately for fast response
+        deviceApi.input(targetDevice, resolvedAction, resolvedParams).then(() => {
+          refreshScreenshot();
+        }).catch((e: any) => {
+          message.error(e.response?.data?.detail || t('record.inputFailed'));
+        });
+      }
 
       // Record step in background (skip_execute since we already ran it)
       pendingStepsRef.current += 1;
@@ -496,14 +503,16 @@ export default function RecordPage() {
         }
       });
     } else {
-      // Fire input and refresh in parallel — don't wait for input to complete
-      deviceApi.input(targetDevice, resolvedAction, resolvedParams).catch((e: any) => {
-        message.error(e.response?.data?.detail || t('record.inputFailed'));
-      });
-      // Short delay then refresh (device needs a moment to process input)
-      setTimeout(() => refreshScreenshot(), 150);
+      if (!alreadyExecuted) {
+        // Fire input and refresh in parallel — don't wait for input to complete
+        deviceApi.input(targetDevice, resolvedAction, resolvedParams).catch((e: any) => {
+          message.error(e.response?.data?.detail || t('record.inputFailed'));
+        });
+        // Short delay then refresh (device needs a moment to process input)
+        setTimeout(() => refreshScreenshot(), 150);
+      }
     }
-  }, [recording, stepDeviceId, screenshotDeviceId, delayMs, refreshScreenshot, resolveAction, resolveParams]);
+  }, [recording, stepDeviceId, screenshotDeviceId, delayMs, refreshScreenshot, resolveAction, resolveParams, h264Mode]);
 
   // --- ROI Modal logic ---
   // Draw on the ROI canvas using the captured screenshot (not reactive screenshot)
@@ -1060,25 +1069,42 @@ export default function RecordPage() {
     if (multiCropModalOpen) setTimeout(() => drawMultiCropCanvas(), 50);
   }, [steps, multiCropModalOpen, drawMultiCropCanvas]);
 
-  // Canvas gesture handlers (no ROI logic here)
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Canvas/Video gesture handlers (no ROI logic here)
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement | HTMLVideoElement>) => {
     if (!screenshotDeviceId) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const { x, y } = toDeviceCoords(canvas, e.clientX, e.clientY);
+    const el = h264Mode ? videoRef.current : canvasRef.current;
+    if (!el) return;
+    const { x, y } = toDeviceCoords(el, e.clientX, e.clientY);
     gestureRef.current = { startX: x, startY: y, startTime: Date.now(), active: true };
-  }, [screenshotDeviceId, deviceRes]);
+    // H.264 모드: scrcpy 터치 즉시 주입 (DOWN)
+    if (h264Mode) {
+      sendControl({ type: 'touch', action: 0, x, y, w: h264Size.width, h: h264Size.height });
+    }
+  }, [screenshotDeviceId, deviceRes, h264Mode, h264Size, sendControl]);
 
-  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement | HTMLVideoElement>) => {
+    if (!h264Mode || !gestureRef.current.active) return;
+    const el = videoRef.current;
+    if (!el) return;
+    const { x, y } = toDeviceCoords(el, e.clientX, e.clientY);
+    sendControl({ type: 'touch', action: 2, x, y, w: h264Size.width, h: h264Size.height });
+  }, [h264Mode, h264Size, sendControl]);
+
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement | HTMLVideoElement>) => {
     if (!screenshotDeviceId || !gestureRef.current.active) return;
     gestureRef.current.active = false;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const el = h264Mode ? videoRef.current : canvasRef.current;
+    if (!el) return;
 
     const { startX, startY, startTime } = gestureRef.current;
-    const { x: endX, y: endY } = toDeviceCoords(canvas, e.clientX, e.clientY);
+    const { x: endX, y: endY } = toDeviceCoords(el, e.clientX, e.clientY);
     const dist = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2);
     const elapsed = Date.now() - startTime;
+
+    // H.264 모드: scrcpy 터치 즉시 주입 (UP) — 디바이스에 이미 반영됨
+    if (h264Mode) {
+      sendControl({ type: 'touch', action: 1, x: endX, y: endY, w: h264Size.width, h: h264Size.height });
+    }
 
     if (dist > SWIPE_DISTANCE_THRESHOLD) {
       const durationMs = Math.max(200, Math.min(elapsed, 3000));
@@ -1094,7 +1120,7 @@ export default function RecordPage() {
       executeAction('tap', params, `tap (${startX},${startY})`);
       setLastGesture(`${t('record.gestureTap')} (${startX},${startY})`);
     }
-  }, [screenshotDeviceId, executeAction, deviceRes]);
+  }, [screenshotDeviceId, executeAction, deviceRes, h264Mode, h264Size, sendControl]);
 
   const startRecording = async () => {
     if (!scenarioName.trim()) {
@@ -1895,22 +1921,42 @@ export default function RecordPage() {
             style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}
             styles={{ body: { flex: 1, overflow: 'hidden', padding: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' } }}
           >
-            {screenshotDeviceId && screenshot ? (
+            {screenshotDeviceId && (h264Mode || screenshot) ? (
               <>
               <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', maxHeight: '100%' }}>
-                <canvas
-                  ref={canvasRef}
-                  onMouseDown={testingStepIndex == null ? handleMouseDown : undefined}
-                  onMouseUp={testingStepIndex == null ? handleMouseUp : undefined}
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    border: '1px solid #333',
-                    borderRadius: 4,
-                    cursor: testingStepIndex != null ? 'wait' : 'crosshair',
-                    userSelect: 'none',
-                  }}
-                />
+                {h264Mode ? (
+                  <video
+                    ref={videoRef as React.RefObject<HTMLVideoElement>}
+                    autoPlay
+                    muted
+                    playsInline
+                    onMouseDown={testingStepIndex == null ? handleMouseDown : undefined}
+                    onMouseMove={testingStepIndex == null ? handleMouseMove : undefined}
+                    onMouseUp={testingStepIndex == null ? handleMouseUp : undefined}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      border: '1px solid #333',
+                      borderRadius: 4,
+                      cursor: testingStepIndex != null ? 'wait' : 'crosshair',
+                      userSelect: 'none',
+                    }}
+                  />
+                ) : (
+                  <canvas
+                    ref={canvasRef}
+                    onMouseDown={testingStepIndex == null ? handleMouseDown : undefined}
+                    onMouseUp={testingStepIndex == null ? handleMouseUp : undefined}
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '100%',
+                      border: '1px solid #333',
+                      borderRadius: 4,
+                      cursor: testingStepIndex != null ? 'wait' : 'crosshair',
+                      userSelect: 'none',
+                    }}
+                  />
+                )}
                 {testingStepIndex != null && (
                   <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', borderRadius: 4, pointerEvents: 'none' }}>
                     <Tag color="processing" style={{ fontSize: 14, padding: '4px 12px' }}>{t('record.stepTesting')}</Tag>

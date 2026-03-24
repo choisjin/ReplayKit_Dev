@@ -122,7 +122,8 @@ async def websocket_screen_mirror(websocket: WebSocket):
     """WebSocket endpoint for real-time screen mirroring.
 
     클라이언트가 첫 메시지로 {"device_id": "...", "screen_type": "front_center"} 전송.
-    바이너리 JPEG 프레임을 연속 전송. device_id 미전송 시 기존 ADB 방식 폴백.
+    H.264 모드: scrcpy → binary H.264 NAL 전송 + 양방향 컨트롤 (터치/키)
+    JPEG 모드: JPEG 프레임 전송 (HKMC, VisionCamera, screencap 폴백)
     """
     await websocket.accept()
     logger.debug("Screen mirror WebSocket connected")
@@ -149,6 +150,7 @@ async def websocket_screen_mirror(websocket: WebSocket):
     scrcpy_stream = None
     scrcpy_serial = ""
     scrcpy_display = 0
+    h264_mode = False
 
     try:
         # ADB 디바이스: scrcpy 스트림 획득 시도
@@ -167,6 +169,51 @@ async def websocket_screen_mirror(websocket: WebSocket):
                 logger.info("scrcpy stream acquired for %s (display=%d)", scrcpy_serial, scrcpy_display)
             else:
                 logger.debug("scrcpy unavailable for %s, falling back to screencap", scrcpy_serial)
+
+        # 모드 협상: scrcpy H.264 사용 가능하면 h264, 아니면 jpeg
+        if scrcpy_stream and scrcpy_stream.is_running:
+            h264_mode = True
+            await websocket.send_json({
+                "mode": "h264",
+                "width": scrcpy_stream._video_width or 1080,
+                "height": scrcpy_stream._video_height or 1920,
+            })
+        else:
+            await websocket.send_json({"mode": "jpeg"})
+
+        # H.264 모드: 컨트롤 수신 태스크 + 프레임 송신
+        async def _receive_control():
+            """클라이언트로부터 컨트롤 메시지 수신 (터치/키)."""
+            try:
+                while True:
+                    raw = await websocket.receive_text()
+                    try:
+                        import json
+                        msg = json.loads(raw)
+                    except Exception:
+                        continue
+                    msg_type = msg.get("type")
+                    if msg_type == "touch" and scrcpy_stream:
+                        scrcpy_stream.inject_touch(
+                            action=msg.get("action", 0),
+                            x=msg.get("x", 0),
+                            y=msg.get("y", 0),
+                            width=msg.get("w", 1080),
+                            height=msg.get("h", 1920),
+                        )
+                    elif msg_type == "key" and scrcpy_stream:
+                        scrcpy_stream.inject_keycode(
+                            keycode=msg.get("keycode", 0),
+                            action=msg.get("action", 0),
+                        )
+            except WebSocketDisconnect:
+                pass
+            except Exception:
+                pass
+
+        recv_task = None
+        if h264_mode:
+            recv_task = asyncio.create_task(_receive_control())
 
         while True:
             try:
@@ -203,8 +250,16 @@ async def websocket_screen_mirror(websocket: WebSocket):
                                        cam is not None, cam.IsConnected() if cam else "no_cam")
                         await asyncio.sleep(1)
                         continue
+                elif h264_mode and scrcpy_stream and scrcpy_stream.is_running:
+                    # scrcpy H.264 raw NAL 전송 (브라우저 MSE 디코딩)
+                    h264_data = await scrcpy_stream.async_get_h264_frame(timeout=0.1)
+                    if h264_data:
+                        await websocket.send_bytes(h264_data)
+                    else:
+                        await asyncio.sleep(0.01)
+                    continue  # h264 모드는 자체 타이밍
                 elif scrcpy_stream and scrcpy_stream.is_running:
-                    # scrcpy H.264 스트리밍 — binary JPEG
+                    # scrcpy JPEG 폴백
                     jpeg_bytes = await scrcpy_stream.async_wait_frame(timeout=2.0)
                     if jpeg_bytes:
                         await websocket.send_bytes(jpeg_bytes)
@@ -254,6 +309,9 @@ async def websocket_screen_mirror(websocket: WebSocket):
     except WebSocketDisconnect:
         logger.info("Screen mirror WebSocket disconnected")
     finally:
+        # 컨트롤 수신 태스크 정리
+        if recv_task and not recv_task.done():
+            recv_task.cancel()
         # scrcpy 스트림 해제
         if scrcpy_stream:
             scrcpy_manager.release_stream(scrcpy_serial, scrcpy_display)
