@@ -460,7 +460,12 @@ class ScrcpyManager:
         self._lock = threading.Lock()
 
     def is_available(self) -> bool:
-        """scrcpy 사용 가능 여부 (scrcpy-server 존재, PyAV 없어도 H.264 raw 전송 가능)."""
+        """scrcpy 사용 가능 여부 (PyAV + scrcpy-server 필요, JPEG 스트리밍용).
+
+        H.264 raw 모드(JMuxer)는 아직 불안정하여 PyAV 디코딩 경로만 사용.
+        """
+        if not HAS_AV:
+            return False
         return _find_scrcpy_server() is not None
 
     async def acquire_stream(self, serial: str, display_id: int = 0,
