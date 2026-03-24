@@ -399,20 +399,28 @@ def step_package():
 
     # ── .gitignore (배포 repo용) ──
     dist_gitignore = DIST_DIR / ".gitignore"
-    dist_gitignore.write_text("""venv/
+    dist_gitignore.write_text("""# 런타임 생성 (setup.bat이 생성)
+venv/
 python/
 __pycache__/
 *.pyc
+*.c
+
+# 설치 프로그램 (인스톨러 전용, git 불필요)
 *.exe
 *.msi
 *.zip
 get-pip.py
+
+# 사용자 데이터
 backend/screenshots/
 backend/results/
 backend/scenarios/
 backend/auxiliary_devices.json
 backend/settings.json
 Results/
+
+# 기타
 DLL_DEBUG/
 .env
 unins*

@@ -5,7 +5,7 @@ __pycache__/
 *.pyo
 *.egg-info/
 
-# 빌드 산출물/중간 파일
+# 빌드 산출물
 build/
 dist/
 *.c
@@ -15,8 +15,9 @@ _cython_setup.py
 
 # Node
 frontend/node_modules/
+frontend/dist/
 
-# Runtime data (사용자 영역)
+# Runtime data (사용자 데이터)
 backend/screenshots/
 backend/results/
 backend/scenarios/
@@ -24,8 +25,14 @@ backend/auxiliary_devices.json
 backend/settings.json
 Results/
 
-# Large binaries (수동 복사)
+# Large binaries (배포에만 포함)
 *.whl
+tools/
+installer_output/
+DltViewerSDK_21.1.3_ver/
+
+# 임시 파일
+HANDOFF.md
 
 # OS / IDE
 .env
@@ -36,10 +43,8 @@ Desktop.ini
 .DS_Store
 .claude/settings.json
 .claude/settings.local.json
+frontend/.claude/
 .bkit/
 .playwright-mcp/
 DLL_DEBUG/
 References/
-tools/
-installer_output/
-DltViewerSDK_21.1.3_ver/
