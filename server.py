@@ -397,13 +397,11 @@ class ServerManagerApp:
             safe_dir = PROJECT_ROOT.replace("\\", "/")
             git = ["git", "-c", f"safe.directory={safe_dir}"]
 
-            # 로컬 변경 초기화 (빌드 산출물 .pyd 등이 pull과 충돌하는 것 방지)
-            log_callback("[동기화] 로컬 변경 초기화...")
-            _run_cmd(git + ["checkout", "--", "."], timeout=15)
-            _run_cmd(git + ["clean", "-fd", "frontend/dist/assets/"], timeout=15)
-
-            log_callback("[동기화] git pull ...")
-            code, out = _run_cmd(git + ["pull", "--ff-only", "origin", "main"], timeout=60)
+            # 원격 최신 상태로 강제 동기화 (배포 PC는 수신 전용)
+            log_callback("[동기화] 원격 최신 상태 가져오는 중...")
+            _run_cmd(git + ["fetch", "origin", "main"], timeout=60)
+            code, out = _run_cmd(git + ["reset", "--hard", "origin/main"], timeout=30)
+            _run_cmd(git + ["clean", "-fd"], timeout=15)
             if out:
                 log_callback(f"[동기화] {out}")
             if code != 0:
