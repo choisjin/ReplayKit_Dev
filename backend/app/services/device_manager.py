@@ -626,6 +626,16 @@ class DeviceManager:
         """LAN에서 네트워크 호스트 탐색 (ARP + ping + UDP 프로브)."""
         return await _scan_network_hosts()
 
+    async def scan_vision_cameras(self) -> list[dict]:
+        """GigE Vision 카메라 스캔 (Harvester 기반)."""
+        loop = asyncio.get_event_loop()
+        try:
+            from ..plugins.VisionCameraClient import scan_vision_cameras
+            return await loop.run_in_executor(None, scan_vision_cameras)
+        except Exception as e:
+            logger.debug("VisionCamera scan failed: %s", e)
+            return []
+
     async def add_serial_device(self, port: str, baudrate: int = 115200, name: str = "", category: str = "auxiliary", device_id: str = "") -> ManagedDevice:
         """Add a serial device and open a persistent connection."""
         final_id = device_id or self._generate_device_id("serial")

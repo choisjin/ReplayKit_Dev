@@ -58,6 +58,7 @@ export default function DevicePage() {
   const [scannedSerial, setScannedSerial] = useState<SerialPort[]>([]);
   const [scannedHkmc, setScannedHkmc] = useState<{ ip: string; port: number; raw: string }[]>([]);
   const [scannedBench, setScannedBench] = useState<{ ip: string; port: number; verified?: boolean }[]>([]);
+  const [scannedVision, setScannedVision] = useState<{ id: string; mac: string; model: string; serial: string; vendor: string; tl_type: string; ip: string }[]>([]);
   const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th' | 'vision_camera'>('adb');
   const [connectAddress, setConnectAddress] = useState('');
   const [baudrate, setBaudrate] = useState(115200);
@@ -129,6 +130,7 @@ export default function DevicePage() {
       setScannedSerial(res.data.serial_ports || []);
       setScannedHkmc(res.data.hkmc_devices || []);
       setScannedBench(res.data.bench_devices || []);
+      setScannedVision(res.data.vision_cameras || []);
     } catch {
       message.error(t('device.scanFailed'));
     }
@@ -583,7 +585,39 @@ export default function DevicePage() {
                     </>
                   )}
 
-                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && scannedBench.length === 0 && !scanning && (
+                  {modalCategory === 'primary' && scannedVision.length > 0 && (
+                    <>
+                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{t('device.detectedVision')}</div>
+                      <List
+                        size="small"
+                        dataSource={scannedVision}
+                        renderItem={(cam) => (
+                          <List.Item actions={[
+                            <Button size="small" type="primary" loading={connecting} onClick={() => {
+                              // 스캔 탭에서 수동 연결 탭으로 전환하며 값 채우기
+                              setConnectType('vision_camera');
+                              setVcMac(cam.mac);
+                              setVcModel(cam.model || '');
+                              setVcSerial(cam.serial || '');
+                              setConnectAddress(cam.ip || '');
+                              // 수동 연결 탭으로 전환 (두 번째 탭)
+                              const tabs = document.querySelectorAll('.ant-tabs-tab');
+                              if (tabs.length >= 2) (tabs[1] as HTMLElement).click();
+                            }}>{t('common.connect')}</Button>
+                          ]}>
+                            <Tag color="magenta">VisionCam</Tag>
+                            {cam.mac && <Tag color="blue">{cam.mac}</Tag>}
+                            {cam.model && <span style={{ marginRight: 8 }}>{cam.model}</span>}
+                            {cam.vendor && <span style={{ color: '#888', marginRight: 8 }}>{cam.vendor}</span>}
+                            {cam.ip && <Tag color="cyan">{cam.ip}</Tag>}
+                            {cam.tl_type && <Tag>{cam.tl_type}</Tag>}
+                          </List.Item>
+                        )}
+                      />
+                    </>
+                  )}
+
+                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && scannedBench.length === 0 && scannedVision.length === 0 && !scanning && (
                     <div style={{ color: '#666', textAlign: 'center', padding: 24 }}>
                       {t('device.noDevicesFound')}
                     </div>

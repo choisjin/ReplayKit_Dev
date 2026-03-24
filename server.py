@@ -392,7 +392,7 @@ class ServerManagerApp:
         if os.path.isdir(git_dir):
             log_callback("[동기화] git reset + pull ...")
             _run_cmd(["git", "checkout", "--", "."], timeout=30)
-            _run_cmd(["git", "clean", "-fd"], timeout=30)
+            _run_cmd(["git", "clean", "-fd", "--exclude=unins*", "--exclude=*.dat"], timeout=30)
             code, out = _run_cmd(["git", "pull", "origin", "main"], timeout=60)
             if out:
                 log_callback(f"[동기화] {out}")

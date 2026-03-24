@@ -266,6 +266,7 @@ backend/settings.json
 Results/
 DLL_DEBUG/
 .env
+unins*
 """, encoding="utf-8")
 
     # ── 배포 repo URL 기록 (설치 후 git init용) ──

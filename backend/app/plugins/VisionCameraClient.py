@@ -82,6 +82,73 @@ def _component_to_pil(comp, pixel_format: str = "") -> Image.Image:
         return Image.fromarray(img_arr[:, :, :3], 'RGB')
 
 
+def scan_vision_cameras() -> list[dict]:
+    """네트워크에서 GigE Vision 카메라를 검색하여 목록을 반환.
+
+    Harvester를 사용하여 카메라를 열거하고, 연결하지 않고 정보만 반환한다.
+    Returns:
+        [{"mac": "...", "model": "...", "serial": "...", "ip": "...", "id": "..."}]
+    """
+    cti_files = _find_cti_files()
+    if not cti_files:
+        logger.debug("scan_vision_cameras: CTI files not found (Vimba X SDK not installed)")
+        return []
+
+    cameras = []
+    harvester = None
+    try:
+        from harvesters.core import Harvester
+        harvester = Harvester()
+        for cti in cti_files:
+            harvester.add_file(cti)
+        harvester.update()
+
+        for info in harvester.device_info_list:
+            cam_info = {
+                "id": getattr(info, "id_", ""),
+                "model": getattr(info, "model", ""),
+                "serial": getattr(info, "serial_number", ""),
+                "vendor": getattr(info, "vendor", ""),
+                "tl_type": getattr(info, "tl_type", ""),  # e.g. "GEV" (GigE Vision)
+            }
+            # MAC 주소 추출 (ID에서 DEV_XXXXXXXXXXXX 형태)
+            raw_id = cam_info["id"]
+            mac = ""
+            if "DEV_" in raw_id:
+                parts = raw_id.split("DEV_")
+                if len(parts) > 1:
+                    mac_part = parts[1].split("_")[0].split("#")[0]
+                    if len(mac_part) == 12 and all(c in "0123456789ABCDEFabcdef" for c in mac_part):
+                        mac = mac_part.upper()
+            cam_info["mac"] = mac
+
+            # IP 추출 시도 — GigE Vision 디바이스는 access_status에 IP 정보가 있을 수 있음
+            ip = ""
+            try:
+                if hasattr(info, "access_status") and info.access_status is not None:
+                    ip = str(getattr(info, "host", ""))
+            except Exception:
+                pass
+            cam_info["ip"] = ip
+
+            cameras.append(cam_info)
+            logger.info("scan_vision_cameras: found %s (mac=%s, model=%s)",
+                        raw_id, mac, cam_info["model"])
+
+    except ImportError:
+        logger.debug("scan_vision_cameras: harvesters not installed")
+    except Exception as e:
+        logger.warning("scan_vision_cameras error: %s", e)
+    finally:
+        if harvester:
+            try:
+                harvester.reset()
+            except Exception:
+                pass
+
+    return cameras
+
+
 class VisionCameraClient:
     """harvesters 기반 GigE Vision 카메라 제어.
 

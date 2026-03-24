@@ -98,6 +98,8 @@ const translations = {
     'device.hkmcPortPlaceholder': 'TCP 포트 (기본 5000)',
     'device.detectedHkmc': '감지된 HKMC 디바이스',
     'device.detectedBench': '감지된 벤치 디바이스',
+    'device.detectedVision': '감지된 Vision 카메라',
+    'device.visionNoSdk': 'Vimba X SDK 미설치 — 수동 연결을 사용하세요',
 
     // === Settings Page ===
     'settings.theme': 'UI 테마',
@@ -590,6 +592,8 @@ const translations = {
     'device.hkmcPortPlaceholder': 'TCP port (default 5000)',
     'device.detectedHkmc': 'Detected HKMC Devices',
     'device.detectedBench': 'Detected Bench Devices',
+    'device.detectedVision': 'Detected Vision Cameras',
+    'device.visionNoSdk': 'Vimba X SDK not installed — use manual connection',
 
     // === Settings Page ===
     'settings.theme': 'UI Theme',
