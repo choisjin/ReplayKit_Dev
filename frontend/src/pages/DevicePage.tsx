@@ -59,6 +59,7 @@ export default function DevicePage() {
   const [scannedHkmc, setScannedHkmc] = useState<{ ip: string; port: number; raw: string }[]>([]);
   const [scannedBench, setScannedBench] = useState<{ ip: string; port: number; verified?: boolean }[]>([]);
   const [scannedVision, setScannedVision] = useState<{ id: string; mac: string; model: string; serial: string; vendor: string; tl_type: string; ip: string; subnet?: string; gateway?: string }[]>([]);
+  const [scannedDlt, setScannedDlt] = useState<{ ip: string; port: number }[]>([]);
   const [pcInterfaces, setPcInterfaces] = useState<{ name: string; ip: string; prefix: number }[]>([]);
   const [forceIpModal, setForceIpModal] = useState<{ mac: string; currentIp: string } | null>(null);
   const [forceIpAddr, setForceIpAddr] = useState('');
@@ -139,6 +140,7 @@ export default function DevicePage() {
       setScannedHkmc(res.data.hkmc_devices || []);
       setScannedBench(res.data.bench_devices || []);
       setScannedVision(res.data.vision_cameras || []);
+      setScannedDlt(res.data.dlt_devices || []);
       setPcInterfaces(ifRes.data.interfaces || []);
     } catch {
       message.error(t('device.scanFailed'));
@@ -667,7 +669,42 @@ export default function DevicePage() {
                     </>
                   )}
 
-                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && scannedBench.length === 0 && scannedVision.length === 0 && !scanning && (
+                  {scannedDlt.length > 0 && (
+                    <>
+                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{t('dlt.detectedDlt')}</div>
+                      <List
+                        size="small"
+                        bordered
+                        dataSource={scannedDlt}
+                        renderItem={(d) => (
+                          <List.Item
+                            actions={[
+                              <Button
+                                size="small"
+                                type="primary"
+                                onClick={async () => {
+                                  try {
+                                    await connectDevice('module', d.ip, undefined, `DLT_${d.ip}`, 'auxiliary', 'DLTViewer', 'socket', { port: String(d.port) });
+                                    message.success(`DLT ${d.ip}:${d.port} ${t('common.connect')}`);
+                                    setModalOpen(false);
+                                  } catch (e: any) {
+                                    message.error(e.response?.data?.detail || 'Connect failed');
+                                  }
+                                }}
+                              >{t('common.connect')}</Button>,
+                            ]}
+                          >
+                            <div>
+                              <Tag color="geekblue">DLT</Tag>
+                              <strong>{d.ip}</strong>:{d.port}
+                            </div>
+                          </List.Item>
+                        )}
+                      />
+                    </>
+                  )}
+
+                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && scannedBench.length === 0 && scannedVision.length === 0 && scannedDlt.length === 0 && !scanning && (
                     <div style={{ color: '#666', textAlign: 'center', padding: 24 }}>
                       {t('device.noDevicesFound')}
                     </div>

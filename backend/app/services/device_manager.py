@@ -135,6 +135,113 @@ async def _scan_hkmc_tcp(
     return deduped
 
 
+# ── DLT 데몬 TCP 스캔 ──────────────────────────────────────────────
+
+DLT_SCAN_PORTS = [3490]
+
+
+async def _probe_dlt_host(
+    ip: str, port: int, timeout: float, semaphore: asyncio.Semaphore
+) -> dict | None:
+    """단일 IP에 TCP 연결 시도로 DLT 데몬 탐지."""
+    async with semaphore:
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(ip, port), timeout=timeout
+            )
+            # DLT 데몬은 연결 즉시 메시지를 보내므로 짧게 읽어 검증
+            verified = False
+            try:
+                data = await asyncio.wait_for(reader.read(4), timeout=1.5)
+                if len(data) >= 4:
+                    # DLT Standard Header: version 1 = (htyp >> 5) & 0x07 == 1
+                    htyp = data[0]
+                    version = (htyp >> 5) & 0x07
+                    verified = version == 1
+                elif len(data) > 0:
+                    # 데이터가 오면 DLT일 가능성 있음
+                    verified = True
+            except Exception:
+                # 연결은 되지만 데이터가 없을 수도 있음 — 포트 열림만으로 후보 처리
+                verified = True
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+            if verified:
+                return {"ip": ip, "port": port}
+        except Exception:
+            pass
+    return None
+
+
+async def _scan_dlt_tcp(
+    ports: list[int] | None = None,
+    connect_timeout: float = 0.3,
+    max_concurrent: int = 100,
+) -> list[dict]:
+    """LAN 서브넷의 모든 IP에서 DLT 데몬(TCP 3490)을 탐지."""
+    import ipaddress
+    import ifaddr
+
+    if ports is None:
+        ports = DLT_SCAN_PORTS
+
+    local_ips: set[str] = {"127.0.0.1"}
+    subnets: list[ipaddress.IPv4Network] = []
+
+    for adapter in ifaddr.get_adapters():
+        for ip_info in adapter.ips:
+            if not isinstance(ip_info.ip, str):
+                continue
+            ip_str = ip_info.ip
+            prefix = ip_info.network_prefix
+            if ip_str.startswith("127.") or ip_str.startswith("169.254."):
+                continue
+            # 사내망(10.x) 제외 — DLT는 전용 네트워크에 있음
+            if ip_str.startswith("10."):
+                continue
+            local_ips.add(ip_str)
+            try:
+                net = ipaddress.IPv4Network(f"{ip_str}/{prefix}", strict=False)
+                if net.prefixlen >= 20:
+                    subnets.append(net)
+            except ValueError:
+                pass
+
+    unique = list({str(s): s for s in subnets}.values())
+
+    candidate_ips: set[str] = set()
+    for subnet in unique:
+        for host in subnet.hosts():
+            ip_str = str(host)
+            if ip_str not in local_ips:
+                candidate_ips.add(ip_str)
+
+    if not candidate_ips:
+        return []
+
+    semaphore = asyncio.Semaphore(max_concurrent)
+    tasks = [
+        _probe_dlt_host(ip, port, connect_timeout, semaphore)
+        for ip in candidate_ips
+        for port in ports
+    ]
+    results = await asyncio.gather(*tasks)
+    found = [r for r in results if r is not None]
+
+    seen_ips: set[str] = set()
+    deduped: list[dict] = []
+    for r in found:
+        if r["ip"] not in seen_ips:
+            seen_ips.add(r["ip"])
+            deduped.append(r)
+            logger.info("DLT scan: found daemon at %s:%d", r["ip"], r["port"])
+
+    return deduped
+
+
 BENCH_UDP_SCAN_PORTS = [25000]
 BENCH_UDP_PROBE = bytes([0x55, 0xAA, 100, 0, 0x20, 0x02, 0x00, 0x00])
 
@@ -625,6 +732,10 @@ class DeviceManager:
     async def scan_bench(self) -> list[dict]:
         """LAN에서 네트워크 호스트 탐색 (ARP + ping + UDP 프로브)."""
         return await _scan_network_hosts()
+
+    async def scan_dlt(self) -> list[dict]:
+        """TCP 포트 스캔으로 LAN 상의 DLT 데몬 탐지."""
+        return await _scan_dlt_tcp()
 
     async def scan_vision_cameras(self) -> list[dict]:
         """GigE Vision 카메라 스캔 (Harvester 기반)."""
