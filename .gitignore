@@ -9,6 +9,7 @@ __pycache__/
 # 빌드 산출물
 build/
 dist/
+!frontend/dist/
 *.c
 *.pyd
 _cython_setup.py
