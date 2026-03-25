@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Input, Select, Space, Switch, message, Typography } from 'antd';
-import { FolderOpenOutlined } from '@ant-design/icons';
+import { Badge, Button, Card, Input, Select, Space, Switch, message, Typography } from 'antd';
+import { ApiOutlined, FolderOpenOutlined } from '@ant-design/icons';
 import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from '../i18n';
 
@@ -11,12 +11,14 @@ export default function SettingsPage() {
   const { t } = useTranslation();
   const [excelDir, setExcelDir] = useState(settings.excel_export_dir);
   const [exportDir, setExportDir] = useState(settings.scenario_export_dir);
+  const [monitorUrl, setMonitorUrl] = useState(settings.monitor_server_url);
 
   // Sync local state when settings load
   useEffect(() => {
     setExcelDir(settings.excel_export_dir);
     setExportDir(settings.scenario_export_dir);
-  }, [settings.excel_export_dir, settings.scenario_export_dir]);
+    setMonitorUrl(settings.monitor_server_url);
+  }, [settings.excel_export_dir, settings.scenario_export_dir, settings.monitor_server_url]);
 
   const handleThemeToggle = async (checked: boolean) => {
     try {
@@ -132,6 +134,46 @@ export default function SettingsPage() {
           </Space.Compact>
           <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
             {t('settings.exportDirDesc')}
+          </Text>
+        </Card>
+
+        <Card
+          title={
+            <Space>
+              <ApiOutlined />
+              {t('settings.monitorServer')}
+              {monitorUrl ? <Badge status="processing" text="" /> : null}
+            </Space>
+          }
+          size="small"
+        >
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              placeholder={t('settings.monitorServerPlaceholder')}
+              value={monitorUrl}
+              onChange={(e) => setMonitorUrl(e.target.value)}
+              onPressEnter={async () => {
+                try {
+                  await updateSettings({ monitor_server_url: monitorUrl.trim() });
+                  message.success(t('settings.monitorServerSuccess'));
+                } catch { message.error(t('common.saveFailed')); }
+              }}
+              style={{ flex: 1 }}
+            />
+            <Button
+              type="primary"
+              onClick={async () => {
+                try {
+                  await updateSettings({ monitor_server_url: monitorUrl.trim() });
+                  message.success(t('settings.monitorServerSuccess'));
+                } catch { message.error(t('common.saveFailed')); }
+              }}
+            >
+              {t('common.save')}
+            </Button>
+          </Space.Compact>
+          <Text type="secondary" style={{ fontSize: 12, marginTop: 4, display: 'block' }}>
+            {t('settings.monitorServerDesc')}
           </Text>
         </Card>
       </Space>

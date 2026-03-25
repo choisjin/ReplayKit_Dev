@@ -26,6 +26,7 @@ _DEFAULTS = {
     "excel_export_dir": "",
     "scenario_export_dir": "",
     "language": "ko",
+    "monitor_server_url": "",
 }
 
 
@@ -54,6 +55,7 @@ class UpdateSettingsRequest(BaseModel):
     excel_export_dir: Optional[str] = None
     scenario_export_dir: Optional[str] = None
     language: Optional[str] = None
+    monitor_server_url: Optional[str] = None
 
 
 @router.post("")
@@ -69,7 +71,19 @@ async def update_settings(req: UpdateSettingsRequest):
         current["scenario_export_dir"] = req.scenario_export_dir
     if req.language is not None:
         current["language"] = req.language
+    if req.monitor_server_url is not None:
+        current["monitor_server_url"] = req.monitor_server_url
     _save(current)
+
+    # 관제 서버 URL 변경 시 monitor_client 재연결
+    if req.monitor_server_url is not None:
+        try:
+            from ..dependencies import monitor_client
+            import asyncio
+            asyncio.create_task(monitor_client.update_server_url(req.monitor_server_url))
+        except Exception as e:
+            logger.debug("Monitor client URL update: %s", e)
+
     return current
 
 

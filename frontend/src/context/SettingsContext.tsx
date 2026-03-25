@@ -11,6 +11,7 @@ export interface AppSettings {
   excel_export_dir: string;
   scenario_export_dir: string;
   language: Language;
+  monitor_server_url: string;
 }
 
 interface SettingsContextType {
@@ -30,6 +31,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   excel_export_dir: '',
   scenario_export_dir: '',
   language: 'ko',
+  monitor_server_url: '',
 };
 
 const SettingsContext = createContext<SettingsContextType | null>(null);

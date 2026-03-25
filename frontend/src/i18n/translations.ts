@@ -152,6 +152,10 @@ const translations = {
     'settings.exportDirSuccess': '내보내기 저장 경로 설정됨',
     'settings.exportDirDesc': '시나리오/그룹 내보내기 시 이 경로에 ZIP 파일로 저장됩니다. 비어있으면 브라우저 다운로드를 사용합니다.',
     'settings.folderSelectFailed': '폴더 선택 실패',
+    'settings.monitorServer': '관제 서버',
+    'settings.monitorServerPlaceholder': '예: http://192.168.0.100:9000',
+    'settings.monitorServerSuccess': '관제 서버 설정 저장됨',
+    'settings.monitorServerDesc': '통합 관제 서버 주소를 입력하면 이 ReplayKit의 상태가 실시간으로 전송됩니다. 비어있으면 연결하지 않습니다.',
     'settings.language': '언어 / Language',
     'settings.languageDesc': '시스템 언어를 변경합니다. / Change system language.',
 
@@ -684,6 +688,10 @@ const translations = {
     'settings.exportDirSuccess': 'Export save path set',
     'settings.exportDirDesc': 'Scenario/group exports will be saved as ZIP files to this path. Falls back to browser download if empty.',
     'settings.folderSelectFailed': 'Folder selection failed',
+    'settings.monitorServer': 'Monitor Server',
+    'settings.monitorServerPlaceholder': 'e.g. http://192.168.0.100:9000',
+    'settings.monitorServerSuccess': 'Monitor server URL saved',
+    'settings.monitorServerDesc': 'Enter the monitor server address to send this ReplayKit status in real-time. Leave empty to disable.',
     'settings.language': 'Language / 언어',
     'settings.languageDesc': 'Change system language. / 시스템 언어를 변경합니다.',
 

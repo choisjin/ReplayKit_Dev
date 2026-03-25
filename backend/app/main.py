@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from .routers import device, results, scenario, settings
-from .dependencies import adb_service, device_manager, playback_service, recording_service, scrcpy_manager
+from .dependencies import adb_service, device_manager, playback_service, recording_service, scrcpy_manager, monitor_client
 from .services.adb_service import resolve_sf_display_id
 from .services.scrcpy_service import _find_scrcpy_server
 from .models.scenario import ScenarioResult
@@ -33,6 +33,163 @@ async def _reconnect_loop():
             logger.debug("Reconnect loop error: %s", e)
 
 
+async def _get_monitor_status() -> dict:
+    """관제 서버에 보낼 현재 상태를 수집."""
+    # 활동 상태 판별
+    activity = "idle"
+    if playback_service.is_running:
+        activity = "playing"
+    elif recording_service.is_recording:
+        activity = "recording"
+
+    # 디바이스 목록
+    devices = []
+    for dev in device_manager.list_devices():
+        devices.append({
+            "device_id": dev.id,
+            "name": dev.info.get("name", dev.id),
+            "type": dev.type,
+            "status": "connected" if dev.is_connected else "disconnected",
+        })
+
+    # 재생 진행 상태
+    playback = None
+    if playback_service.is_running and hasattr(playback_service, '_monitor_state'):
+        ms = playback_service._monitor_state
+        playback = {
+            "scenario_name": ms.get("scenario_name", ""),
+            "current_cycle": ms.get("current_cycle", 0),
+            "total_cycles": ms.get("total_cycles", 0),
+            "current_step": ms.get("current_step", 0),
+            "total_steps": ms.get("total_steps", 0),
+            "status": "paused" if playback_service.is_paused else "running",
+            "passed": ms.get("passed", 0),
+            "failed": ms.get("failed", 0),
+            "warning": ms.get("warning", 0),
+            "error": ms.get("error", 0),
+        }
+
+    # 시나리오 목록
+    try:
+        scenarios = await recording_service.list_scenarios()
+    except Exception:
+        scenarios = []
+
+    return {
+        "activity": activity,
+        "devices": devices,
+        "playback": playback,
+        "scenarios": scenarios,
+    }
+
+
+async def _handle_monitor_command(cmd: dict) -> dict | None:
+    """관제 서버에서 수신한 원격 명령 처리."""
+    action = cmd.get("action", "")
+
+    if action == "list_scenarios":
+        scenarios = await recording_service.list_scenarios()
+        return {"action": "list_scenarios", "scenarios": scenarios}
+
+    elif action == "stop":
+        if playback_service.is_running:
+            await playback_service.stop()
+            return {"action": "stop", "result": "ok"}
+        return {"action": "stop", "result": "not_running"}
+
+    elif action == "pause":
+        if playback_service.is_running:
+            await playback_service.pause()
+            return {"action": "pause", "result": "ok"}
+        return {"action": "pause", "result": "not_running"}
+
+    elif action == "resume":
+        if playback_service.is_running:
+            await playback_service.resume()
+            return {"action": "resume", "result": "ok"}
+        return {"action": "resume", "result": "not_running"}
+
+    elif action == "play":
+        scenario_name = cmd.get("scenario", "")
+        repeat = cmd.get("repeat", 1)
+        verify = cmd.get("verify", True)
+        if not scenario_name:
+            return {"action": "play", "result": "error", "message": "scenario required"}
+        if playback_service.is_running:
+            return {"action": "play", "result": "error", "message": "already_running"}
+
+        # 비동기로 재생 시작 (백그라운드)
+        asyncio.create_task(_remote_play(scenario_name, repeat, verify))
+        return {"action": "play", "result": "started", "scenario": scenario_name}
+
+    return None
+
+
+async def _remote_play(scenario_name: str, repeat: int, verify: bool):
+    """원격 재생 명령 실행 (백그라운드)."""
+    try:
+        scen = await recording_service.load_scenario(scenario_name)
+        playback_service._should_stop = False
+        playback_service._pause_event.set()
+        playback_service._monitor_state = {
+            "scenario_name": scenario_name,
+            "total_cycles": repeat,
+            "current_cycle": 0,
+            "current_step": 0,
+            "total_steps": len(scen.steps),
+            "passed": 0, "failed": 0, "warning": 0, "error": 0,
+        }
+
+        result = ScenarioResult(
+            scenario_name=scenario_name,
+            device_serial="multi-device",
+            status="pass",
+            total_steps=len(scen.steps),
+            total_repeat=repeat,
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        for iteration in range(1, repeat + 1):
+            playback_service._monitor_state["current_cycle"] = iteration
+            step_idx = 0
+            async for item in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration):
+                if isinstance(item, dict) and item.get("_type") == "step_start":
+                    step_idx += 1
+                    playback_service._monitor_state["current_step"] = step_idx
+                else:
+                    step_result = item
+                    result.step_results.append(step_result)
+                    if step_result.status == "pass":
+                        result.passed_steps += 1
+                        playback_service._monitor_state["passed"] += 1
+                    elif step_result.status == "fail":
+                        result.failed_steps += 1
+                        playback_service._monitor_state["failed"] += 1
+                    elif step_result.status == "warning":
+                        result.warning_steps += 1
+                        playback_service._monitor_state["warning"] += 1
+                    else:
+                        result.error_steps += 1
+                        playback_service._monitor_state["error"] += 1
+
+            if playback_service._should_stop:
+                break
+
+        result.finished_at = datetime.now(timezone.utc).isoformat()
+        if result.failed_steps > 0 or result.error_steps > 0:
+            result.status = "fail"
+        elif result.warning_steps > 0:
+            result.status = "warning"
+        else:
+            result.status = "pass"
+        await playback_service._save_result(result)
+    except Exception as e:
+        logger.error("원격 재생 오류: %s", e)
+    finally:
+        if hasattr(playback_service, '_monitor_state'):
+            playback_service._monitor_state["status"] = "idle"
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
@@ -40,8 +197,22 @@ async def lifespan(app: FastAPI):
     logger.info("Opening persistent serial connections...")
     await device_manager.open_all_serial_connections()
     reconnect_task = asyncio.create_task(_reconnect_loop())
+
+    # 관제 서버 연결 (설정에 URL이 있으면)
+    try:
+        from .routers.settings import _load as _load_settings
+        cfg = _load_settings()
+        monitor_url = cfg.get("monitor_server_url", "")
+        if monitor_url:
+            monitor_client.set_status_callback(_get_monitor_status)
+            monitor_client.set_command_callback(_handle_monitor_command)
+            await monitor_client.start(monitor_url)
+    except Exception as e:
+        logger.debug("Monitor client startup: %s", e)
+
     yield
     # --- Shutdown ---
+    await monitor_client.stop()
     reconnect_task.cancel()
     scrcpy_manager.stop_all()
     logger.info("Closing all serial connections...")
@@ -400,6 +571,16 @@ async def websocket_playback(websocket: WebSocket):
                         })
                         continue
 
+                    # 관제 모니터링 상태 초기화
+                    playback_service._monitor_state = {
+                        "scenario_name": scenario_name,
+                        "total_cycles": repeat,
+                        "current_cycle": 0,
+                        "current_step": 0,
+                        "total_steps": len(scen.steps),
+                        "passed": 0, "failed": 0, "warning": 0, "error": 0,
+                    }
+
                     # Single result for ALL cycles
                     result = ScenarioResult(
                         scenario_name=scenario_name,
@@ -411,6 +592,7 @@ async def websocket_playback(websocket: WebSocket):
                     )
 
                     for iteration in range(1, repeat + 1):
+                        playback_service._monitor_state["current_cycle"] = iteration
                         if repeat > 1:
                             await websocket.send_json({
                                 "type": "iteration_start",
@@ -418,8 +600,11 @@ async def websocket_playback(websocket: WebSocket):
                                 "total": repeat,
                             })
 
+                        _step_idx = 0
                         async for item in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, device_map_override=device_map_override):
                             if isinstance(item, dict) and item.get("_type") == "step_start":
+                                _step_idx += 1
+                                playback_service._monitor_state["current_step"] = _step_idx
                                 await websocket.send_json({
                                     "type": "step_start",
                                     "data": {k: v for k, v in item.items() if k != "_type"},
@@ -430,12 +615,16 @@ async def websocket_playback(websocket: WebSocket):
                                 result.step_results.append(step_result)
                                 if step_result.status == "pass":
                                     result.passed_steps += 1
+                                    playback_service._monitor_state["passed"] += 1
                                 elif step_result.status == "fail":
                                     result.failed_steps += 1
+                                    playback_service._monitor_state["failed"] += 1
                                 elif step_result.status == "warning":
                                     result.warning_steps += 1
+                                    playback_service._monitor_state["warning"] += 1
                                 else:
                                     result.error_steps += 1
+                                    playback_service._monitor_state["error"] += 1
                                 await websocket.send_json({
                                     "type": "step_result",
                                     "data": step_result.model_dump(),

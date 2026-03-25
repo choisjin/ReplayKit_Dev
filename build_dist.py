@@ -37,7 +37,8 @@ BUILD_DIR = PROJECT_ROOT / "build"
 # - routers/*.py: FastAPI의 File/Form/Query 기본값이 Cython과 호환 불가
 # - dependencies.py: FastAPI 의존성 주입
 SKIP_COMPILE = {"__init__.py", "dependencies.py",
-                "device.py", "scenario.py", "results.py", "settings.py"}
+                "device.py", "scenario.py", "results.py", "settings.py",
+                "monitor_client.py"}
 
 # 배포에 포함할 루트 파일
 INCLUDE_ROOT_FILES = [
