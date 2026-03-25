@@ -1589,7 +1589,7 @@ export default function RecordPage() {
     const dev = allDevices.find(d => d.id === deviceId);
     if (!dev) return <Tag color="orange">{deviceId}</Tag>;
     const color = dev.category === 'primary' ? 'green' : 'purple';
-    return <Tag color={color}>{dev.id}{dev.name && dev.name !== dev.id ? ` (${dev.name})` : ''}</Tag>;
+    return <Tag color={color}>{dev.id}</Tag>;
   };
 
   // Memoize the step list so screenshot polling doesn't re-render it
@@ -1613,7 +1613,7 @@ export default function RecordPage() {
                 style={{ flex: 1, maxWidth: 200 }}
               />
               {getDeviceTag(s.device_id)}
-              <Tag color={s.type === 'wait' ? 'cyan' : s.type.startsWith('hkmc_') ? 'volcano' : undefined}>{s.type}</Tag>
+              <Tag color={s.type === 'wait' ? 'cyan' : s.type === 'module_command' ? 'geekblue' : s.type.startsWith('hkmc_') ? 'volcano' : undefined}>{s.type === 'module_command' ? (s.params.module || 'module_command') : s.type}</Tag>
               {s.screen_type && <Tag color="geekblue" style={{ margin: 0 }}>{s.screen_type}</Tag>}
               {s.expected_image && scenarioName && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', position: 'relative', marginRight: 4 }}>
@@ -1658,7 +1658,7 @@ export default function RecordPage() {
                 {s.type === 'wait'
                   ? <><Tag color="cyan" style={{ margin: 0 }}>WAIT</Tag><InputNumber size="small" min={100} max={60000} step={100} value={s.params.duration_ms} onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, params: { ...st.params, duration_ms: v || 1000 } } : st))} suffix="ms" style={{ width: 110 }} /></>
                   : s.type === 'module_command'
-                  ? `${s.params.module}::${s.params.function}()`
+                  ? `${s.params.function}(${s.params.args ? Object.entries(s.params.args).map(([, v]) => `"${v}"`).join(', ') : ''})`
                   : s.type === 'serial_command'
                   ? <><Tag color="purple" style={{ margin: 0 }}>Serial</Tag> {s.params.data}</>
                   : s.type === 'hkmc_touch'

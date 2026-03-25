@@ -327,7 +327,7 @@ export default function ScenarioPage() {
     else if (type === 'wait') detail = `${p.duration_ms || 1000}ms`;
     else if (type === 'adb_command') detail = p.command || '';
     else if (type === 'serial_command') detail = `"${p.data || ''}"`;
-    else if (type === 'module_command') detail = `${p.module}::${p.function}()`;
+    else if (type === 'module_command') detail = `${p.function}(${p.args ? Object.values(p.args).map((v: any) => `"${v}"`).join(', ') : ''})`;
     const desc = step.description ? ` [${step.description}]` : '';
     return `#${idx + 1} ${type} ${detail}${desc}`;
   };
@@ -956,7 +956,7 @@ export default function ScenarioPage() {
   const scenarioStepColumns = [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
     { title: 'Remark', dataIndex: 'description', key: 'description', ellipsis: true },
-    { title: t('common.type'), dataIndex: 'type', key: 'type', render: (val: string) => <Tag>{val}</Tag> },
+    { title: t('common.type'), dataIndex: 'type', key: 'type', render: (val: string, row: any) => <Tag color={val === 'module_command' ? 'geekblue' : undefined}>{val === 'module_command' ? (row.params?.module || val) : val}</Tag> },
     { title: t('scenario.device'), dataIndex: 'device_id', key: 'device_id', width: 120, render: (v: string) => v ? <Tag color={v.startsWith('Android') ? 'green' : v.startsWith('Serial') ? 'purple' : 'geekblue'}>{v}</Tag> : '-' },
     {
       title: t('scenario.expectedImage'), dataIndex: 'expected_image', key: 'expected_image', width: 90,
@@ -1258,7 +1258,7 @@ export default function ScenarioPage() {
                     ),
                   },
                   { title: '#', dataIndex: 'id', key: 'id', width: 40, align: 'center' as const },
-                  { title: 'Type', dataIndex: 'type', key: 'type', width: 120, render: (v: string) => <Tag>{v}</Tag> },
+                  { title: 'Type', dataIndex: 'type', key: 'type', width: 120, render: (v: string, row: any) => <Tag color={v === 'module_command' ? 'geekblue' : undefined}>{v === 'module_command' ? (row.params?.module || v) : v}</Tag> },
                   { title: 'Device', dataIndex: 'device_id', key: 'device', width: 120, render: (v: string) => v ? <Tag color="blue">{v}</Tag> : '-' },
                   { title: t('common.description'), dataIndex: 'description', key: 'desc', width: 120, ellipsis: true },
                   {
