@@ -198,14 +198,14 @@ async def lifespan(app: FastAPI):
     await device_manager.open_all_serial_connections()
     reconnect_task = asyncio.create_task(_reconnect_loop())
 
-    # 관제 서버 연결 (설정에 URL이 있으면)
+    # 관제 클라이언트 콜백 항상 등록 (URL은 나중에 Settings에서 설정 가능)
+    monitor_client.set_status_callback(_get_monitor_status)
+    monitor_client.set_command_callback(_handle_monitor_command)
     try:
         from .routers.settings import _load as _load_settings
         cfg = _load_settings()
         monitor_url = cfg.get("monitor_server_url", "")
         if monitor_url:
-            monitor_client.set_status_callback(_get_monitor_status)
-            monitor_client.set_command_callback(_handle_monitor_command)
             await monitor_client.start(monitor_url)
     except Exception as e:
         logger.debug("Monitor client startup: %s", e)
