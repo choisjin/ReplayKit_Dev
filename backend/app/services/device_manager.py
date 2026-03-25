@@ -598,6 +598,8 @@ class DeviceManager:
             raise RuntimeError(f"Cannot connect to HKMC agent at {host}:{port}")
 
         info = svc.get_info()
+        # 화면 해상도 조회 (프론트엔드 좌표 매핑에 필요)
+        scr_w, scr_h = svc.get_screen_size("front_center")
         dev = ManagedDevice(
             id=final_id,
             type="hkmc6th",
@@ -605,7 +607,12 @@ class DeviceManager:
             address=host,
             status="connected",
             name=display_name,
-            info={"port": port, "agent_version": svc.agent_version, "screens": info["screens"]},
+            info={
+                "port": port,
+                "agent_version": svc.agent_version,
+                "screens": info["screens"],
+                "resolution": {"width": scr_w, "height": scr_h},
+            },
         )
         self._devices[final_id] = dev
         self._hkmc_conns[final_id] = svc
