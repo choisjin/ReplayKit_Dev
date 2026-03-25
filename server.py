@@ -408,17 +408,20 @@ class ServerManagerApp:
                     except Exception:
                         pass
 
-            # 원격 최신 상태로 강제 동기화 (배포 PC는 수신 전용)
-            log_callback("[동기화] 원격 최신 상태 가져오는 중...")
-            _run_cmd(git + ["fetch", "origin", "main"], timeout=60)
-            code, out = _run_cmd(git + ["reset", "--hard", "origin/main"], timeout=30)
-            _run_cmd(git + ["clean", "-fd", "-e", "python/", "-e", "node_modules/"], timeout=15)
-            if out:
-                log_callback(f"[동기화] {out}")
-            if code != 0:
-                log_callback("[동기화] git pull 실패 — 충돌을 확인하세요")
-                self._set_status("동기화 실패")
-                return False
+            # git 명령 사용 가능 여부 먼저 확인
+            git_available = _run_cmd(["git", "--version"], timeout=5)[0] == 0
+            if git_available:
+                # 원격 최신 상태로 강제 동기화 (배포 PC는 수신 전용)
+                log_callback("[동기화] 원격 최신 상태 가져오는 중...")
+                _run_cmd(git + ["fetch", "origin", "main"], timeout=60)
+                code, out = _run_cmd(git + ["reset", "--hard", "origin/main"], timeout=30)
+                _run_cmd(git + ["clean", "-fd", "-e", "python/", "-e", "node_modules/"], timeout=15)
+                if out:
+                    log_callback(f"[동기화] {out}")
+                if code != 0:
+                    log_callback("[동기화] git pull 실패 — 의존성 설치는 계속합니다")
+            else:
+                log_callback("[동기화] git 미설치 — git pull 건너뜀")
         else:
             log_callback("[동기화] git 저장소 없음 — git pull 건너뜀")
 
