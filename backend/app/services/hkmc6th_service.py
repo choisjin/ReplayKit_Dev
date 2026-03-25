@@ -583,6 +583,8 @@ class HKMC6thService:
         release_event = [x, y, RELEASE_KEY, st]
         # _capture_lock: 탭 동안 스크린샷 CMD_GETIMG 차단
         with self._capture_lock:
+            # 에이전트가 이전 이미지 응답 전송을 마칠 시간 확보
+            time.sleep(0.3)
             with self._send_lock:
                 self._lcd_touch_ext_6th([press_event])
                 logger.info("[TAP] PRESS (%d,%d)", x, y)
@@ -599,6 +601,7 @@ class HKMC6thService:
         press_event = [x, y, PRESS_KEY, st]
         release_event = [x, y, RELEASE_KEY, st]
         with self._capture_lock:
+            time.sleep(0.3)
             with self._send_lock:
                 self._lcd_touch_ext_6th([press_event])
                 time.sleep(duration_ms / 1000.0)
@@ -610,6 +613,7 @@ class HKMC6thService:
         """Swipe (drag) from (x1, y1) to (x2, y2) using lcdDrag."""
         st = SCREEN_TOUCH_MAP.get(screen_type, 0)
         with self._capture_lock:
+            time.sleep(0.3)
             with self._send_lock:
                 self._lcd_drag(x1, y1, x2, y2, st)
             time.sleep(0.05)
