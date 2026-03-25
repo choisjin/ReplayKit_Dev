@@ -359,12 +359,15 @@ class ScrcpyStream:
 
                 # H.264 raw 데이터 큐 (브라우저 직접 디코딩용)
                 if self._h264_queue and self._loop and not self._loop.is_closed():
+                    def _safe_put(q, data):
+                        try:
+                            q.put_nowait(data)
+                        except asyncio.QueueFull:
+                            pass  # 소비자가 느리면 프레임 드롭
                     try:
-                        self._loop.call_soon_threadsafe(
-                            self._h264_queue.put_nowait, h264_data
-                        )
-                    except (asyncio.QueueFull, RuntimeError):
-                        pass  # 소비자가 느리면 프레임 드롭
+                        self._loop.call_soon_threadsafe(_safe_put, self._h264_queue, h264_data)
+                    except RuntimeError:
+                        pass
 
                 # PyAV 디코딩 → JPEG (있을 때만, screencap 폴백용)
                 if codec:
