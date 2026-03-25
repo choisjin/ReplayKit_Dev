@@ -16,6 +16,7 @@ from pathlib import Path
 from .routers import device, results, scenario, settings
 from .dependencies import adb_service, device_manager, playback_service, recording_service, scrcpy_manager
 from .services.adb_service import resolve_sf_display_id
+from .services.scrcpy_service import _find_scrcpy_server
 from .models.scenario import ScenarioResult
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -131,10 +132,12 @@ async def websocket_screen_mirror(websocket: WebSocket):
     # 클라이언트로부터 device_id 수신 (선택)
     target_device_id = ""
     screen_type = "front_center"
+    force_h264 = False
     try:
         init_msg = await asyncio.wait_for(websocket.receive_json(), timeout=2.0)
         target_device_id = init_msg.get("device_id", "")
         screen_type = init_msg.get("screen_type", "front_center")
+        force_h264 = init_msg.get("force_h264", False)
     except (asyncio.TimeoutError, Exception):
         pass  # 타임아웃이면 ADB 폴백
 
@@ -162,9 +165,27 @@ async def websocket_screen_mirror(websocket: WebSocket):
                 pass
             scrcpy_serial = dev.address or target_device_id
             scrcpy_display = adb_display_id
-            scrcpy_stream = await scrcpy_manager.acquire_stream(
-                serial=scrcpy_serial, display_id=scrcpy_display
-            )
+            # force_h264: scrcpy-server만 있으면 PyAV 없이도 H.264 raw 스트리밍
+            if force_h264 and _find_scrcpy_server() is not None:
+                from .services.scrcpy_service import ScrcpyStream
+                stream = ScrcpyStream(serial=scrcpy_serial, display_id=scrcpy_display)
+                stream.start(asyncio.get_event_loop())
+                # 첫 데이터 대기
+                for _ in range(50):
+                    if stream.is_running and (stream._h264_queue and not stream._h264_queue.empty()):
+                        break
+                    if not stream.is_running:
+                        break
+                    await asyncio.sleep(0.1)
+                if stream.is_running:
+                    scrcpy_stream = stream
+                    logger.info("scrcpy H.264 raw stream forced for %s", scrcpy_serial)
+                else:
+                    logger.warning("scrcpy force_h264 failed for %s", scrcpy_serial)
+            else:
+                scrcpy_stream = await scrcpy_manager.acquire_stream(
+                    serial=scrcpy_serial, display_id=scrcpy_display
+                )
             if scrcpy_stream:
                 logger.info("scrcpy stream acquired for %s (display=%d)", scrcpy_serial, scrcpy_display)
             else:

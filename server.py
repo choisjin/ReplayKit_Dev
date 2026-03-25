@@ -399,6 +399,15 @@ class ServerManagerApp:
             safe_dir = PROJECT_ROOT.replace("\\", "/")
             git = ["git", "-c", f"safe.directory={safe_dir}"]
 
+            # 이전 빌드 .pyd 캐시 삭제 (구 컴파일 코드가 새 .py 로딩 방해)
+            import glob as _glob
+            for _pyd in _glob.glob(os.path.join(PROJECT_ROOT, "**", "*.pyd"), recursive=True):
+                if "python" not in _pyd and "site-packages" not in _pyd:
+                    try:
+                        os.remove(_pyd)
+                    except Exception:
+                        pass
+
             # 원격 최신 상태로 강제 동기화 (배포 PC는 수신 전용)
             log_callback("[동기화] 원격 최신 상태 가져오는 중...")
             _run_cmd(git + ["fetch", "origin", "main"], timeout=60)
