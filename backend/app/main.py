@@ -128,7 +128,24 @@ async def _handle_monitor_command(cmd: dict) -> dict | None:
 async def _remote_play(scenario_name: str, repeat: int, verify: bool):
     """원격 재생 명령 실행 (백그라운드)."""
     try:
+        logger.info("원격 재생 시작: %s (repeat=%d, verify=%s)", scenario_name, repeat, verify)
         scen = await recording_service.load_scenario(scenario_name)
+
+        # Preflight device check
+        preflight_errors = await playback_service.preflight_check(scen)
+        if preflight_errors:
+            logger.error("원격 재생 preflight 실패: %s", preflight_errors)
+            # 에러를 monitor_state에 기록하여 대시보드에서 확인 가능
+            playback_service._monitor_state = {
+                "scenario_name": scenario_name,
+                "total_cycles": repeat, "current_cycle": 0,
+                "current_step": 0, "total_steps": len(scen.steps),
+                "status": "error",
+                "passed": 0, "failed": 0, "warning": 0, "error": 0,
+                "error_message": "; ".join(preflight_errors),
+            }
+            return
+
         playback_service._should_stop = False
         playback_service._pause_event.set()
         playback_service._monitor_state = {
@@ -183,8 +200,11 @@ async def _remote_play(scenario_name: str, repeat: int, verify: bool):
         else:
             result.status = "pass"
         await playback_service._save_result(result)
+        logger.info("원격 재생 완료: %s → %s", scenario_name, result.status)
     except Exception as e:
-        logger.error("원격 재생 오류: %s", e)
+        logger.error("원격 재생 오류: %s", e, exc_info=True)
+        if hasattr(playback_service, '_monitor_state'):
+            playback_service._monitor_state["error_message"] = str(e)
     finally:
         if hasattr(playback_service, '_monitor_state'):
             playback_service._monitor_state["status"] = "idle"
