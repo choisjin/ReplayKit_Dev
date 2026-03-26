@@ -243,6 +243,8 @@ export default function RecordPage() {
   const [hkmcDisplayMode, setHkmcDisplayMode] = useState<'standard' | 'integrated'>('standard');
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  // 실제 스트리밍 화면 크기 추적 (가로/세로 판단용)
+  const [streamSize, setStreamSize] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const allDevices = [...primaryDevices, ...auxiliaryDevices];
 
   // Expected image manual capture
@@ -1578,6 +1580,8 @@ export default function RecordPage() {
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
       canvas.getContext('2d')?.drawImage(img, 0, 0);
+      setStreamSize(prev => prev.width !== img.naturalWidth || prev.height !== img.naturalHeight
+        ? { width: img.naturalWidth, height: img.naturalHeight } : prev);
     };
     img.src = screenshot;
   }, [screenshot]);
@@ -1880,7 +1884,11 @@ export default function RecordPage() {
   ), [steps, recording, updateStepJump, updateStepDescription, openEditStepModal, openRoiModal, screenshotDeviceId, scenarioName, saveExpectedFull, openCaptureModal, testStep, testingStepIndex, updateCompareMode, openExcludeRoiModal, openMultiCropModal, t]);
 
   // Determine if device screen is portrait (tall) or landscape
-  const isPortrait = deviceRes.height > deviceRes.width;
+  // H.264: h264Size, JPEG: streamSize(canvas에서 추적), 폴백: deviceRes
+  const effectiveSize = h264Mode
+    ? h264Size
+    : (streamSize.width > 0 ? streamSize : deviceRes);
+  const isPortrait = effectiveSize.height > effectiveSize.width;
 
   return (
     <div style={{ height: 'calc(100vh - 80px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
