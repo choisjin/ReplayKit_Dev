@@ -85,6 +85,10 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     screenAliveTimerRef.current = setTimeout(() => setScreenAlive(false), 3000);
   }, []);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // WS 재연결 관리
+  const wsRetryCountRef = useRef(0);
+  const wsRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const MAX_WS_RETRIES = 3;
   const screenshotDeviceIdRef = useRef('');
   const screenTypeRef = useRef('front_center');
   const wsRef = useRef<WebSocket | null>(null);
@@ -194,16 +198,34 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // --- WebSocket screen streaming (H.264 / JPEG) ---
+  // startWsStream의 최신 참조를 유지 (재연결 콜백에서 사용)
+  const startWsStreamRef = useRef<((deviceId: string, st: string) => void) | null>(null);
+
   const startWsStream = useCallback((deviceId: string, st: string) => {
-    // closeWs()는 호출부(useEffect)에서 이미 수행하므로 중복 제거
+    closeWs();
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${wsProto}//${window.location.host}/ws/screen`);
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 
+    // 예기치 않은 종료 시 재연결 스케줄링
+    const scheduleReconnect = () => {
+      if (screenshotDeviceIdRef.current !== deviceId) return;
+      if (wsRetryCountRef.current >= MAX_WS_RETRIES) return;
+      wsRetryCountRef.current += 1;
+      const delay = 500 * wsRetryCountRef.current;
+      wsRetryTimerRef.current = setTimeout(() => {
+        wsRetryTimerRef.current = null;
+        if (screenshotDeviceIdRef.current === deviceId && !wsRef.current) {
+          startWsStreamRef.current?.(deviceId, st);
+        }
+      }, delay);
+    };
+
     ws.onopen = () => {
       ws.send(JSON.stringify({ device_id: deviceId, screen_type: st }));
       startFpsCounter();
+      wsRetryCountRef.current = 0; // 연결 성공 → 재시도 카운터 초기화
     };
 
     ws.onmessage = (event) => {
@@ -252,14 +274,20 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     };
 
     ws.onerror = () => {
-      // WebSocket 실패 시 폴링 폴백으로 전환
+      // 에러 → 정리 후 재연결 시도
       closeWs();
+      scheduleReconnect();
     };
 
     ws.onclose = () => {
-      wsRef.current = null;
+      // closeWs()가 호출했으면 onclose=null이므로 여기 도달 = 예기치 않은 서버 종료
+      closeWs(); // JMuxer, FPS 등 전체 상태 정리
+      scheduleReconnect();
     };
   }, [closeWs, markFrameAlive, startFpsCounter]);
+
+  // 최신 startWsStream 참조 유지
+  startWsStreamRef.current = startWsStream;
 
   // Prevent overlapping poll requests
   const pollInFlightRef = useRef(false);
@@ -324,11 +352,16 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   // 디바운스로 screenType 자동 설정 완료 후 WS를 1회만 연결
   const wsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    // 이전 디바운스 타이머 취소
+    // 이전 디바운스/재연결 타이머 취소 + 카운터 리셋
     if (wsDebounceRef.current) {
       clearTimeout(wsDebounceRef.current);
       wsDebounceRef.current = null;
     }
+    if (wsRetryTimerRef.current) {
+      clearTimeout(wsRetryTimerRef.current);
+      wsRetryTimerRef.current = null;
+    }
+    wsRetryCountRef.current = 0;
 
     // 기존 스트림 즉시 정리
     if (intervalRef.current) {
@@ -352,6 +385,10 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       if (wsDebounceRef.current) {
         clearTimeout(wsDebounceRef.current);
         wsDebounceRef.current = null;
+      }
+      if (wsRetryTimerRef.current) {
+        clearTimeout(wsRetryTimerRef.current);
+        wsRetryTimerRef.current = null;
       }
       if (intervalRef.current) {
         clearInterval(intervalRef.current);

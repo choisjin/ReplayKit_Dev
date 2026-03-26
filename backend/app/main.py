@@ -345,6 +345,7 @@ async def websocket_screen_mirror(websocket: WebSocket):
     scrcpy_serial = ""
     scrcpy_display = 0
     h264_mode = False
+    recv_task = None  # finally에서 참조하므로 try 밖에서 초기화
 
     try:
         # ADB 디바이스: scrcpy 스트림 획득 시도
@@ -423,7 +424,6 @@ async def websocket_screen_mirror(websocket: WebSocket):
             except Exception:
                 pass
 
-        recv_task = None
         if h264_mode:
             recv_task = asyncio.create_task(_receive_control())
 
@@ -509,15 +509,22 @@ async def websocket_screen_mirror(websocket: WebSocket):
             except WebSocketDisconnect:
                 raise
             except Exception as e:
-                await websocket.send_json({
-                    "type": "error",
-                    "message": str(e),
-                })
+                try:
+                    await websocket.send_json({
+                        "type": "error",
+                        "message": str(e),
+                    })
+                except Exception:
+                    # 클라이언트 이미 끊김 — 루프 탈출
+                    break
                 await asyncio.sleep(0.3)
                 continue
             await asyncio.sleep(0)  # 이벤트 루프 양보 (각 소스가 자체 속도로 전송)
-    except WebSocketDisconnect:
-        logger.info("Screen mirror WebSocket disconnected")
+    except (WebSocketDisconnect, Exception) as exc:
+        if isinstance(exc, WebSocketDisconnect):
+            logger.info("Screen mirror WebSocket disconnected")
+        else:
+            logger.warning("Screen mirror WebSocket error: %s", exc)
     finally:
         # 컨트롤 수신 태스크 정리
         if recv_task and not recv_task.done():
