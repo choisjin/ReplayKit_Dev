@@ -1638,24 +1638,57 @@ export default function RecordPage() {
       dataSource={steps}
       renderItem={(s, index) => (
         <List.Item style={{ display: 'flex', padding: '4px 8px', gap: 8 }}>
-          {/* 좌측: 스텝 정보 (1행) + 도구 버튼 (2행) */}
+          {/* 좌측: 스텝 정보 (1행: 설명+함수+delay) + (2행: 나머지) */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* 1행: 스텝 정보 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-              <Tag color={s.type === 'wait' ? 'cyan' : 'blue'}>#{index + 1}</Tag>
+            {/* 1행: 설명, 함수(인자), delay(우측정렬) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Tag color={s.type === 'wait' ? 'cyan' : 'blue'} style={{ flexShrink: 0 }}>#{index + 1}</Tag>
               <Input
                 size="small"
                 placeholder="Remark"
                 value={s.description}
                 onChange={(e) => updateStepDescription(index, e.target.value)}
-                style={{ flex: 1, maxWidth: 200 }}
+                style={{ flex: 1, minWidth: 60, maxWidth: 180 }}
               />
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4, flex: 1 }}>
+                {s.type === 'wait'
+                  ? <><Tag color="cyan" style={{ margin: 0 }}>WAIT</Tag><InputNumber size="small" min={100} step={100} value={s.params.duration_ms} onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, params: { ...st.params, duration_ms: v || 1000 } } : st))} suffix="ms" style={{ width: 110 }} /></>
+                  : s.type === 'module_command'
+                  ? `${s.params.function}(${s.params.args ? Object.entries(s.params.args).map(([, v]) => `"${v}"`).join(', ') : ''})`
+                  : s.type === 'serial_command'
+                  ? <><Tag color="purple" style={{ margin: 0 }}>Serial</Tag> {s.params.data}</>
+                  : s.type === 'hkmc_touch'
+                  ? `touch (${s.params.x},${s.params.y})`
+                  : s.type === 'hkmc_swipe'
+                  ? `swipe (${s.params.x1},${s.params.y1})→(${s.params.x2},${s.params.y2})`
+                  : s.type === 'hkmc_key'
+                  ? <><Tag color="volcano" style={{ margin: 0 }}>KEY</Tag> {s.params.key_name || `cmd:${s.params.cmd}`}</>
+                  : s.type === 'cmd_send'
+                  ? <><Tag color="blue" style={{ margin: 0 }}>CMD</Tag> {s.params.command?.substring(0, 40)}</>
+                  : s.type === 'cmd_check'
+                  ? <><Tag color="orange" style={{ margin: 0 }}>CHECK</Tag> {s.params.command?.substring(0, 25)} → {s.params.match_mode === 'exact' ? '=' : '⊃'} {s.params.expected?.substring(0, 20)}</>
+                  : JSON.stringify(s.params)}
+              </span>
+              {s.type !== 'wait' && (
+                <InputNumber
+                  size="small"
+                  min={0}
+                  max={Infinity}
+                  step={100}
+                  value={s.delay_after_ms}
+                  onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, delay_after_ms: v || 0 } : st))}
+                  suffix="ms"
+                  style={{ width: 110, flexShrink: 0, marginLeft: 'auto' }}
+                />
+              )}
+            </div>
+            {/* 2행: 디바이스, 타입, 이미지, ROI, 점프, 도구 버튼 */}
+            <div style={{ display: 'flex', gap: 2, alignItems: 'center', marginTop: 2, paddingLeft: 36, flexWrap: 'wrap' }}>
               {getDeviceTag(s.device_id)}
               <Tag color={s.type === 'wait' ? 'cyan' : s.type === 'module_command' ? 'geekblue' : s.type.startsWith('hkmc_') ? 'volcano' : undefined}>{s.type === 'module_command' ? (s.params.module || 'module_command') : s.type}</Tag>
               {s.screen_type && <Tag color="geekblue" style={{ margin: 0 }}>{s.screen_type}</Tag>}
               {s.expected_image && scenarioName && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', position: 'relative', marginRight: 4 }}>
-                  {/* Annotated thumbnail for full_exclude / multi_crop; plain image otherwise */}
                   {s.compare_mode === 'full_exclude' && (s.exclude_rois?.length || 0) > 0 ? (
                     <Tooltip title={t('record.expectedWithExclude')}>
                       <span><AnnotatedThumbnail
@@ -1692,149 +1725,105 @@ export default function RecordPage() {
                   </Tooltip>
                 </span>
               )}
-              <span style={{ minWidth: 100, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                {s.type === 'wait'
-                  ? <><Tag color="cyan" style={{ margin: 0 }}>WAIT</Tag><InputNumber size="small" min={100} step={100} value={s.params.duration_ms} onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, params: { ...st.params, duration_ms: v || 1000 } } : st))} suffix="ms" style={{ width: 110 }} /></>
-                  : s.type === 'module_command'
-                  ? `${s.params.function}(${s.params.args ? Object.entries(s.params.args).map(([, v]) => `"${v}"`).join(', ') : ''})`
-                  : s.type === 'serial_command'
-                  ? <><Tag color="purple" style={{ margin: 0 }}>Serial</Tag> {s.params.data}</>
-                  : s.type === 'hkmc_touch'
-                  ? `touch (${s.params.x},${s.params.y})`
-                  : s.type === 'hkmc_swipe'
-                  ? `swipe (${s.params.x1},${s.params.y1})→(${s.params.x2},${s.params.y2})`
-                  : s.type === 'hkmc_key'
-                  ? <><Tag color="volcano" style={{ margin: 0 }}>KEY</Tag> {s.params.key_name || `cmd:${s.params.cmd}`}</>
-                  : s.type === 'cmd_send'
-                  ? <><Tag color="blue" style={{ margin: 0 }}>CMD</Tag> {s.params.command?.substring(0, 40)}</>
-                  : s.type === 'cmd_check'
-                  ? <><Tag color="orange" style={{ margin: 0 }}>CHECK</Tag> {s.params.command?.substring(0, 25)} → {s.params.match_mode === 'exact' ? '=' : '⊃'} {s.params.expected?.substring(0, 20)}</>
-                  : JSON.stringify(s.params)}
-              </span>
-              {s.type !== 'wait' && (
-                <InputNumber
-                  size="small"
-                  min={0}
-                  max={Infinity}
-                  step={100}
-                  value={s.delay_after_ms}
-                  onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, delay_after_ms: v || 0 } : st))}
-                  suffix="ms"
-                  style={{ width: 110, marginLeft: 8 }}
-                />
-              )}
               {s.roi && (
-                <Tag color="orange" style={{ marginLeft: 4 }}>
-                  ROI {s.roi.width}×{s.roi.height}
-                </Tag>
+                <Tag color="orange">ROI {s.roi.width}×{s.roi.height}</Tag>
               )}
               {s.compare_mode === 'full_exclude' && (s.exclude_rois?.length || 0) > 0 && (
-                <Tag color="red" style={{ marginLeft: 4 }}>{t('record.excludeCount', { count: s.exclude_rois!.length })}</Tag>
+                <Tag color="red">{t('record.excludeCount', { count: s.exclude_rois!.length })}</Tag>
               )}
               {s.compare_mode === 'multi_crop' && (
-                <Tag color="purple" style={{ marginLeft: 4 }}>
-                  {t('record.cropCount', { count: s.expected_images?.length || 0 })}
-                </Tag>
+                <Tag color="purple">{t('record.cropCount', { count: s.expected_images?.length || 0 })}</Tag>
               )}
               {s.on_pass_goto != null && (
-                <Tag color="green" style={{ marginLeft: 4 }}>
-                  P→{s.on_pass_goto === -1 ? 'END' : `#${s.on_pass_goto}`}
-                </Tag>
+                <Tag color="green">P→{s.on_pass_goto === -1 ? 'END' : `#${s.on_pass_goto}`}</Tag>
               )}
               {s.on_fail_goto != null && (
-                <Tag color="red" style={{ marginLeft: 4 }}>
-                  F→{s.on_fail_goto === -1 ? 'END' : `#${s.on_fail_goto}`}
-                </Tag>
+                <Tag color="red">F→{s.on_fail_goto === -1 ? 'END' : `#${s.on_fail_goto}`}</Tag>
               )}
-            </div>
-            {/* 2행: 도구 버튼 */}
-            <div style={{ display: 'flex', gap: 2, alignItems: 'center', marginTop: 2, paddingLeft: 36 }}>
-            <Button
-              size="small" type="text"
-              icon={<EditOutlined />}
-              title={t('record.editCommand')}
-              onClick={() => openEditStepModal(index)}
-              style={{ color: '#1890ff' }}
-            />
-            <Popover
-              content={<JumpEditorInner step={s} index={index} steps={steps} onUpdate={updateStepJump} t={t} />}
-              trigger="click"
-              placement="left"
-            >
-              <Button
-                size="small" type="text"
-                icon={<BranchesOutlined />}
-                title={t('record.conditionalJump')}
-                style={s.on_pass_goto != null || s.on_fail_goto != null ? { color: '#722ed1' } : undefined}
-              />
-            </Popover>
-            {!recording && (
-              <Button
-                size="small" type="text"
-                title={t('record.insertWait')}
-                onClick={() => addWaitStep(index)}
-              >W</Button>
-            )}
-            {screenshotDeviceId && scenarioName && (
-              <>
-                <Select
-                  size="small"
-                  value={s.compare_mode || 'full'}
-                  onChange={(v) => updateCompareMode(index, v)}
-                  style={{ width: 105, fontSize: 11 }}
-                  options={[
-                    { value: 'full', label: t('record.fullScreen') },
-                    { value: 'single_crop', label: t('record.singleCrop') },
-                    { value: 'full_exclude', label: t('record.excludeArea') },
-                    { value: 'multi_crop', label: t('record.multiCrop') },
-                  ]}
+              <span style={{ borderLeft: '1px solid #333', paddingLeft: 4, marginLeft: 4, display: 'inline-flex', gap: 2, alignItems: 'center' }}>
+                <Button
+                  size="small" type="text"
+                  icon={<EditOutlined />}
+                  title={t('record.editCommand')}
+                  onClick={() => openEditStepModal(index)}
+                  style={{ color: '#1890ff' }}
                 />
-                {/* 전체화면: 카메라 (전체화면 캡처) */}
-                {(!s.compare_mode || s.compare_mode === 'full') && (
+                <Popover
+                  content={<JumpEditorInner step={s} index={index} steps={steps} onUpdate={updateStepJump} t={t} />}
+                  trigger="click"
+                  placement="left"
+                >
                   <Button
                     size="small" type="text"
-                    icon={<CameraOutlined />}
-                    title={s.expected_image ? t('record.expectedRecapture') : t('record.expectedCapture')}
-                    style={s.expected_image ? { color: '#52c41a' } : undefined}
-                    onClick={() => saveExpectedFull(index)}
+                    icon={<BranchesOutlined />}
+                    title={t('record.conditionalJump')}
+                    style={s.on_pass_goto != null || s.on_fail_goto != null ? { color: '#722ed1' } : undefined}
                   />
-                )}
-                {/* 단일크롭: 가위 (크롭 캡처) */}
-                {s.compare_mode === 'single_crop' && (
+                </Popover>
+                {!recording && (
                   <Button
                     size="small" type="text"
-                    icon={<ScissorOutlined />}
-                    title={s.expected_image ? t('record.expectedRecaptureCrop') : t('record.expectedCaptureCrop')}
-                    style={s.expected_image ? { color: '#52c41a' } : undefined}
-                    onClick={() => openCaptureModal(index)}
-                  />
+                    title={t('record.insertWait')}
+                    onClick={() => addWaitStep(index)}
+                  >W</Button>
                 )}
-                {/* 영역제외: 가위 (제외 영역 편집) */}
-                {s.compare_mode === 'full_exclude' && (
-                  <Button
-                    size="small" type="text"
-                    icon={<ScissorOutlined />}
-                    title={t('record.excludeAreaEdit')}
-                    style={(s.exclude_rois?.length || 0) > 0 ? { color: '#ff4d4f' } : undefined}
-                    onClick={() => openExcludeRoiModal(index)}
-                  />
+                {screenshotDeviceId && scenarioName && (
+                  <>
+                    <Select
+                      size="small"
+                      value={s.compare_mode || 'full'}
+                      onChange={(v) => updateCompareMode(index, v)}
+                      style={{ width: 105, fontSize: 11 }}
+                      options={[
+                        { value: 'full', label: t('record.fullScreen') },
+                        { value: 'single_crop', label: t('record.singleCrop') },
+                        { value: 'full_exclude', label: t('record.excludeArea') },
+                        { value: 'multi_crop', label: t('record.multiCrop') },
+                      ]}
+                    />
+                    {s.compare_mode === 'single_crop' && (
+                      <Button
+                        size="small" type="text"
+                        icon={<ScissorOutlined />}
+                        title={s.expected_image ? t('record.expectedRecaptureCrop') : t('record.expectedCaptureCrop')}
+                        style={s.expected_image ? { color: '#52c41a' } : undefined}
+                        onClick={() => openCaptureModal(index)}
+                      />
+                    )}
+                    {s.compare_mode === 'full_exclude' && (
+                      <Button
+                        size="small" type="text"
+                        icon={<ScissorOutlined />}
+                        title={t('record.excludeAreaEdit')}
+                        style={(s.exclude_rois?.length || 0) > 0 ? { color: '#ff4d4f' } : undefined}
+                        onClick={() => openExcludeRoiModal(index)}
+                      />
+                    )}
+                    {s.compare_mode === 'multi_crop' && (
+                      <Button
+                        size="small" type="text"
+                        icon={<ScissorOutlined />}
+                        title={t('record.cropAreaEdit')}
+                        style={(s.expected_images?.length || 0) > 0 ? { color: '#52c41a' } : undefined}
+                        onClick={() => openMultiCropModal(index)}
+                      />
+                    )}
+                  </>
                 )}
-                {/* 멀티크롭: 가위 (크롭 영역 편집) */}
-                {s.compare_mode === 'multi_crop' && (
-                  <Button
-                    size="small" type="text"
-                    icon={<ScissorOutlined />}
-                    title={t('record.cropAreaEdit')}
-                    style={(s.expected_images?.length || 0) > 0 ? { color: '#52c41a' } : undefined}
-                    onClick={() => openMultiCropModal(index)}
-                  />
-                )}
-              </>
-            )}
+              </span>
             </div>
           </div>
-          {/* 우측: 순서변경 + 테스트 + 삭제 (가로 배치, 1-2행 전체 높이) */}
+          {/* 우측: 카메라 + 순서변경 + 테스트 + 삭제 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0, borderLeft: '1px solid #333', paddingLeft: 8, alignSelf: 'stretch' }}>
+            {screenshotDeviceId && scenarioName && (!s.compare_mode || s.compare_mode === 'full') && (
+              <Button
+                size="small" type="text"
+                icon={<CameraOutlined />}
+                title={s.expected_image ? t('record.expectedRecapture') : t('record.expectedCapture')}
+                style={s.expected_image ? { color: '#52c41a' } : { }}
+                onClick={() => saveExpectedFull(index)}
+              />
+            )}
             {!recording && (
               <>
                 <Button
@@ -2127,66 +2116,9 @@ export default function RecordPage() {
 
         <Splitter.Panel style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', opacity: testingStepIndex != null ? 0.5 : 1, pointerEvents: testingStepIndex != null ? 'none' : 'auto' }}>
           {/* Right panel: Controls + Steps */}
-          <Card size="small" title={t('record.control')}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {/* Row 1: 시나리오 불러오기 + 이름 */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <Input
-                  placeholder={t('record.scenarioNamePlaceholder')}
-                  value={scenarioName}
-                  onChange={(e) => setScenarioName(e.target.value)}
-                  disabled={recording}
-                  style={{ flex: 1, minWidth: 120 }}
-                />
-                {!recording && (
-                  <Select
-                    placeholder={t('record.loadScenario')}
-                    style={{ flex: 1, minWidth: 120 }}
-                    onChange={loadScenario}
-                    value={undefined}
-                    onOpenChange={(open) => { if (open) fetchSavedScenarios(); }}
-                  >
-                    {savedScenarios.map(n => (
-                      <Option key={n} value={n}>{n}</Option>
-                    ))}
-                  </Select>
-                )}
-                {!recording && editingExisting && (
-                  <Button onClick={clearEditing}>{t('record.createNew')}</Button>
-                )}
-              </div>
-              {/* Row 2: 설명 + 상태 + 녹화 버튼 */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <Input
-                  placeholder={t('record.descriptionPlaceholder')}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  disabled={recording}
-                  style={{ flex: 1, minWidth: 120 }}
-                />
-                <Tag color={recording ? 'red' : editingExisting ? 'blue' : 'default'} style={{ margin: 0 }}>
-                  {recording ? t('record.recording') : editingExisting ? t('record.editing') : t('record.waiting')}
-                </Tag>
-                {!recording ? (
-                  <Button type="primary" icon={<PlayCircleOutlined />} onClick={startRecording}>
-                    {editingExisting ? t('record.resumeRecording') : t('record.startRecording')}
-                  </Button>
-                ) : (
-                  <Button danger icon={<PauseOutlined />} onClick={stopRecording} disabled={hasPendingSteps}>
-                    {hasPendingSteps ? t('record.savingSteps') : t('record.stopRecording')}
-                  </Button>
-                )}
-                {!recording && steps.length > 0 && (
-                  <Button icon={<SaveOutlined />} onClick={saveScenario} type={isDirty() ? 'primary' : 'default'} danger={isDirty()}>
-                    {t('record.save')}{isDirty() ? ' *' : ''}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </Card>
-
-          {recording && (
-            <Card size="small" title={t('record.manualStep')} style={{ flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            {recording && (
+            <Card size="small" title={t('record.manualStep')} style={{ flex: 1, minWidth: 0 }}>
               <Space direction="vertical" style={{ width: '100%' }}>
                 {/* Device selector — grouped by category */}
                 <Select
@@ -2378,7 +2310,65 @@ export default function RecordPage() {
                 )}
               </Space>
             </Card>
-          )}
+            )}
+            <Card size="small" title={t('record.control')} style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Row 1: 시나리오 불러오기 + 이름 */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Input
+                    placeholder={t('record.scenarioNamePlaceholder')}
+                    value={scenarioName}
+                    onChange={(e) => setScenarioName(e.target.value)}
+                    disabled={recording}
+                    style={{ flex: 1, minWidth: 120 }}
+                  />
+                  {!recording && (
+                    <Select
+                      placeholder={t('record.loadScenario')}
+                      style={{ flex: 1, minWidth: 120 }}
+                      onChange={loadScenario}
+                      value={undefined}
+                      onOpenChange={(open) => { if (open) fetchSavedScenarios(); }}
+                    >
+                      {savedScenarios.map(n => (
+                        <Option key={n} value={n}>{n}</Option>
+                      ))}
+                    </Select>
+                  )}
+                  {!recording && editingExisting && (
+                    <Button onClick={clearEditing}>{t('record.createNew')}</Button>
+                  )}
+                </div>
+                {/* Row 2: 설명 + 상태 + 녹화 버튼 */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Input
+                    placeholder={t('record.descriptionPlaceholder')}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    disabled={recording}
+                    style={{ flex: 1, minWidth: 120 }}
+                  />
+                  <Tag color={recording ? 'red' : editingExisting ? 'blue' : 'default'} style={{ margin: 0 }}>
+                    {recording ? t('record.recording') : editingExisting ? t('record.editing') : t('record.waiting')}
+                  </Tag>
+                  {!recording ? (
+                    <Button type="primary" icon={<PlayCircleOutlined />} onClick={startRecording}>
+                      {editingExisting ? t('record.resumeRecording') : t('record.startRecording')}
+                    </Button>
+                  ) : (
+                    <Button danger icon={<PauseOutlined />} onClick={stopRecording} disabled={hasPendingSteps}>
+                      {hasPendingSteps ? t('record.savingSteps') : t('record.stopRecording')}
+                    </Button>
+                  )}
+                  {!recording && steps.length > 0 && (
+                    <Button icon={<SaveOutlined />} onClick={saveScenario} type={isDirty() ? 'primary' : 'default'} danger={isDirty()}>
+                      {t('record.save')}{isDirty() ? ' *' : ''}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </Card>
+          </div>
 
           <Card
             size="small"
