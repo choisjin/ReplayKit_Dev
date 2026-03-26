@@ -303,6 +303,22 @@ export default function RecordPage() {
 
   // blob URL → data URL 변환 (HKMC WebSocket blob URL은 다음 프레임에 revoke 됨)
   const snapshotScreenshot = useCallback((): Promise<string> => {
+    // H.264 모드: video 요소에서 직접 프레임 캡처
+    if (h264Mode && videoRef.current) {
+      const video = videoRef.current;
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        const cvs = document.createElement('canvas');
+        // H.264 스트림은 다운스케일 가능 → deviceRes 기준으로 캡처
+        cvs.width = video.videoWidth;
+        cvs.height = video.videoHeight;
+        const ctx = cvs.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(video, 0, 0);
+          return Promise.resolve(cvs.toDataURL('image/png'));
+        }
+      }
+    }
+
     const src = screenshot || '';
     if (!src) return Promise.resolve('');
     if (!src.startsWith('blob:')) return Promise.resolve(src);
@@ -321,10 +337,10 @@ export default function RecordPage() {
           resolve(src);
         }
       };
-      img.onerror = () => resolve(src);
+      img.onerror = () => resolve('');
       img.src = src;
     });
-  }, [screenshot]);
+  }, [screenshot, h264Mode, videoRef]);
 
   // Fetch devices on mount & sync recording state with backend
   useEffect(() => {
@@ -708,7 +724,15 @@ export default function RecordPage() {
     const rw = Math.abs(curX - startX);
     const rh = Math.abs(curY - startY);
     if (rw > 10 && rh > 10 && captureStepIndex != null && scenarioName && screenshotDeviceId) {
-      const crop = { x: rx, y: ry, width: rw, height: rh };
+      // H.264 모드: 캡처 캔버스가 h264Size 해상도 → deviceRes로 비율 변환
+      const captW = captureCanvasRef.current?.width || 1;
+      const captH = captureCanvasRef.current?.height || 1;
+      const ratioX = deviceRes.width / captW;
+      const ratioY = deviceRes.height / captH;
+      const needsScale = Math.abs(ratioX - 1) > 0.01 || Math.abs(ratioY - 1) > 0.01;
+      const crop = needsScale
+        ? { x: Math.round(rx * ratioX), y: Math.round(ry * ratioY), width: Math.round(rw * ratioX), height: Math.round(rh * ratioY) }
+        : { x: rx, y: ry, width: rw, height: rh };
       try {
         const res = await scenarioApi.captureExpectedImage(
           scenarioName, captureStepIndex, screenshotDeviceId, crop, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined,
@@ -774,9 +798,19 @@ export default function RecordPage() {
     const rw = Math.abs(curX - startX);
     const rh = Math.abs(curY - startY);
     if (rw > 10 && rh > 10 && roiEditingIndex != null) {
-      const roi = { x: rx, y: ry, width: rw, height: rh };
+      // 캔버스가 deviceRes와 다르면 비율 변환 (H.264 다운스케일 대응)
+      const roiCW = roiCanvasRef.current?.width || 1;
+      const roiCH = roiCanvasRef.current?.height || 1;
+      const rrx = deviceRes.width / roiCW;
+      const rry = deviceRes.height / roiCH;
+      const needsRoiScale = Math.abs(rrx - 1) > 0.01 || Math.abs(rry - 1) > 0.01;
+      const roi = needsRoiScale
+        ? { x: Math.round(rx * rrx), y: Math.round(ry * rry), width: Math.round(rw * rrx), height: Math.round(rh * rry) }
+        : { x: rx, y: ry, width: rw, height: rh };
       setSteps((prev) => prev.map((s, i) => i === roiEditingIndex ? { ...s, roi } : s));
-      message.success(t('record.roiSet', { size: `${rw}×${rh}`, pos: `${rx},${ry}` }));
+      const dispW = needsRoiScale ? roi.width : rw;
+      const dispH = needsRoiScale ? roi.height : rh;
+      message.success(t('record.roiSet', { size: `${dispW}×${dispH}`, pos: `${roi.x},${roi.y}` }));
       setRoiModalOpen(false);
       setRoiEditingIndex(null);
     }
@@ -895,7 +929,15 @@ export default function RecordPage() {
           return;
         }
       }
-      const newRoi = { x: rx, y: ry, width: rw, height: rh };
+      // 캔버스 ↔ deviceRes 비율 변환 (H.264 다운스케일 대응)
+      const exCW = excludeRoiCanvasRef.current?.width || 1;
+      const exCH = excludeRoiCanvasRef.current?.height || 1;
+      const exRX = deviceRes.width / exCW;
+      const exRY = deviceRes.height / exCH;
+      const exNeedsScale = Math.abs(exRX - 1) > 0.01 || Math.abs(exRY - 1) > 0.01;
+      const newRoi = exNeedsScale
+        ? { x: Math.round(rx * exRX), y: Math.round(ry * exRY), width: Math.round(rw * exRX), height: Math.round(rh * exRY) }
+        : { x: rx, y: ry, width: rw, height: rh };
       if (excludeRoiSelectedIdx != null) {
         // Replace selected region
         setSteps(prev => prev.map((s, i) => {
@@ -1026,7 +1068,15 @@ export default function RecordPage() {
     const rw = Math.abs(curX - startX);
     const rh = Math.abs(curY - startY);
     if (rw > 10 && rh > 10 && multiCropEditingIndex != null && scenarioName && screenshotDeviceId) {
-      const crop = { x: rx, y: ry, width: rw, height: rh };
+      // 캔버스 ↔ deviceRes 비율 변환 (H.264 다운스케일 대응)
+      const mcCW = multiCropCanvasRef.current?.width || 1;
+      const mcCH = multiCropCanvasRef.current?.height || 1;
+      const mcRX = deviceRes.width / mcCW;
+      const mcRY = deviceRes.height / mcCH;
+      const mcNeedsScale = Math.abs(mcRX - 1) > 0.01 || Math.abs(mcRY - 1) > 0.01;
+      const crop = mcNeedsScale
+        ? { x: Math.round(rx * mcRX), y: Math.round(ry * mcRY), width: Math.round(rw * mcRX), height: Math.round(rh * mcRY) }
+        : { x: rx, y: ry, width: rw, height: rh };
       try {
         // 현재 화면으로 기대이미지 갱신 (모달 스냅샷과 좌표 일치 보장)
         const capRes = await scenarioApi.captureExpectedImage(scenarioName, multiCropEditingIndex, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
