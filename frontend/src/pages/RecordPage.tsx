@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Button, Card, Col, Image, Input, Modal, Row, Select, Space, InputNumber, message, List, Tag, Popover, Tooltip, Splitter } from 'antd';
-import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined, CopyOutlined } from '@ant-design/icons';
 import { deviceApi, scenarioApi, customKeysApi } from '../services/api';
 import { useDevice } from '../context/DeviceContext';
 import { useSettings } from '../context/SettingsContext';
@@ -1586,6 +1586,91 @@ export default function RecordPage() {
     setEditingExisting(false);
   };
 
+  // 이름 입력 모달로 시나리오 작업 수행
+  const promptScenarioName = (title: string, defaultValue: string, onConfirm: (name: string) => Promise<void>) => {
+    let inputValue = defaultValue;
+    Modal.confirm({
+      title,
+      content: <Input defaultValue={defaultValue} onChange={(e) => { inputValue = e.target.value; }} />,
+      okText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        const name = inputValue.trim();
+        if (!name) { message.warning(t('record.enterScenarioName')); throw new Error('empty'); }
+        // 중복 체크
+        if (savedScenarios.includes(name) && name !== scenarioName) {
+          return new Promise<void>((resolve, reject) => {
+            Modal.confirm({
+              title: t('record.duplicateName'),
+              content: t('record.overwriteOrRename'),
+              okText: t('record.overwrite'),
+              cancelText: t('record.changeName'),
+              onOk: async () => { await onConfirm(name); resolve(); },
+              onCancel: () => reject(new Error('rename')),
+            });
+          });
+        }
+        await onConfirm(name);
+      },
+    });
+  };
+
+  const deleteScenario = async () => {
+    if (!scenarioName || !editingExisting) return;
+    Modal.confirm({
+      title: t('record.confirmDelete', { name: scenarioName }),
+      okText: t('common.delete'),
+      okType: 'danger',
+      cancelText: t('common.cancel'),
+      onOk: async () => {
+        try {
+          await scenarioApi.delete(scenarioName);
+          message.success(t('record.scenarioDeleted'));
+          clearEditing();
+          fetchSavedScenarios();
+        } catch (e: any) {
+          message.error(e.response?.data?.detail || t('common.deleteFailed'));
+        }
+      },
+    });
+  };
+
+  const copyScenario = () => {
+    if (!scenarioName || !editingExisting) return;
+    promptScenarioName(t('record.copyScenario'), `${scenarioName}_copy`, async (name) => {
+      try {
+        await scenarioApi.copy(scenarioName, name);
+        message.success(t('record.scenarioCopied', { name }));
+        fetchSavedScenarios();
+        loadScenario(name);
+      } catch (e: any) {
+        message.error(e.response?.data?.detail || t('common.saveFailed'));
+      }
+    });
+  };
+
+  const renameScenario = () => {
+    if (!scenarioName || !editingExisting) return;
+    promptScenarioName(t('record.renameScenario'), scenarioName, async (name) => {
+      try {
+        await scenarioApi.rename(scenarioName, name);
+        setScenarioName(name);
+        setOriginalScenarioName(name);
+        message.success(t('record.scenarioRenamed', { name }));
+        fetchSavedScenarios();
+      } catch (e: any) {
+        message.error(e.response?.data?.detail || t('common.saveFailed'));
+      }
+    });
+  };
+
+  const createNewWithName = () => {
+    promptScenarioName(t('record.createNewScenario'), '', async (name) => {
+      clearEditing();
+      setScenarioName(name);
+    });
+  };
+
   // 기대이미지 미리보기: 어노테이션(exclude/crop ROI) 포함
   const showAnnotatedPreview = useCallback((step: Step) => {
     if (!step.expected_image || !scenarioName) return;
@@ -2302,21 +2387,14 @@ export default function RecordPage() {
             )}
             <Card size="small" title={t('record.control')} style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {/* Row 1: 시나리오 불러오기 + 이름 */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Input
-                    placeholder={t('record.scenarioNamePlaceholder')}
-                    value={scenarioName}
-                    onChange={(e) => setScenarioName(e.target.value)}
-                    disabled={recording}
-                    style={{ flex: 1, minWidth: 120 }}
-                  />
+                {/* Row 1: 시나리오 콤보 + 관리 버튼 */}
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                   {!recording && (
                     <Select
                       placeholder={t('record.loadScenario')}
-                      style={{ flex: 1, minWidth: 120 }}
+                      style={{ flex: 1, minWidth: 140 }}
                       onChange={loadScenario}
-                      value={undefined}
+                      value={editingExisting ? scenarioName : undefined}
                       onOpenChange={(open) => { if (open) fetchSavedScenarios(); }}
                     >
                       {savedScenarios.map(n => (
@@ -2324,8 +2402,18 @@ export default function RecordPage() {
                       ))}
                     </Select>
                   )}
+                  {recording && scenarioName && (
+                    <Tag color="red" style={{ margin: 0, fontSize: 13 }}>{scenarioName}</Tag>
+                  )}
                   {!recording && editingExisting && (
-                    <Button onClick={clearEditing}>{t('record.createNew')}</Button>
+                    <>
+                      <Button size="small" icon={<CopyOutlined />} title={t('record.copyScenario')} onClick={copyScenario} />
+                      <Button size="small" icon={<EditOutlined />} title={t('record.renameScenario')} onClick={renameScenario} />
+                      <Button size="small" danger icon={<DeleteOutlined />} title={t('common.delete')} onClick={deleteScenario} />
+                    </>
+                  )}
+                  {!recording && (
+                    <Button size="small" icon={<PlusOutlined />} onClick={createNewWithName}>{t('record.createNew')}</Button>
                   )}
                 </div>
                 {/* Row 2: 설명 + 상태 + 녹화 버튼 */}
