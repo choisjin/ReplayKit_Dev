@@ -308,7 +308,6 @@ export default function RecordPage() {
       const video = videoRef.current;
       if (video.videoWidth > 0 && video.videoHeight > 0) {
         const cvs = document.createElement('canvas');
-        // H.264 스트림은 다운스케일 가능 → deviceRes 기준으로 캡처
         cvs.width = video.videoWidth;
         cvs.height = video.videoHeight;
         const ctx = cvs.getContext('2d');
@@ -317,6 +316,14 @@ export default function RecordPage() {
           return Promise.resolve(cvs.toDataURL('image/png'));
         }
       }
+    }
+
+    // JPEG 모드: 메인 캔버스에서 직접 프레임 캡처 (blob URL 해제 레이스 방지)
+    const mainCanvas = canvasRef.current;
+    if (mainCanvas && mainCanvas.width > 0 && mainCanvas.height > 0) {
+      try {
+        return Promise.resolve(mainCanvas.toDataURL('image/png'));
+      } catch { /* CORS 등 실패 시 아래 폴백 */ }
     }
 
     const src = screenshot || '';
@@ -551,8 +558,8 @@ export default function RecordPage() {
 
     const img = new window.Image();
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       ctx.drawImage(img, 0, 0);
 
       // Existing ROI (green)
@@ -665,8 +672,8 @@ export default function RecordPage() {
     if (!ctx) return;
     const img = new window.Image();
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       ctx.drawImage(img, 0, 0);
       if (dragRect && dragRect.w > 5 && dragRect.h > 5) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
@@ -837,8 +844,8 @@ export default function RecordPage() {
     if (!ctx) return;
     const img = new window.Image();
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       ctx.drawImage(img, 0, 0);
       // Draw existing exclude regions
       const stepIdx = excludeRoiEditingIndex;
@@ -988,8 +995,8 @@ export default function RecordPage() {
     if (!ctx) return;
     const img = new window.Image();
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       ctx.drawImage(img, 0, 0);
       // Draw existing crop regions
       const stepIdx = multiCropEditingIndex;
@@ -1508,33 +1515,42 @@ export default function RecordPage() {
   }, []);
 
   // --- Step command edit modal ---
-  const openEditStepModal = useCallback((index: number) => {
+  const editScreenshotRef = useRef<string>('');
+
+  const openEditStepModal = useCallback(async (index: number) => {
     const s = steps[index];
     setEditStepIndex(index);
     setEditStepParams({ ...s.params });
-  }, [steps]);
+    // 원본 해상도 스냅샷 캡처 (blob URL 해제 레이스 방지)
+    editScreenshotRef.current = await snapshotScreenshot();
+  }, [steps, snapshotScreenshot]);
 
   const drawEditCanvas = useCallback(() => {
     const canvas = editCanvasRef.current;
-    if (!canvas || !screenshot) return;
+    const src = editScreenshotRef.current;
+    if (!canvas || !src) return;
     const img = new window.Image();
     img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       canvas.getContext('2d')?.drawImage(img, 0, 0);
     };
-    img.src = screenshot;
-  }, [screenshot]);
+    img.src = src;
+  }, []);
 
   const editCanvasToDevice = useCallback((canvas: HTMLCanvasElement, clientX: number, clientY: number) => {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    return {
-      x: Math.round((clientX - rect.left) * scaleX),
-      y: Math.round((clientY - rect.top) * scaleY),
-    };
-  }, []);
+    let x = Math.round((clientX - rect.left) * scaleX);
+    let y = Math.round((clientY - rect.top) * scaleY);
+    // 캔버스 해상도와 deviceRes 불일치 시 비율 변환 (H.264 다운스케일 대응)
+    if (canvas.width > 0 && Math.abs(deviceRes.width / canvas.width - 1) > 0.01) {
+      x = Math.round(x * deviceRes.width / canvas.width);
+      y = Math.round(y * deviceRes.height / canvas.height);
+    }
+    return { x, y };
+  }, [deviceRes]);
 
   const editMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = editCanvasRef.current;
@@ -1601,8 +1617,8 @@ export default function RecordPage() {
     const img = new window.Image();
     img.onload = () => {
       const canvas = canvasRef.current!;
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       canvas.getContext('2d')?.drawImage(img, 0, 0);
     };
     img.src = screenshot;
