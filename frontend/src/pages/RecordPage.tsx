@@ -1816,7 +1816,7 @@ export default function RecordPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* 1행: 설명, 함수(인자), delay(우측정렬) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Tag color={s.type === 'wait' ? 'cyan' : 'blue'} style={{ flexShrink: 0, width: 36, textAlign: 'center' }}>#{index + 1}</Tag>
+              <span style={{ flexShrink: 0, width: 32, textAlign: 'center', display: 'inline-block' }}><Tag color={s.type === 'wait' ? 'cyan' : 'blue'} style={{ margin: 0 }}>#{index + 1}</Tag></span>
               <Input
                 size="small"
                 placeholder="Remark"
@@ -1862,7 +1862,7 @@ export default function RecordPage() {
               )}
             </div>
             {/* 2행: 디바이스/타입/이미지/태그 (좌측 정렬) */}
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 2, paddingLeft: 40, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 2, paddingLeft: 36, flexWrap: 'wrap' }}>
               {getDeviceTag(s.device_id)}
               <Tag color={s.type === 'wait' ? 'cyan' : s.type === 'module_command' ? 'geekblue' : s.type.startsWith('hkmc_') ? 'volcano' : undefined}>{s.type === 'module_command' ? (s.params.module || 'module_command') : s.type}</Tag>
               {s.screen_type && <Tag color="geekblue" style={{ margin: 0 }}>{s.screen_type}</Tag>}
@@ -2402,7 +2402,7 @@ export default function RecordPage() {
             )}
             <Card
               size="small"
-              title={t('record.control')}
+              title={recording ? undefined : t('record.control')}
               extra={recording ? (
                 <Space size={4}>
                   <Tag color="red" style={{ margin: 0 }}>{t('record.recording')}</Tag>
@@ -2411,12 +2411,13 @@ export default function RecordPage() {
                   </Button>
                 </Space>
               ) : undefined}
+              styles={recording ? { header: { borderBottom: 'none', minHeight: 32, padding: '0 12px' }, body: { padding: '4px 12px 8px' } } : undefined}
               style={recording ? { flexShrink: 0 } : { flex: 1, minWidth: 0 }}
             >
               {recording ? (
-                /* 녹화 중: 시나리오명 + 설명 */
+                /* 녹화 중: 시나리오명(읽기전용) + 설명 */
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <Tag color="red" style={{ margin: 0, fontSize: 13 }}>{scenarioName}</Tag>
+                  <Input size="small" value={scenarioName} disabled style={{ width: 140 }} />
                   <Input
                     placeholder={t('record.descriptionPlaceholder')}
                     value={description}
