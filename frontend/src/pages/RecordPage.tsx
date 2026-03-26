@@ -1195,18 +1195,23 @@ export default function RecordPage() {
       }
       params = { module: stepDeviceModule, function: funcName, args: { ...moduleFuncArgs } };
     } else if (stepType === 'serial_command') {
+      if (!serialData.trim()) { message.warning(t('record.enterValue')); return; }
       params = { data: serialData };
     } else if (stepType === 'input_text') {
+      if (!stepDesc.trim()) { message.warning(t('record.enterValue')); return; }
       params = { text: stepDesc };
     } else if (stepType === 'key_event') {
       params = { keycode: stepDesc || 'KEYCODE_BACK' };
     } else if (stepType === 'wait') {
       params = { duration_ms: delayMs };
     } else if (stepType === 'adb_command') {
+      if (!stepDesc.trim()) { message.warning(t('record.enterValue')); return; }
       params = { command: stepDesc };
     } else if (stepType === 'cmd_send') {
+      if (!stepDesc.trim()) { message.warning(t('record.enterValue')); return; }
       params = { command: stepDesc, background: cmdBackground };
     } else if (stepType === 'cmd_check') {
+      if (!stepDesc.trim()) { message.warning(t('record.enterValue')); return; }
       params = { command: stepDesc, expected: cmdExpected, match_mode: cmdMatchMode, background: cmdBackground };
     } else if (stepType === 'hkmc_key') {
       params = { key_name: stepDesc, screen_type: screenType };
@@ -1220,7 +1225,7 @@ export default function RecordPage() {
         description: stepDesc || (
           stepType === 'module_command' ? `${stepDeviceModule}::${selectedModuleFunc}()` :
           stepType === 'serial_command' ? `Serial: ${serialData.substring(0, 30)}` :
-          stepType === 'hkmc_key' ? `HKMC Key: ${stepDesc}` :
+          stepType === 'hkmc_key' ? (stepDesc ? `HKMC Key: ${stepDesc}` : 'HKMC Key') :
           stepType === 'cmd_send' ? `CMD: ${stepDesc.substring(0, 40)}` :
           stepType === 'cmd_check' ? `CHECK: ${stepDesc.substring(0, 30)}` : ''
         ),
@@ -1357,8 +1362,9 @@ export default function RecordPage() {
           newIdx++;
         }
       }
-      return filtered.map(s => ({
+      return filtered.map((s, i) => ({
         ...s,
+        id: i + 1,
         on_pass_goto: remapGoto(s.on_pass_goto, mapping),
         on_fail_goto: remapGoto(s.on_fail_goto, mapping),
       }));
@@ -1367,9 +1373,9 @@ export default function RecordPage() {
   };
 
   const moveStep = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= steps.length) return;
     setSteps((prev) => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
       const arr = [...prev];
       [arr[index], arr[target]] = [arr[target], arr[index]];
       // Build old-position → new-position mapping
@@ -1427,11 +1433,18 @@ export default function RecordPage() {
     } else if (afterIndex !== undefined) {
       setSteps((prev) => {
         const arr = [...prev];
+        const insertPos1Based = afterIndex + 2;
         arr.splice(afterIndex + 1, 0, waitStep);
-        return arr;
+        // 삽입 위치 이후의 goto 참조를 +1 시프트 + ID 재번호
+        return arr.map((s, i) => ({
+          ...s,
+          id: i + 1,
+          on_pass_goto: s.on_pass_goto != null && s.on_pass_goto !== -1 && s.on_pass_goto >= insertPos1Based ? s.on_pass_goto + 1 : s.on_pass_goto,
+          on_fail_goto: s.on_fail_goto != null && s.on_fail_goto !== -1 && s.on_fail_goto >= insertPos1Based ? s.on_fail_goto + 1 : s.on_fail_goto,
+        }));
       });
     } else {
-      setSteps((prev) => [...prev, waitStep]);
+      setSteps((prev) => [...prev, { ...waitStep, id: prev.length + 1 }]);
     }
   };
 
@@ -1825,7 +1838,13 @@ export default function RecordPage() {
             )}
             <Button
               type="text" danger icon={<DeleteOutlined />}
-              onClick={() => deleteStep(index)}
+              onClick={() => Modal.confirm({
+                title: t('record.confirmDeleteStep', { index: index + 1 }),
+                okText: t('common.delete'),
+                okType: 'danger',
+                cancelText: t('common.cancel'),
+                onOk: () => deleteStep(index),
+              })}
               style={{ fontSize: 16, width: 32, height: '100%' }}
             />
           </div>
