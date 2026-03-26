@@ -1816,7 +1816,7 @@ export default function RecordPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* 1행: 설명, 함수(인자), delay(우측정렬) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Tag color={s.type === 'wait' ? 'cyan' : 'blue'} style={{ flexShrink: 0 }}>#{index + 1}</Tag>
+              <Tag color={s.type === 'wait' ? 'cyan' : 'blue'} style={{ flexShrink: 0, width: 36, textAlign: 'center' }}>#{index + 1}</Tag>
               <Input
                 size="small"
                 placeholder="Remark"
@@ -1862,7 +1862,7 @@ export default function RecordPage() {
               )}
             </div>
             {/* 2행: 디바이스/타입/이미지/태그 (좌측 정렬) */}
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 2, paddingLeft: 36, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 2, paddingLeft: 40, flexWrap: 'wrap' }}>
               {getDeviceTag(s.device_id)}
               <Tag color={s.type === 'wait' ? 'cyan' : s.type === 'module_command' ? 'geekblue' : s.type.startsWith('hkmc_') ? 'volcano' : undefined}>{s.type === 'module_command' ? (s.params.module || 'module_command') : s.type}</Tag>
               {s.screen_type && <Tag color="geekblue" style={{ margin: 0 }}>{s.screen_type}</Tag>}
@@ -2400,11 +2400,36 @@ export default function RecordPage() {
               </div>
             </Card>
             )}
-            <Card size="small" title={t('record.control')} style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {/* Row 1: 시나리오 콤보 + 관리 버튼 */}
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {!recording && (
+            <Card
+              size="small"
+              title={t('record.control')}
+              extra={recording ? (
+                <Space size={4}>
+                  <Tag color="red" style={{ margin: 0 }}>{t('record.recording')}</Tag>
+                  <Button size="small" danger icon={<PauseOutlined />} onClick={stopRecording} disabled={hasPendingSteps}>
+                    {hasPendingSteps ? t('record.savingSteps') : t('record.stopRecording')}
+                  </Button>
+                </Space>
+              ) : undefined}
+              style={recording ? { flexShrink: 0 } : { flex: 1, minWidth: 0 }}
+            >
+              {recording ? (
+                /* 녹화 중: 시나리오명 + 설명 */
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <Tag color="red" style={{ margin: 0, fontSize: 13 }}>{scenarioName}</Tag>
+                  <Input
+                    placeholder={t('record.descriptionPlaceholder')}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    size="small"
+                    style={{ width: 140 }}
+                  />
+                </div>
+              ) : (
+                /* 비녹화: 기존 2행 레이아웃 */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {/* Row 1: 시나리오 콤보 + 관리 버튼 */}
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                     <Select
                       placeholder={t('record.loadScenario')}
                       style={{ flex: 1, minWidth: 140 }}
@@ -2416,49 +2441,37 @@ export default function RecordPage() {
                         <Option key={n} value={n}>{n}</Option>
                       ))}
                     </Select>
-                  )}
-                  {recording && scenarioName && (
-                    <Tag color="red" style={{ margin: 0, fontSize: 13 }}>{scenarioName}</Tag>
-                  )}
-                  {!recording && editingExisting && (
-                    <>
-                      <Button size="small" icon={<CopyOutlined />} title={t('record.copyScenario')} onClick={copyScenario} />
-                      <Button size="small" icon={<EditOutlined />} title={t('record.renameScenario')} onClick={renameScenario} />
-                      <Button size="small" danger icon={<DeleteOutlined />} title={t('common.delete')} onClick={deleteScenario} />
-                    </>
-                  )}
-                  {!recording && (
+                    {editingExisting && (
+                      <>
+                        <Button size="small" icon={<CopyOutlined />} title={t('record.copyScenario')} onClick={copyScenario} />
+                        <Button size="small" icon={<EditOutlined />} title={t('record.renameScenario')} onClick={renameScenario} />
+                        <Button size="small" danger icon={<DeleteOutlined />} title={t('common.delete')} onClick={deleteScenario} />
+                      </>
+                    )}
                     <Button size="small" icon={<PlusOutlined />} onClick={createNewWithName}>{t('record.createNew')}</Button>
-                  )}
-                </div>
-                {/* Row 2: 설명 + 상태 + 녹화 버튼 */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <Input
-                    placeholder={t('record.descriptionPlaceholder')}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    disabled={recording}
-                    style={{ flex: 1, minWidth: 120 }}
-                  />
-                  <Tag color={recording ? 'red' : editingExisting ? 'blue' : 'default'} style={{ margin: 0 }}>
-                    {recording ? t('record.recording') : editingExisting ? t('record.editing') : t('record.waiting')}
-                  </Tag>
-                  {!recording ? (
+                  </div>
+                  {/* Row 2: 설명 + 상태 + 녹화 버튼 */}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Input
+                      placeholder={t('record.descriptionPlaceholder')}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      style={{ flex: 1, minWidth: 120 }}
+                    />
+                    <Tag color={editingExisting ? 'blue' : 'default'} style={{ margin: 0 }}>
+                      {editingExisting ? t('record.editing') : t('record.waiting')}
+                    </Tag>
                     <Button type="primary" icon={<PlayCircleOutlined />} onClick={startRecording}>
                       {editingExisting ? t('record.resumeRecording') : t('record.startRecording')}
                     </Button>
-                  ) : (
-                    <Button danger icon={<PauseOutlined />} onClick={stopRecording} disabled={hasPendingSteps}>
-                      {hasPendingSteps ? t('record.savingSteps') : t('record.stopRecording')}
-                    </Button>
-                  )}
-                  {!recording && steps.length > 0 && (
-                    <Button icon={<SaveOutlined />} onClick={saveScenario} type={isDirty() ? 'primary' : 'default'} danger={isDirty()}>
-                      {t('record.save')}{isDirty() ? ' *' : ''}
-                    </Button>
-                  )}
+                    {steps.length > 0 && (
+                      <Button icon={<SaveOutlined />} onClick={saveScenario} type={isDirty() ? 'primary' : 'default'} danger={isDirty()}>
+                        {t('record.save')}{isDirty() ? ' *' : ''}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </Card>
           </div>
 
