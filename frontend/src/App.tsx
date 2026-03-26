@@ -247,14 +247,16 @@ function AppContent() {
           {diskInfoList.length > 0 && (
             <div style={{ padding: siderCollapsed ? '8px 4px' : '8px 16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
               {diskInfoList.map((di) => (
-              <Tooltip key={di.drive} title={`${di.drive} — ${di.free_gb} GB 가용 / ${di.total_gb} GB`} placement="right">
-                <div style={{ fontSize: 11, color: '#888', textAlign: 'center', marginBottom: diskInfoList.length > 1 ? 6 : 0 }}>
-                  {!siderCollapsed && <div style={{ marginBottom: 4 }}><DatabaseOutlined /> {di.drive}</div>}
-                  <div style={{ background: '#333', borderRadius: 4, height: 6, overflow: 'hidden' }}>
-                    <div style={{ background: di.used_percent > 90 ? '#ff4d4f' : di.used_percent > 70 ? '#faad14' : '#52c41a', width: `${di.used_percent}%`, height: '100%' }} />
+              <Tooltip key={di.drive} title={`${di.drive} — ${di.free_gb} GB 사용가능 / ${di.total_gb} GB`} placement="right">
+                <div style={{ fontSize: 11, color: '#888', marginBottom: diskInfoList.length > 1 ? 6 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {!siderCollapsed && <span style={{ whiteSpace: 'nowrap', minWidth: 24 }}>{di.drive}</span>}
+                    <div style={{ flex: 1, background: '#333', borderRadius: 4, height: 6, overflow: 'hidden' }}>
+                      <div style={{ background: di.used_percent > 90 ? '#ff4d4f' : di.used_percent > 70 ? '#faad14' : '#52c41a', width: `${di.used_percent}%`, height: '100%' }} />
+                    </div>
                   </div>
-                  <div style={{ marginTop: 2, fontSize: 10 }}>
-                    {siderCollapsed ? `${di.free_gb}G` : `${di.free_gb} GB 가용`}
+                  <div style={{ marginTop: 2, fontSize: 10, textAlign: 'center' }}>
+                    {siderCollapsed ? `${di.free_gb}G` : `${di.free_gb} GB 사용가능`}
                   </div>
                 </div>
               </Tooltip>
