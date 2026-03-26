@@ -243,6 +243,7 @@ export default function RecordPage() {
   const [serialData, setSerialData] = useState('');
   const [serialResponse, setSerialResponse] = useState('');
   const [serialSending, setSerialSending] = useState(false);
+  const [compareModePopoverIndex, setCompareModePopoverIndex] = useState<number | null>(null);
 
   // Module command
   const [moduleFunctions, setModuleFunctions] = useState<{ name: string; params: { name: string; required: boolean; default?: string }[] }[]>([]);
@@ -1730,6 +1731,18 @@ export default function RecordPage() {
     img.src = imgUrl;
   }, [scenarioName]);
 
+  // 비교모드 Popover 닫고 → 모달 열기
+  const selectCompareMode = useCallback((index: number, mode: string) => {
+    setCompareModePopoverIndex(null);
+    updateCompareMode(index, mode);
+    setTimeout(() => {
+      if (mode === 'full') saveExpectedFull(index);
+      else if (mode === 'single_crop') openCaptureModal(index);
+      else if (mode === 'full_exclude') openExcludeRoiModal(index);
+      else if (mode === 'multi_crop') openMultiCropModal(index);
+    }, 100);
+  }, [updateCompareMode, saveExpectedFull, openCaptureModal, openExcludeRoiModal, openMultiCropModal]);
+
   // Draw screenshot on canvas
   useEffect(() => {
     if (!screenshot || !canvasRef.current) return;
@@ -1904,20 +1917,22 @@ export default function RecordPage() {
               <Button size="small" type="text" title={t('record.insertWait')} onClick={() => addWaitStep(index)} style={{ width: 28 }}>W</Button>
               {screenshotDeviceId && scenarioName && (
                 <Popover
+                  open={compareModePopoverIndex === index}
+                  onOpenChange={(v) => setCompareModePopoverIndex(v ? index : null)}
                   trigger="click"
                   placement="bottomRight"
                   content={
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 130 }}>
-                      <Button size="small" block onClick={() => { updateCompareMode(index, 'full'); saveExpectedFull(index); }}>
+                      <Button size="small" block onClick={() => selectCompareMode(index, 'full')}>
                         <CameraOutlined /> {t('record.fullScreen')}
                       </Button>
-                      <Button size="small" block onClick={() => { updateCompareMode(index, 'single_crop'); openCaptureModal(index); }}>
+                      <Button size="small" block onClick={() => selectCompareMode(index, 'single_crop')}>
                         <ScissorOutlined /> {t('record.singleCrop')}
                       </Button>
-                      <Button size="small" block onClick={() => { updateCompareMode(index, 'full_exclude'); openExcludeRoiModal(index); }}>
+                      <Button size="small" block onClick={() => selectCompareMode(index, 'full_exclude')}>
                         <ScissorOutlined /> {t('record.excludeArea')}
                       </Button>
-                      <Button size="small" block onClick={() => { updateCompareMode(index, 'multi_crop'); openMultiCropModal(index); }}>
+                      <Button size="small" block onClick={() => selectCompareMode(index, 'multi_crop')}>
                         <ScissorOutlined /> {t('record.multiCrop')}
                       </Button>
                     </div>
@@ -1932,7 +1947,7 @@ export default function RecordPage() {
       )}
       locale={{ emptyText: t('record.noSteps') }}
     />
-  ), [steps, recording, updateStepJump, updateStepDescription, openEditStepModal, openRoiModal, screenshotDeviceId, scenarioName, saveExpectedFull, openCaptureModal, testStep, testingStepIndex, updateCompareMode, openExcludeRoiModal, openMultiCropModal, showAnnotatedPreview, t]);
+  ), [steps, recording, updateStepJump, updateStepDescription, openEditStepModal, openRoiModal, screenshotDeviceId, scenarioName, saveExpectedFull, openCaptureModal, testStep, testingStepIndex, updateCompareMode, openExcludeRoiModal, openMultiCropModal, showAnnotatedPreview, selectCompareMode, compareModePopoverIndex, t]);
 
   return (
     <div style={{ height: 'calc(100vh - 80px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
