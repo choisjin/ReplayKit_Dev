@@ -185,10 +185,10 @@ export default function RecordPage() {
   const savedStepsRef = useRef<string>('[]');
   const saveScenarioRef = useRef<() => Promise<void>>(async () => {});
   const isDirty = useCallback(() => {
-    if (!editingExisting || steps.length === 0) return false;
+    if (steps.length === 0) return false;
     const current = JSON.stringify(steps.map(({ _imageVer, ...rest }) => rest));
     return current !== savedStepsRef.current;
-  }, [steps, editingExisting]);
+  }, [steps]);
   const confirmIfDirty = useCallback((): Promise<boolean> => {
     if (!isDirty()) return Promise.resolve(true);
     return new Promise(resolve => {
@@ -202,6 +202,21 @@ export default function RecordPage() {
       });
     });
   }, [isDirty, t]);
+
+  // 브라우저 닫기/새로고침 시 저장 확인
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (isDirty()) { e.preventDefault(); }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
+
+  // 페이지 전환 시 확인할 수 있도록 window에 노출
+  useEffect(() => {
+    (window as any).__recordPageDirtyCheck = () => isDirty() ? confirmIfDirty() : Promise.resolve(true);
+    return () => { delete (window as any).__recordPageDirtyCheck; };
+  }, [isDirty, confirmIfDirty]);
 
   // Pending background step count
   const pendingStepsRef = useRef(0);
@@ -1784,12 +1799,8 @@ export default function RecordPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, borderLeft: '1px solid #333', paddingLeft: 8, alignSelf: 'stretch', justifyContent: 'center' }}>
             {/* 1행: 순서변경 + 테스트 + 삭제 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'flex-end' }}>
-              {!recording && (
-                <>
-                  <Button size="small" type="text" icon={<ArrowUpOutlined />} disabled={index === 0} onClick={() => moveStep(index, -1)} style={{ width: 28 }} />
-                  <Button size="small" type="text" icon={<ArrowDownOutlined />} disabled={index === steps.length - 1} onClick={() => moveStep(index, 1)} style={{ width: 28 }} />
-                </>
-              )}
+              <Button size="small" type="text" icon={<ArrowUpOutlined />} disabled={index === 0} onClick={() => moveStep(index, -1)} style={{ width: 28 }} />
+              <Button size="small" type="text" icon={<ArrowDownOutlined />} disabled={index === steps.length - 1} onClick={() => moveStep(index, 1)} style={{ width: 28 }} />
               {scenarioName && (
                 <Button size="small" type="text" icon={<ThunderboltOutlined />} title={t('record.testStep')} loading={testingStepIndex === index} onClick={() => testStep(index)} style={{ color: '#faad14', width: 28 }} />
               )}
@@ -1805,9 +1816,7 @@ export default function RecordPage() {
               >
                 <Button size="small" type="text" icon={<BranchesOutlined />} title={t('record.conditionalJump')} style={{ width: 28, ...(s.on_pass_goto != null || s.on_fail_goto != null ? { color: '#722ed1' } : {}) }} />
               </Popover>
-              {!recording && (
-                <Button size="small" type="text" title={t('record.insertWait')} onClick={() => addWaitStep(index)} style={{ width: 28 }}>W</Button>
-              )}
+              <Button size="small" type="text" title={t('record.insertWait')} onClick={() => addWaitStep(index)} style={{ width: 28 }}>W</Button>
               {screenshotDeviceId && scenarioName && (
                 <Popover
                   trigger="click"
@@ -2091,59 +2100,53 @@ export default function RecordPage() {
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             {recording && (
             <Card size="small" title={t('record.manualStep')} style={{ flex: 1, minWidth: 0 }}>
-              <Space direction="vertical" style={{ width: '100%' }}>
-                {/* Device selector — grouped by category */}
-                <Select
-                  value={stepDeviceId || undefined}
-                  onChange={setStepDeviceId}
-                  placeholder={t('record.targetDevice')}
-                  style={{ width: '100%' }}
-                >
-                  {primaryDevices.length > 0 && (
-                    <Select.OptGroup label={t('record.primaryDevices')}>
-                      {primaryDevices.map(d => (
-                        <Option key={d.id} value={d.id}>
-                          <Tag color="green" style={{ marginRight: 4 }}>{d.type.toUpperCase()}</Tag>
-                          {d.name || d.id}
-                        </Option>
-                      ))}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {/* 1행: 대상 디바이스 + 스텝 타입 */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <Select
+                    value={stepDeviceId || undefined}
+                    onChange={setStepDeviceId}
+                    placeholder={t('record.targetDevice')}
+                    size="small"
+                    style={{ flex: 1, minWidth: 120 }}
+                  >
+                    {primaryDevices.length > 0 && (
+                      <Select.OptGroup label={t('record.primaryDevices')}>
+                        {primaryDevices.map(d => (
+                          <Option key={d.id} value={d.id}>
+                            <Tag color="green" style={{ marginRight: 4 }}>{d.type.toUpperCase()}</Tag>
+                            {d.name || d.id}
+                          </Option>
+                        ))}
+                      </Select.OptGroup>
+                    )}
+                    {auxiliaryDevices.length > 0 && (
+                      <Select.OptGroup label={t('record.auxiliaryDevices')}>
+                        {auxiliaryDevices.map(d => (
+                          <Option key={d.id} value={d.id}>
+                            {d.info?.module
+                              ? <><Tag color="purple" style={{ marginRight: 4 }}>{d.info.module}</Tag>{d.address || d.name || d.id}</>
+                              : <><Tag color="purple" style={{ marginRight: 4 }}>{d.type.toUpperCase()}</Tag>{d.name || d.id}</>
+                            }
+                          </Option>
+                        ))}
+                      </Select.OptGroup>
+                    )}
+                    <Select.OptGroup label="Common">
+                      <Option key="__common__" value="__common__">
+                        <Tag color="cyan" style={{ marginRight: 4 }}>CMD</Tag>Common
+                      </Option>
                     </Select.OptGroup>
-                  )}
-                  {auxiliaryDevices.length > 0 && (
-                    <Select.OptGroup label={t('record.auxiliaryDevices')}>
-                      {auxiliaryDevices.map(d => (
-                        <Option key={d.id} value={d.id}>
-                          {d.info?.module
-                            ? <><Tag color="purple" style={{ marginRight: 4 }}>{d.info.module}</Tag>{d.address || d.name || d.id}</>
-                            : <><Tag color="purple" style={{ marginRight: 4 }}>{d.type.toUpperCase()}</Tag>{d.name || d.id}</>
-                          }
-                        </Option>
-                      ))}
-                    </Select.OptGroup>
-                  )}
-                  <Select.OptGroup label="Common">
-                    <Option key="__common__" value="__common__">
-                      <Tag color="cyan" style={{ marginRight: 4 }}>CMD</Tag>Common
-                    </Option>
-                  </Select.OptGroup>
-                </Select>
-
-                <Space>
-                  <Select value={stepType} onChange={setStepType} style={{ width: 170 }}>
+                  </Select>
+                  <Select value={stepType} onChange={setStepType} size="small" style={{ width: 150 }}>
                     {getStepTypes().map(t => (
                       <Option key={t.value} value={t.value}>{t.label}</Option>
                     ))}
                   </Select>
-                  <InputNumber
-                    min={100}
-                    max={Infinity}
-                    step={100}
-                    value={delayMs}
-                    onChange={(v) => setDelayMs(v || 1000)}
-                    suffix="ms"
-                  />
-                </Space>
-
+                </div>
+                {/* 2행: 스텝 설명/파라미터 + delay + 추가 버튼 */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {stepType === 'module_command' ? (
                   <>
                     <Select
@@ -2270,17 +2273,31 @@ export default function RecordPage() {
                   />
                 )}
 
-                {['input_text', 'key_event', 'wait', 'adb_command', 'serial_command', 'module_command', 'hkmc_key', 'cmd_send', 'cmd_check'].includes(stepType) && (
-                  <Button
-                    icon={<PlusOutlined />}
-                    onClick={addManualStep}
-                    disabled={!stepDeviceId && stepType !== 'wait'}
-                    block
-                  >
-                    {t('record.addStep')}
-                  </Button>
-                )}
-              </Space>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignItems: 'flex-end' }}>
+                    <InputNumber
+                      size="small"
+                      min={100}
+                      max={Infinity}
+                      step={100}
+                      value={delayMs}
+                      onChange={(v) => setDelayMs(v || 1000)}
+                      suffix="ms"
+                      style={{ width: 120 }}
+                    />
+                    {['input_text', 'key_event', 'wait', 'adb_command', 'serial_command', 'module_command', 'hkmc_key', 'cmd_send', 'cmd_check'].includes(stepType) && (
+                      <Button
+                        size="small"
+                        icon={<PlusOutlined />}
+                        onClick={addManualStep}
+                        disabled={!stepDeviceId && stepType !== 'wait'}
+                      >
+                        {t('record.addStep')}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
             </Card>
             )}
             <Card size="small" title={t('record.control')} style={{ flex: 1, minWidth: 0 }}>

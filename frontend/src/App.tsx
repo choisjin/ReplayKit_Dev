@@ -163,7 +163,14 @@ function AppContent() {
             mode="inline"
             selectedKeys={[activeKey]}
             items={menuItems}
-            onClick={({ key }) => { setActiveKey(key); window.dispatchEvent(new CustomEvent('tab-change', { detail: key })); }}
+            onClick={async ({ key }) => {
+              if (activeKey === '/record' && key !== '/record') {
+                const check = (window as any).__recordPageDirtyCheck;
+                if (check) { const ok = await check(); if (!ok) return; }
+              }
+              setActiveKey(key);
+              window.dispatchEvent(new CustomEvent('tab-change', { detail: key }));
+            }}
             style={isDark ? undefined : { background: '#f0f0f0' }}
           />
           <div style={{ padding: siderCollapsed ? '12px 8px' : '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
