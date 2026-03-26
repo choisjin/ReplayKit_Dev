@@ -195,7 +195,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
 
   // --- WebSocket screen streaming (H.264 / JPEG) ---
   const startWsStream = useCallback((deviceId: string, st: string) => {
-    closeWs();
+    // closeWs()는 호출부(useEffect)에서 이미 수행하므로 중복 제거
     const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${wsProto}//${window.location.host}/ws/screen`);
     ws.binaryType = 'arraybuffer';
@@ -321,8 +321,16 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   }, [h264Mode]);
 
   // Screenshot source management: WebSocket for HKMC, polling for ADB
+  // 디바운스로 screenType 자동 설정 완료 후 WS를 1회만 연결
+  const wsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    // 기존 정리
+    // 이전 디바운스 타이머 취소
+    if (wsDebounceRef.current) {
+      clearTimeout(wsDebounceRef.current);
+      wsDebounceRef.current = null;
+    }
+
+    // 기존 스트림 즉시 정리
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -334,10 +342,17 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // 모든 디바이스 WebSocket 스트리밍 (scrcpy H.264 또는 screencap 폴백은 백엔드에서 처리)
-    startWsStream(screenshotDeviceId, screenType);
+    // 100ms 디바운스: deviceId 변경 → screenType 자동 설정 → 확정 후 WS 1회 연결
+    wsDebounceRef.current = setTimeout(() => {
+      wsDebounceRef.current = null;
+      startWsStream(screenshotDeviceId, screenType);
+    }, 100);
 
     return () => {
+      if (wsDebounceRef.current) {
+        clearTimeout(wsDebounceRef.current);
+        wsDebounceRef.current = null;
+      }
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;

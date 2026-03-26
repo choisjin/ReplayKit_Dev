@@ -433,12 +433,12 @@ async def websocket_screen_mirror(websocket: WebSocket):
                 hkmc = device_manager.get_hkmc_service(target_device_id) if is_hkmc else None
                 if hkmc and hkmc.is_connected:
                     jpeg_bytes = await hkmc.async_screencap_bytes(
-                        screen_type=screen_type, fmt="jpeg", timeout=10.0
+                        screen_type=screen_type, fmt="jpeg", timeout=3.0
                     )
                     await websocket.send_bytes(jpeg_bytes)
                 elif is_hkmc:
                     # HKMC 재연결 대기 중 — 빈 프레임 대신 잠시 대기
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.3)
                     continue
                 elif is_vision_camera:
                     cam = device_manager.get_vision_camera(target_device_id)
@@ -455,12 +455,12 @@ async def websocket_screen_mirror(websocket: WebSocket):
                                 logger.debug("VisionCamera: waiting for first frame...")
                             else:
                                 logger.error("VisionCamera capture error: %s", ve)
-                            await asyncio.sleep(1)
+                            await asyncio.sleep(0.3)
                             continue
                     else:
                         logger.warning("VisionCam not ready: cam=%s connected=%s",
                                        cam is not None, cam.IsConnected() if cam else "no_cam")
-                        await asyncio.sleep(1)
+                        await asyncio.sleep(0.3)
                         continue
                 elif h264_mode and scrcpy_stream and scrcpy_stream.is_running:
                     # scrcpy H.264 raw NAL 전송 (브라우저 MSE 디코딩)
@@ -513,7 +513,7 @@ async def websocket_screen_mirror(websocket: WebSocket):
                     "type": "error",
                     "message": str(e),
                 })
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.3)
                 continue
             await asyncio.sleep(0)  # 이벤트 루프 양보 (각 소스가 자체 속도로 전송)
     except WebSocketDisconnect:
