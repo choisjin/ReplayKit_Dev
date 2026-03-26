@@ -457,6 +457,8 @@ class PlaybackService:
                             from .adb_service import resolve_sf_display_id
                             sf_did = resolve_sf_display_id(dev_obj.info, adb_did)
                     adb_serial = ss_device.get("serial") or ss_device["id"]
+                    logger.debug("Screenshot capture: device=%s adb_did=%s sf_did=%s",
+                                 ss_device["id"], adb_did, sf_did)
                     await self.adb.screencap(actual_path, serial=adb_serial, sf_display_id=sf_did)
                 elif ss_device["type"] == "hkmc6th":
                     hkmc_svc = self.dm.get_hkmc_service(ss_device["id"])

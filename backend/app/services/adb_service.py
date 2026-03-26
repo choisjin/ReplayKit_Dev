@@ -20,12 +20,19 @@ def resolve_sf_display_id(dev_info: dict | None, logical_id: int | None) -> str 
     """logical display ID → SurfaceFlinger display ID 변환.
 
     dev_info: ManagedDevice.info dict (displays 리스트 포함).
+    SF display ID를 찾지 못하면 logical_id를 문자열로 폴백 반환.
     """
     if logical_id is None or not dev_info:
         return None
     for d in dev_info.get("displays", []):
         if d.get("id") == logical_id:
-            return d.get("sf_id")
+            sf_id = d.get("sf_id")
+            if sf_id is not None:
+                return sf_id
+    # SF display ID를 찾지 못한 경우 logical ID를 직접 사용 (display 0 제외)
+    if logical_id and logical_id != 0:
+        logger.warning("SF display ID not found for logical_id=%d, using logical ID as fallback", logical_id)
+        return str(logical_id)
     return None
 
 

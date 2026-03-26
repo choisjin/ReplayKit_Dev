@@ -209,14 +209,21 @@ class ScrcpyStream:
 
         serial = self.serial
 
-        # 1. Push server to device
-        logger.info("Pushing scrcpy-server to %s", serial)
-        result = subprocess.run(
-            f'{ADB_PATH} -s {serial} push "{server_path}" /data/local/tmp/scrcpy-server',
-            shell=True, capture_output=True, timeout=30,
+        # 1. Push server to device (이미 존재하면 스킵)
+        check = subprocess.run(
+            f'{ADB_PATH} -s {serial} shell ls -l /data/local/tmp/scrcpy-server',
+            shell=True, capture_output=True, timeout=5,
         )
-        if result.returncode != 0:
-            raise RuntimeError(f"Push failed: {result.stderr.decode(errors='replace')}")
+        if check.returncode != 0 or b"No such file" in check.stdout + check.stderr:
+            logger.info("Pushing scrcpy-server to %s", serial)
+            result = subprocess.run(
+                f'{ADB_PATH} -s {serial} push "{server_path}" /data/local/tmp/scrcpy-server',
+                shell=True, capture_output=True, timeout=30,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"Push failed: {result.stderr.decode(errors='replace')}")
+        else:
+            logger.debug("scrcpy-server already on %s, skipping push", serial)
 
         # 2. Forward port
         self._port = _find_free_port()
@@ -249,17 +256,15 @@ class ScrcpyStream:
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
 
-        # 4. Connect to video socket
-        time.sleep(1.5)  # 서버 준비 대기
-        sock = self._connect_video_socket()
+        # 4. Connect to video socket (고정 대기 대신 즉시 폴링)
+        sock = self._connect_video_socket(retries=10, delay=0.3)
         if sock is None:
             # v2 실패 → v1 시도
             logger.info("v2 connection failed, trying v1 protocol for %s", serial)
             if self._server_proc:
                 self._server_proc.kill()
             self._start_v1_server(serial)
-            time.sleep(1.5)
-            sock = self._connect_video_socket()
+            sock = self._connect_video_socket(retries=10, delay=0.3)
             if sock is None:
                 raise RuntimeError("Cannot connect to scrcpy video socket")
             self._decode_loop(sock, is_v1=True)
@@ -455,11 +460,15 @@ class ScrcpyManager:
     """ScrcpyStream 싱글톤 관리자.
 
     (serial, display_id) 키로 스트림 관리, ref-count 기반 공유.
+    release 시 즉시 종료하지 않고 유예 기간 후 정리 (빠른 재연결 지원).
     """
+
+    GRACE_PERIOD = 30  # 초: release 후 스트림 유지 시간
 
     def __init__(self):
         self._streams: dict[tuple[str, int], ScrcpyStream] = {}
         self._refcounts: dict[tuple[str, int], int] = {}
+        self._grace_timers: dict[tuple[str, int], threading.Timer] = {}
         self._lock = threading.Lock()
 
     def is_available(self) -> bool:
@@ -473,7 +482,7 @@ class ScrcpyManager:
 
     async def acquire_stream(self, serial: str, display_id: int = 0,
                              max_fps: int = 60, max_size: int = 1024) -> Optional[ScrcpyStream]:
-        """스트림 획득 (ref-count 증가). 없으면 생성."""
+        """스트림 획득 (ref-count 증가). 캐시된 스트림이 있으면 즉시 재사용."""
         if not self.is_available():
             return None
 
@@ -481,8 +490,14 @@ class ScrcpyManager:
         loop = asyncio.get_event_loop()
 
         with self._lock:
+            # 유예 타이머 취소 (release 후 재연결)
+            timer = self._grace_timers.pop(key, None)
+            if timer:
+                timer.cancel()
+
             if key in self._streams and self._streams[key].is_running:
                 self._refcounts[key] = self._refcounts.get(key, 0) + 1
+                logger.info("scrcpy stream reused for %s (display=%d)", serial, display_id)
                 return self._streams[key]
 
             # 새 스트림 생성
@@ -521,21 +536,45 @@ class ScrcpyManager:
         return None
 
     def release_stream(self, serial: str, display_id: int = 0) -> None:
-        """스트림 해제 (ref-count 감소, 0이면 종료)."""
+        """스트림 해제 (ref-count 감소, 0이면 유예 후 종료).
+
+        유예 기간(30초) 내 재연결 시 스트림을 재사용할 수 있어
+        scrcpy 서버 재시작 비용(~3초)을 절약.
+        """
         key = (serial, display_id)
         with self._lock:
             count = self._refcounts.get(key, 0) - 1
             if count <= 0:
+                self._refcounts[key] = 0
+                # 즉시 종료 대신 유예 타이머 설정
+                old_timer = self._grace_timers.pop(key, None)
+                if old_timer:
+                    old_timer.cancel()
+                timer = threading.Timer(self.GRACE_PERIOD, self._expire_stream, args=[key])
+                timer.daemon = True
+                self._grace_timers[key] = timer
+                timer.start()
+                logger.info("scrcpy stream for %s:%d released (grace %ds)", serial, display_id, self.GRACE_PERIOD)
+            else:
+                self._refcounts[key] = count
+
+    def _expire_stream(self, key: tuple[str, int]) -> None:
+        """유예 기간 만료: ref-count가 여전히 0이면 스트림 종료."""
+        with self._lock:
+            self._grace_timers.pop(key, None)
+            if self._refcounts.get(key, 0) <= 0:
                 stream = self._streams.pop(key, None)
                 self._refcounts.pop(key, None)
                 if stream:
                     stream.stop()
-            else:
-                self._refcounts[key] = count
+                    logger.info("scrcpy stream expired and stopped: %s:%d", key[0], key[1])
 
     def stop_all(self) -> None:
         """모든 스트림 종료 (앱 종료 시)."""
         with self._lock:
+            for timer in self._grace_timers.values():
+                timer.cancel()
+            self._grace_timers.clear()
             for stream in self._streams.values():
                 stream.stop()
             self._streams.clear()
