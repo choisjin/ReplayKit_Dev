@@ -40,7 +40,7 @@ const pageKeys = [
 function AppContent() {
   const [activeKey, setActiveKey] = useState('/');
   const [siderCollapsed, setSiderCollapsed] = useState(false);
-  const [diskInfo, setDiskInfo] = useState<{ drive: string; free_gb: number; total_gb: number; used_percent: number } | null>(null);
+  const [diskInfoList, setDiskInfoList] = useState<{ drive: string; free_gb: number; total_gb: number; used_percent: number }[]>([]);
   const { settings, uploadWebcamRecording, fetchSettings } = useSettings();
   const { t } = useTranslation();
 
@@ -71,7 +71,11 @@ function AppContent() {
           }
           everReadyRef.current = true;
           // 디스크 용량 조회
-          serverApi.diskUsage().then(res => setDiskInfo(res.data)).catch(() => {});
+          serverApi.diskUsage().then(res => {
+            const data = res.data;
+            // 배열이면 그대로, 단일 객체면 배열로 래핑 (하위호환)
+            setDiskInfoList(Array.isArray(data) ? data : [data]);
+          }).catch(() => {});
         }
       } catch {
         if (readyRef.current) {
@@ -240,19 +244,21 @@ function AppContent() {
               </Button>
             </Tooltip>
           </div>
-          {diskInfo && (
+          {diskInfoList.length > 0 && (
             <div style={{ padding: siderCollapsed ? '8px 4px' : '8px 16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-              <Tooltip title={`${diskInfo.drive} — ${diskInfo.free_gb} GB 가용 / ${diskInfo.total_gb} GB`} placement="right">
-                <div style={{ fontSize: 11, color: '#888', textAlign: 'center' }}>
-                  {!siderCollapsed && <div style={{ marginBottom: 4 }}><DatabaseOutlined /> {diskInfo.drive}</div>}
+              {diskInfoList.map((di) => (
+              <Tooltip key={di.drive} title={`${di.drive} — ${di.free_gb} GB 가용 / ${di.total_gb} GB`} placement="right">
+                <div style={{ fontSize: 11, color: '#888', textAlign: 'center', marginBottom: diskInfoList.length > 1 ? 6 : 0 }}>
+                  {!siderCollapsed && <div style={{ marginBottom: 4 }}><DatabaseOutlined /> {di.drive}</div>}
                   <div style={{ background: '#333', borderRadius: 4, height: 6, overflow: 'hidden' }}>
-                    <div style={{ background: diskInfo.used_percent > 90 ? '#ff4d4f' : diskInfo.used_percent > 70 ? '#faad14' : '#52c41a', width: `${diskInfo.used_percent}%`, height: '100%' }} />
+                    <div style={{ background: di.used_percent > 90 ? '#ff4d4f' : di.used_percent > 70 ? '#faad14' : '#52c41a', width: `${di.used_percent}%`, height: '100%' }} />
                   </div>
                   <div style={{ marginTop: 2, fontSize: 10 }}>
-                    {siderCollapsed ? `${diskInfo.free_gb}G` : `${diskInfo.free_gb} GB 가용`}
+                    {siderCollapsed ? `${di.free_gb}G` : `${di.free_gb} GB 가용`}
                   </div>
                 </div>
               </Tooltip>
+              ))}
             </div>
           )}
         </Sider>

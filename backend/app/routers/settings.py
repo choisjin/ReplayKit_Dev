@@ -358,16 +358,37 @@ async def update_and_restart():
 
 @router.get("/disk-usage")
 async def disk_usage():
-    """현재 드라이브의 디스크 사용량 조회."""
-    drive = Path(_PROJECT_ROOT).anchor or "C:\\"
-    total, used, free = shutil.disk_usage(drive)
-    return {
-        "drive": drive.rstrip("\\"),
-        "total_gb": round(total / (1024 ** 3), 1),
-        "used_gb": round(used / (1024 ** 3), 1),
-        "free_gb": round(free / (1024 ** 3), 1),
-        "used_percent": round(used / total * 100, 1),
-    }
+    """연결된 모든 디스크 드라이브의 사용량 조회."""
+    import platform
+    drives: list[dict] = []
+    if platform.system() == "Windows":
+        # Windows: A~Z 드라이브 스캔
+        for letter in "CDEFGHIJKLMNOPQRSTUVWXYZ":
+            dp = f"{letter}:\\"
+            try:
+                total, used, free = shutil.disk_usage(dp)
+                if total > 0:
+                    drives.append({
+                        "drive": f"{letter}:",
+                        "total_gb": round(total / (1024 ** 3), 1),
+                        "used_gb": round(used / (1024 ** 3), 1),
+                        "free_gb": round(free / (1024 ** 3), 1),
+                        "used_percent": round(used / total * 100, 1),
+                    })
+            except (OSError, PermissionError):
+                continue
+    else:
+        # Linux/Mac: 루트 드라이브
+        drive = Path(_PROJECT_ROOT).anchor or "/"
+        total, used, free = shutil.disk_usage(drive)
+        drives.append({
+            "drive": drive.rstrip("/") or "/",
+            "total_gb": round(total / (1024 ** 3), 1),
+            "used_gb": round(used / (1024 ** 3), 1),
+            "free_gb": round(free / (1024 ** 3), 1),
+            "used_percent": round(used / total * 100, 1),
+        })
+    return drives
 
 
 @router.post("/open-results-folder")
