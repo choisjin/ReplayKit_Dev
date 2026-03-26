@@ -1692,58 +1692,35 @@ export default function RecordPage() {
               {getDeviceTag(s.device_id)}
               <Tag color={s.type === 'wait' ? 'cyan' : s.type === 'module_command' ? 'geekblue' : s.type.startsWith('hkmc_') ? 'volcano' : undefined}>{s.type === 'module_command' ? (s.params.module || 'module_command') : s.type}</Tag>
               {s.screen_type && <Tag color="geekblue" style={{ margin: 0 }}>{s.screen_type}</Tag>}
-              {s.expected_image && scenarioName && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', position: 'relative', marginRight: 4 }}>
-                  {s.compare_mode === 'full_exclude' && (s.exclude_rois?.length || 0) > 0 ? (
-                    <Tooltip title={t('record.expectedWithExclude')}>
-                      <span><AnnotatedThumbnail
-                        src={`/screenshots/${scenarioName}/${s.expected_image}?v=${s._imageVer || ''}`}
-                        regions={s.exclude_rois || []}
-                        color="red"
-                        height={40}
-                      /></span>
-                    </Tooltip>
-                  ) : s.compare_mode === 'multi_crop' && (s.expected_images?.length || 0) > 0 ? (
-                    <Tooltip title={t('record.expectedWithCrop')}>
-                      <span><AnnotatedThumbnail
-                        src={`/screenshots/${scenarioName}/${s.expected_image}?v=${s._imageVer || ''}`}
-                        regions={(s.expected_images || []).map(ci => ci.roi).filter((r): r is ROI => !!r)}
-                        color="green"
-                        height={40}
-                      /></span>
-                    </Tooltip>
-                  ) : (
-                    <Tooltip title={t('record.expectedImageClick')}>
-                      <Image
-                        src={`/screenshots/${scenarioName}/${s.expected_image}?v=${s._imageVer || ''}`}
-                        alt="expected"
-                        style={{ height: 40, width: 22, objectFit: 'cover', borderRadius: 2, cursor: 'pointer' }}
-                        preview={{ mask: false }}
-                      />
-                    </Tooltip>
-                  )}
-                  <Tooltip title={t('record.expectedReset')}>
-                    <CloseCircleOutlined
-                      onClick={() => setSteps((prev) => prev.map((st, i) => i === index ? { ...st, expected_image: null, roi: null, exclude_rois: [], expected_images: [] } : st))}
-                      style={{ fontSize: 14, color: '#ff4d4f', cursor: 'pointer', marginLeft: 2 }}
-                    />
-                  </Tooltip>
-                </span>
-              )}
-              {s.roi && (
-                <Tag color="orange">ROI {s.roi.width}×{s.roi.height}</Tag>
-              )}
-              {s.compare_mode === 'full_exclude' && (s.exclude_rois?.length || 0) > 0 && (
-                <Tag color="red">{t('record.excludeCount', { count: s.exclude_rois!.length })}</Tag>
-              )}
-              {s.compare_mode === 'multi_crop' && (
-                <Tag color="purple">{t('record.cropCount', { count: s.expected_images?.length || 0 })}</Tag>
-              )}
               {s.on_pass_goto != null && (
                 <Tag color="green">P→{s.on_pass_goto === -1 ? 'END' : `#${s.on_pass_goto}`}</Tag>
               )}
               {s.on_fail_goto != null && (
                 <Tag color="red">F→{s.on_fail_goto === -1 ? 'END' : `#${s.on_fail_goto}`}</Tag>
+              )}
+              {s.expected_image && scenarioName && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginLeft: 'auto', flexShrink: 0 }}>
+                  <Image
+                    src={`/screenshots/${scenarioName}/${s.expected_image}?v=${s._imageVer || ''}`}
+                    alt="expected"
+                    style={{ display: 'none' }}
+                    preview={{ mask: false }}
+                  />
+                  <Tag
+                    color="green"
+                    style={{ margin: 0, cursor: 'pointer' }}
+                    onClick={(e) => {
+                      const img = e.currentTarget.parentElement?.querySelector('.ant-image img') as HTMLElement;
+                      img?.click();
+                    }}
+                  >
+                    <CameraOutlined style={{ marginRight: 4 }} />IMG
+                  </Tag>
+                  <CloseCircleOutlined
+                    onClick={() => setSteps((prev) => prev.map((st, i) => i === index ? { ...st, expected_image: null, roi: null, exclude_rois: [], expected_images: [] } : st))}
+                    style={{ fontSize: 14, color: '#ff4d4f', cursor: 'pointer' }}
+                  />
+                </span>
               )}
             </div>
           </div>
