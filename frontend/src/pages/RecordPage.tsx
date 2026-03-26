@@ -2199,7 +2199,24 @@ export default function RecordPage() {
           {/* Right panel: Controls + Steps */}
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             {recording && (
-            <Card size="small" title={t('record.manualStep')} style={{ flex: 1, minWidth: 0 }}>
+            <Card
+              size="small"
+              title={t('record.manualStep')}
+              extra={
+                ['input_text', 'key_event', 'wait', 'adb_command', 'serial_command', 'module_command', 'hkmc_key', 'cmd_send', 'cmd_check'].includes(stepType) ? (
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<PlusOutlined />}
+                    onClick={addManualStep}
+                    disabled={!stepDeviceId && stepType !== 'wait'}
+                  >
+                    {t('record.addStep')}
+                  </Button>
+                ) : undefined
+              }
+              style={{ flex: 1, minWidth: 0 }}
+            >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {/* 1행: 대상 디바이스 + 스텝 타입 */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -2385,16 +2402,6 @@ export default function RecordPage() {
                       suffix="ms"
                       style={{ width: 120 }}
                     />
-                    {['input_text', 'key_event', 'wait', 'adb_command', 'serial_command', 'module_command', 'hkmc_key', 'cmd_send', 'cmd_check'].includes(stepType) && (
-                      <Button
-                        size="small"
-                        icon={<PlusOutlined />}
-                        onClick={addManualStep}
-                        disabled={!stepDeviceId && stepType !== 'wait'}
-                      >
-                        {t('record.addStep')}
-                      </Button>
-                    )}
                   </div>
                 </div>
               </div>
@@ -2415,15 +2422,14 @@ export default function RecordPage() {
               style={recording ? { flexShrink: 0 } : { flex: 1, minWidth: 0 }}
             >
               {recording ? (
-                /* 녹화 중: 시나리오명(읽기전용) + 설명 */
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <Input size="small" value={scenarioName} disabled style={{ width: 140 }} />
+                /* 녹화 중: 1행 시나리오명, 2행 설명 */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <Input size="small" value={scenarioName} disabled />
                   <Input
                     placeholder={t('record.descriptionPlaceholder')}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     size="small"
-                    style={{ width: 140 }}
                   />
                 </div>
               ) : (
