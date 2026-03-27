@@ -1911,9 +1911,13 @@ export default function RecordPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'flex-end' }}>
               <Button size="small" type="text" icon={<ArrowUpOutlined />} disabled={index === 0} onClick={() => moveStep(index, -1)} style={{ width: 28 }} />
               <Button size="small" type="text" icon={<ArrowDownOutlined />} disabled={index === steps.length - 1} onClick={() => moveStep(index, 1)} style={{ width: 28 }} />
-              {scenarioName && (
-                <Button size="small" type="text" icon={<ThunderboltOutlined />} title={t('record.testStep')} loading={testingStepIndex === index} onClick={() => testStep(index)} style={{ color: '#faad14', width: 28 }} />
-              )}
+              {scenarioName && (() => {
+                const stepDev = allDevices.find(dd => dd.id === s.device_id);
+                const devConnected = !stepDev || stepDev.status === 'device' || stepDev.status === 'connected';
+                return (
+                  <Button size="small" type="text" icon={<ThunderboltOutlined />} title={devConnected ? t('record.testStep') : t('record.deviceNotConnected')} loading={testingStepIndex === index} disabled={!devConnected} onClick={() => testStep(index)} style={{ color: devConnected ? '#faad14' : undefined, width: 28 }} />
+                );
+              })()}
               <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => Modal.confirm({ title: t('record.confirmDeleteStep', { index: index + 1 }), okText: t('common.delete'), okType: 'danger', cancelText: t('common.cancel'), onOk: () => deleteStep(index) })} style={{ width: 28 }} />
             </div>
             {/* 2행: 편집 + 조건부이동 + W + 카메라 */}
@@ -1959,7 +1963,7 @@ export default function RecordPage() {
       )}
       locale={{ emptyText: t('record.noSteps') }}
     />
-  ), [steps, recording, updateStepJump, updateStepDescription, openEditStepModal, openRoiModal, screenshotDeviceId, scenarioName, saveExpectedFull, openCaptureModal, testStep, testingStepIndex, updateCompareMode, openExcludeRoiModal, openMultiCropModal, showAnnotatedPreview, selectCompareMode, compareModePopoverIndex, t]);
+  ), [steps, recording, updateStepJump, updateStepDescription, openEditStepModal, openRoiModal, screenshotDeviceId, scenarioName, saveExpectedFull, openCaptureModal, testStep, testingStepIndex, updateCompareMode, openExcludeRoiModal, openMultiCropModal, showAnnotatedPreview, selectCompareMode, compareModePopoverIndex, allDevices, t]);
 
   return (
     <div className="record-page" style={{ height: 'calc(100vh - 80px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
