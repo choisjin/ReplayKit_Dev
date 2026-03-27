@@ -390,6 +390,13 @@ class ServerManagerApp:
 
     def _sync(self, log_callback):
         """git pull + pip install + npm install. 메인 스레드가 아닌 곳에서 호출."""
+        try:
+            return self._sync_impl(log_callback)
+        except Exception as e:
+            log_callback(f"[동기화] 예외 발생: {e}")
+            return True  # 동기화 실패해도 서버 시작은 진행
+
+    def _sync_impl(self, log_callback):
         self._set_status("동기화 중...")
 
         # 1) 로컬 변경 초기화 + git pull (git 저장소인 경우만)
@@ -399,14 +406,14 @@ class ServerManagerApp:
             safe_dir = PROJECT_ROOT.replace("\\", "/")
             git = ["git", "-c", f"safe.directory={safe_dir}"]
 
-            # 이전 빌드 .pyd 캐시 삭제 (구 컴파일 코드가 새 .py 로딩 방해)
+            # 이전 빌드 .pyd 캐시 삭제 (backend 내부만)
             import glob as _glob
-            for _pyd in _glob.glob(os.path.join(PROJECT_ROOT, "**", "*.pyd"), recursive=True):
-                if "python" not in _pyd and "site-packages" not in _pyd:
-                    try:
-                        os.remove(_pyd)
-                    except Exception:
-                        pass
+            _backend_dir = os.path.join(PROJECT_ROOT, "backend")
+            for _pyd in _glob.glob(os.path.join(_backend_dir, "**", "*.pyd"), recursive=True):
+                try:
+                    os.remove(_pyd)
+                except Exception:
+                    pass
 
             # git 명령 사용 가능 여부 먼저 확인
             git_available = _run_cmd(["git", "--version"], timeout=5)[0] == 0
@@ -425,50 +432,50 @@ class ServerManagerApp:
             log_callback("[동기화] git 저장소 없음 — git pull 건너뜀")
 
         # 2) pip install (requirements.txt 변경 시에만)
-        req_file = os.path.join(BASE_DIR, "requirements.txt")
-        req_hash_file = os.path.join(BASE_DIR, ".req_hash")
-        import hashlib
-        req_hash = ""
-        if os.path.exists(req_file):
-            req_hash = hashlib.md5(open(req_file, "rb").read()).hexdigest()
-        old_hash = open(req_hash_file).read().strip() if os.path.exists(req_hash_file) else ""
-        if req_hash != old_hash:
-            log_callback("[동기화] Python 의존성 설치 중...")
-            code, out = _run_cmd([VENV_PYTHON, "-m", "pip", "install", "-r", "requirements.txt", "-q"], timeout=120)
-            if out and code == 0:
-                log_callback(f"[동기화] pip: {out[:200]}")
-            elif code != 0:
-                log_callback(f"[동기화] pip install 실패: {out[:200]}")
-            try:
-                with open(req_hash_file, "w") as f:
-                    f.write(req_hash)
-            except Exception:
-                pass
-        else:
-            log_callback("[동기화] Python 의존성 변경 없음 — 건너뜀")
-
-        # 3) npm install (개발 모드 + package.json 변경 시에만)
-        if not self._production:
-            pkg_file = os.path.join(FRONTEND_DIR, "package.json")
-            pkg_hash_file = os.path.join(FRONTEND_DIR, ".pkg_hash")
-            pkg_hash = ""
-            if os.path.exists(pkg_file):
-                pkg_hash = hashlib.md5(open(pkg_file, "rb").read()).hexdigest()
-            old_pkg_hash = open(pkg_hash_file).read().strip() if os.path.exists(pkg_hash_file) else ""
-            if pkg_hash != old_pkg_hash:
-                log_callback("[동기화] Node 의존성 설치 중...")
-                code, out = _run_cmd([NPM_CMD, "install", "--silent"], cwd=FRONTEND_DIR, timeout=120)
-                if out and code == 0:
-                    log_callback(f"[동기화] npm: {out[:200]}")
-                elif code != 0:
-                    log_callback(f"[동기화] npm install 실패: {out[:200]}")
+        log_callback("[동기화] Python 의존성 확인 중...")
+        try:
+            import hashlib
+            req_file = os.path.join(PROJECT_ROOT, "requirements.txt")
+            req_hash_file = os.path.join(PROJECT_ROOT, ".req_hash")
+            req_hash = hashlib.md5(open(req_file, "rb").read()).hexdigest() if os.path.exists(req_file) else ""
+            old_hash = open(req_hash_file).read().strip() if os.path.exists(req_hash_file) else ""
+            if req_hash != old_hash:
+                log_callback("[동기화] Python 의존성 설치 중...")
+                code, out = _run_cmd([VENV_PYTHON, "-m", "pip", "install", "-r", "requirements.txt", "-q"], timeout=120)
+                if code != 0:
+                    log_callback(f"[동기화] pip install 실패: {out[:200]}")
                 try:
-                    with open(pkg_hash_file, "w") as f:
-                        f.write(pkg_hash)
+                    with open(req_hash_file, "w") as f:
+                        f.write(req_hash)
                 except Exception:
                     pass
             else:
-                log_callback("[동기화] Node 의존성 변경 없음 — 건너뜀")
+                log_callback("[동기화] Python 의존성 변경 없음 — 건너뜀")
+        except Exception as e:
+            log_callback(f"[동기화] Python 의존성 확인 오류: {e}")
+
+        # 3) npm install (개발 모드 + package.json 변경 시에만)
+        if not self._production:
+            log_callback("[동기화] Node 의존성 확인 중...")
+            try:
+                pkg_file = os.path.join(FRONTEND_DIR, "package.json")
+                pkg_hash_file = os.path.join(FRONTEND_DIR, ".pkg_hash")
+                pkg_hash = hashlib.md5(open(pkg_file, "rb").read()).hexdigest() if os.path.exists(pkg_file) else ""
+                old_pkg_hash = open(pkg_hash_file).read().strip() if os.path.exists(pkg_hash_file) else ""
+                if pkg_hash != old_pkg_hash:
+                    log_callback("[동기화] Node 의존성 설치 중...")
+                    code, out = _run_cmd([NPM_CMD, "install", "--silent"], cwd=FRONTEND_DIR, timeout=120)
+                    if code != 0:
+                        log_callback(f"[동기화] npm install 실패: {out[:200]}")
+                    try:
+                        with open(pkg_hash_file, "w") as f:
+                            f.write(pkg_hash)
+                    except Exception:
+                        pass
+                else:
+                    log_callback("[동기화] Node 의존성 변경 없음 — 건너뜀")
+            except Exception as e:
+                log_callback(f"[동기화] Node 의존성 확인 오류: {e}")
 
         log_callback("[동기화] 완료")
         self._set_status("동기화 완료")
@@ -573,8 +580,8 @@ class ServerManagerApp:
         """백엔드 HTTP 응답이 올 때까지 대기 후 브라우저 자동 오픈."""
         import urllib.request
         url = self.backend.url if self._production else self.frontend.url
-        check_url = self.backend.url + "/api/device/list"
-        for _ in range(30):  # 최대 30초 대기
+        check_url = self.backend.url + "/api/health"
+        for _ in range(15):  # 최대 15초 대기
             time.sleep(1)
             if not self.backend.running:
                 return

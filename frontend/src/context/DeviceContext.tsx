@@ -19,6 +19,7 @@ interface DeviceContextType {
   fetchDevices: () => Promise<void>;
   connectDevice: (type: string, address: string, baudrate?: number, name?: string, category?: string, module?: string, connect_type?: string, extra_fields?: Record<string, any>, device_id?: string, port?: number) => Promise<string>;
   disconnectDevice: (deviceId: string) => Promise<string>;
+  updateDeviceLists: (data: any) => void;
   // Screenshot for a specific primary device
   screenshotDeviceId: string;
   setScreenshotDeviceId: (id: string) => void;
@@ -407,6 +408,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       fetchDevices,
       connectDevice,
       disconnectDevice,
+      updateDeviceLists,
       screenshotDeviceId,
       setScreenshotDeviceId,
       screenshot,

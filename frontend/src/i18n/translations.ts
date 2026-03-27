@@ -116,6 +116,13 @@ const translations = {
     'device.connectAllSuccess': '전체 연결 완료',
     'device.connectSelectedSuccess': '선택 연결 완료',
     'device.connectOneSuccess': '연결 완료',
+    'device.disconnectOne': '연결 끊기',
+    'device.disconnectOneSuccess': '연결이 끊어졌습니다',
+    'device.statusConnected': '연결됨',
+    'device.statusConnecting': '연결 중',
+    'device.statusDisconnected': '연결 끊김',
+    'device.statusOffline': '오프라인',
+    'device.statusError': '오류',
     'device.noSelection': '연결할 디바이스를 선택하세요',
 
     // === DLT ===
@@ -676,6 +683,13 @@ const translations = {
     'device.connectAllSuccess': 'All devices connected',
     'device.connectSelectedSuccess': 'Selected devices connected',
     'device.connectOneSuccess': 'Device connected',
+    'device.disconnectOne': 'Disconnect',
+    'device.disconnectOneSuccess': 'Device disconnected',
+    'device.statusConnected': 'Connected',
+    'device.statusConnecting': 'Connecting',
+    'device.statusDisconnected': 'Disconnected',
+    'device.statusOffline': 'Offline',
+    'device.statusError': 'Error',
     'device.noSelection': 'Select devices to connect',
 
     // === DLT ===

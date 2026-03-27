@@ -29,6 +29,8 @@ export const deviceApi = {
   dltViewerClose: () => api.post('/device/dlt-viewer/close'),
   connectRegistered: (deviceIds?: string[]) =>
     api.post('/device/connect-registered', { device_ids: deviceIds || [] }),
+  disconnectOne: (deviceId: string) =>
+    api.post('/device/disconnect-one', { device_id: deviceId }),
 };
 
 // Scenario APIs

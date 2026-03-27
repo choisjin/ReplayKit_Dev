@@ -211,11 +211,26 @@ async def _remote_play(scenario_name: str, repeat: int, verify: bool):
 
 
 @asynccontextmanager
+async def _auto_connect_all():
+    """서버 시작 후 등록된 모든 디바이스를 백그라운드에서 자동 연결."""
+    await asyncio.sleep(2)  # 서버 안정화 대기
+    all_devices = device_manager.list_all()
+    if not all_devices:
+        return
+    logger.info("백그라운드 자동 연결 시작: %d개 디바이스", len(all_devices))
+    for dev in all_devices:
+        try:
+            msg = await device_manager.connect_device_by_id(dev.id)
+            logger.info("자동 연결: %s", msg)
+        except Exception as e:
+            logger.debug("자동 연결 실패 %s: %s", dev.id, e)
+
+
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     # --- Startup ---
-    # 디바이스 자동 연결 제거 — 사용자가 디바이스 탭에서 수동 연결
     reconnect_task = asyncio.create_task(_reconnect_loop())
+    auto_connect_task = asyncio.create_task(_auto_connect_all())
 
     # 관제 클라이언트 콜백 항상 등록 (URL은 나중에 Settings에서 설정 가능)
     monitor_client.set_status_callback(_get_monitor_status)
@@ -233,6 +248,7 @@ async def lifespan(app: FastAPI):
     # --- Shutdown ---
     await monitor_client.stop()
     reconnect_task.cancel()
+    auto_connect_task.cancel()
     scrcpy_manager.stop_all()
     logger.info("Closing all serial connections...")
     device_manager.close_all_serial_connections()

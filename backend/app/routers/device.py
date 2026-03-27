@@ -245,6 +245,20 @@ async def disconnect_device(req: DisconnectRequest):
     }
 
 
+class DisconnectOneRequest(BaseModel):
+    device_id: str
+
+@router.post("/disconnect-one")
+async def disconnect_one_device(req: DisconnectOneRequest):
+    """연결만 끊기 (등록 유지)."""
+    result = await dm.disconnect_device_by_id(req.device_id)
+    return {
+        "result": result,
+        "primary": [d.to_dict() for d in dm.list_primary()],
+        "auxiliary": [d.to_dict() for d in dm.list_auxiliary()],
+    }
+
+
 @router.get("/info/{device_id}")
 async def get_device_info(device_id: str):
     """Get device information."""

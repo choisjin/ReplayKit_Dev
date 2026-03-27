@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Card, Checkbox, Col, Input, InputNumber, List, Modal, Row, Select, Space, Table, Tabs, Tag, message } from 'antd';
-import { ReloadOutlined, MobileOutlined, PlusOutlined, DisconnectOutlined, UsbOutlined, WifiOutlined, SearchOutlined, EditOutlined, SyncOutlined, ApiOutlined, LinkOutlined } from '@ant-design/icons';
+import { ReloadOutlined, MobileOutlined, PlusOutlined, DisconnectOutlined, DeleteOutlined, UsbOutlined, WifiOutlined, SearchOutlined, EditOutlined, SyncOutlined, ApiOutlined, LinkOutlined } from '@ant-design/icons';
 import { useDevice, ManagedDevice } from '../context/DeviceContext';
 import { deviceApi } from '../services/api';
 import { useTranslation } from '../i18n';
@@ -33,7 +33,7 @@ interface SerialPort {
 
 export default function DevicePage() {
   const { t } = useTranslation();
-  const { primaryDevices, auxiliaryDevices, loading, fetchDevices, connectDevice, disconnectDevice } = useDevice();
+  const { primaryDevices, auxiliaryDevices, loading, fetchDevices, connectDevice, disconnectDevice, updateDeviceLists } = useDevice();
 
   // ADB reconnect state
   const [reconnecting, setReconnecting] = useState(false);
@@ -62,7 +62,7 @@ export default function DevicePage() {
     setConnectingAll(true);
     try {
       const res = await deviceApi.connectRegistered();
-      if (res.data.primary) fetchDevices();
+      updateDeviceLists(res.data);
       message.success(t('device.connectAllSuccess'));
     } catch {
       message.error(t('device.connectFailed'));
@@ -79,7 +79,7 @@ export default function DevicePage() {
     setConnectingAll(true);
     try {
       const res = await deviceApi.connectRegistered(Array.from(selectedDeviceIds));
-      if (res.data.primary) fetchDevices();
+      updateDeviceLists(res.data);
       message.success(t('device.connectSelectedSuccess'));
     } catch {
       message.error(t('device.connectFailed'));
@@ -92,7 +92,7 @@ export default function DevicePage() {
     setConnectingIds(prev => new Set(prev).add(deviceId));
     try {
       const res = await deviceApi.connectRegistered([deviceId]);
-      if (res.data.primary) fetchDevices();
+      updateDeviceLists(res.data);
       message.success(t('device.connectOneSuccess'));
     } catch {
       message.error(t('device.connectFailed'));
@@ -403,13 +403,56 @@ export default function DevicePage() {
 
   const isDeviceConnected = (d: ManagedDevice) => d.status === 'device' || d.status === 'connected';
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'device': case 'connected': return t('device.statusConnected');
+      case 'reconnecting': return t('device.statusConnecting');
+      case 'disconnected': case 'unknown': return t('device.statusDisconnected');
+      case 'offline': return t('device.statusOffline');
+      case 'error': return t('device.statusError');
+      default: return status;
+    }
+  };
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'device': case 'connected': return 'green';
+      case 'reconnecting': return 'processing';
+      case 'disconnected': case 'unknown': return 'default';
+      case 'offline': case 'error': return 'red';
+      default: return 'orange';
+    }
+  };
+
+  const [disconnectingIds, setDisconnectingIds] = useState<Set<string>>(new Set());
+
+  const handleDisconnectOne = async (deviceId: string) => {
+    setDisconnectingIds(prev => new Set(prev).add(deviceId));
+    try {
+      const res = await deviceApi.disconnectOne(deviceId);
+      updateDeviceLists(res.data);
+      message.info(t('device.disconnectOneSuccess'));
+    } catch {
+      message.error(t('device.disconnectFailed'));
+    }
+    setDisconnectingIds(prev => { const next = new Set(prev); next.delete(deviceId); return next; });
+  };
+
   const renderDeviceList = () => (
     <List
       dataSource={allDevices}
       renderItem={(d) => (
         <List.Item
           actions={[
-            ...(!isDeviceConnected(d) ? [
+            isDeviceConnected(d) ? (
+              <Button
+                size="small"
+                icon={<DisconnectOutlined />}
+                loading={disconnectingIds.has(d.id)}
+                onClick={() => handleDisconnectOne(d.id)}
+              >
+                {t('device.disconnectOne')}
+              </Button>
+            ) : (
               <Button
                 size="small"
                 type="primary"
@@ -418,18 +461,8 @@ export default function DevicePage() {
                 onClick={() => handleConnectOne(d.id)}
               >
                 {t('device.connectOne')}
-              </Button>,
-            ] : []),
-            ...(d.type === 'adb' ? [
-              <Button
-                size="small"
-                icon={<SyncOutlined spin={reconnecting} />}
-                onClick={handleAdbReconnect}
-                loading={reconnecting}
-              >
-                {t('device.reconnect')}
-              </Button>,
-            ] : []),
+              </Button>
+            ),
             <Button
               size="small"
               icon={<EditOutlined />}
@@ -440,10 +473,10 @@ export default function DevicePage() {
             <Button
               danger
               size="small"
-              icon={<DisconnectOutlined />}
+              icon={<DeleteOutlined />}
               onClick={() => handleDisconnect(d.id)}
             >
-              {t('common.disconnect')}
+              {t('common.delete')}
             </Button>,
           ]}
         >
@@ -457,8 +490,8 @@ export default function DevicePage() {
               title={<>{d.info?.module || d.name || d.id} <Tag color="default" style={{ fontSize: 11, fontWeight: 'normal' }}>{d.id}</Tag></>}
               description={
                 <>
-                  <Tag color={isDeviceConnected(d) ? 'green' : d.status === 'offline' || d.status === 'error' ? 'red' : 'orange'}>
-                    {d.status}
+                  <Tag color={getStatusColor(d.status)}>
+                    {getStatusLabel(d.status)}
                   </Tag>
                   {getCategoryTag(d.category)}
                   {getTypeTag(d)}

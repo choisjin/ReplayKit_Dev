@@ -1165,6 +1165,51 @@ class DeviceManager:
 
         return f"Unknown device type: {dev.type}"
 
+    async def disconnect_device_by_id(self, device_id: str) -> str:
+        """등록된 디바이스 1개의 연결만 끊기 (등록은 유지). 결과 메시지 반환."""
+        dev = self._devices.get(device_id)
+        if not dev:
+            return f"Device {device_id} not found"
+
+        self._ever_connected.discard(device_id)
+
+        if dev.type == "serial" or dev.type == "module":
+            self._close_serial_conn(device_id)
+            dev.status = "disconnected"
+            return f"Disconnected: {dev.id}"
+
+        elif dev.type == "hkmc6th":
+            svc = self._hkmc_conns.pop(device_id, None)
+            if svc:
+                try:
+                    svc.disconnect()
+                except Exception:
+                    pass
+            dev.status = "disconnected"
+            return f"Disconnected: {dev.id}"
+
+        elif dev.type == "vision_camera":
+            cam = self._vision_cams.pop(device_id, None)
+            if cam:
+                try:
+                    cam.Disconnect()
+                except Exception:
+                    pass
+            dev.status = "disconnected"
+            return f"Disconnected: {dev.id}"
+
+        elif dev.type == "adb":
+            if ":" in dev.address:
+                try:
+                    await self.adb._run(f"disconnect {dev.address}")
+                except Exception:
+                    pass
+            dev.status = "disconnected"
+            return f"Disconnected: {dev.id}"
+
+        dev.status = "disconnected"
+        return f"Disconnected: {dev.id}"
+
     def close_all_serial_connections(self) -> None:
         """Close all persistent serial/HKMC/VisionCamera connections (called on shutdown)."""
         for device_id in list(self._serial_conns.keys()):
