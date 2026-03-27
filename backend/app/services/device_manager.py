@@ -479,6 +479,7 @@ class DeviceManager:
         self._hkmc_reconnect_attempts: dict[str, int] = {}  # device_id -> 연속 재연결 실패 횟수
         self._adb_reconnect_attempts: dict[str, int] = {}  # device_id -> 연속 재연결 실패 횟수
         self._vision_cams: dict[str, object] = {}  # device_id -> VisionCamera instance
+        self._ever_connected: set[str] = set()  # 사용자가 명시적으로 연결한 디바이스만 자동 재연결
         self._load_auxiliary_devices()
 
     def _load_auxiliary_devices(self) -> None:
@@ -584,6 +585,7 @@ class DeviceManager:
             info=info,
         )
         self._devices[final_id] = dev
+        self._ever_connected.add(final_id)
         self._save_auxiliary_devices()  # persist all non-adb + adb with custom IDs
         return dev
 
@@ -616,6 +618,7 @@ class DeviceManager:
         )
         self._devices[final_id] = dev
         self._hkmc_conns[final_id] = svc
+        self._ever_connected.add(final_id)
         self._hkmc_reconnect_attempts.pop(final_id, None)
         self._save_auxiliary_devices()
         return dev
@@ -668,6 +671,7 @@ class DeviceManager:
         )
         self._devices[final_id] = dev
         self._vision_cams[final_id] = cam
+        self._ever_connected.add(final_id)
         self._save_auxiliary_devices()
         return dev
 
@@ -716,6 +720,9 @@ class DeviceManager:
             adb_status_map = {}
 
         for dev in list(self._devices.values()):
+            # 사용자가 명시적으로 연결한 적 없는 디바이스는 자동 재연결 안 함
+            if dev.id not in self._ever_connected:
+                continue
             # ── ADB 디바이스 재연결 ──
             if dev.type == "adb":
                 adb_serial = dev.address
@@ -869,6 +876,7 @@ class DeviceManager:
         loop = asyncio.get_event_loop()
         try:
             await loop.run_in_executor(None, self._get_serial_conn, final_id)
+            self._ever_connected.add(final_id)
         except Exception as e:
             # Remove device if connection fails
             self._devices.pop(final_id, None)
@@ -904,7 +912,11 @@ class DeviceManager:
             ctor_kwargs = _build_constructor_kwargs(dev)
             loop = asyncio.get_event_loop()
             instance = await loop.run_in_executor(None, _get_instance, module, ctor_kwargs)
-            dev.status = "connected" if _is_connected(instance) else "disconnected"
+            if _is_connected(instance):
+                dev.status = "connected"
+                self._ever_connected.add(final_id)
+            else:
+                dev.status = "disconnected"
         except Exception as e:
             dev.status = "disconnected"
             logger.warning("Module %s init failed on add: %s", module, e)
@@ -928,6 +940,7 @@ class DeviceManager:
             info={"connect_result": result.strip()},
         )
         self._devices[address] = dev
+        self._ever_connected.add(address)
         return dev
 
     async def remove_device(self, device_id: str) -> str:
@@ -1112,10 +1125,14 @@ class DeviceManager:
             return f"Device {device_id} not found"
         loop = asyncio.get_event_loop()
 
+        def _mark_connected():
+            self._ever_connected.add(device_id)
+
         if dev.type == "serial":
             try:
                 await loop.run_in_executor(None, self._get_serial_conn, dev.id)
                 dev.status = "connected"
+                _mark_connected()
                 return f"Serial connected: {dev.id} ({dev.address})"
             except Exception as e:
                 dev.status = "disconnected"
@@ -1132,6 +1149,7 @@ class DeviceManager:
                 if ok:
                     self._hkmc_conns[dev.id] = svc
                     dev.status = "connected"
+                    _mark_connected()
                     dev.info["agent_version"] = svc.agent_version
                     dev.info["screens"] = svc.get_info()["screens"]
                     return f"HKMC connected: {dev.id} ({dev.address}:{port})"
@@ -1156,6 +1174,7 @@ class DeviceManager:
                 )
                 if _is_connected(instance):
                     dev.status = "connected"
+                    _mark_connected()
                     return f"Module connected: {dev.id} ({module_name})"
                 else:
                     dev.status = "disconnected"
@@ -1180,6 +1199,7 @@ class DeviceManager:
                 await loop.run_in_executor(None, cam.Connect)
                 self._vision_cams[dev.id] = cam
                 dev.status = "connected"
+                _mark_connected()
                 return f"VisionCamera connected: {dev.id} ({mac})"
             except Exception as e:
                 dev.status = "disconnected"
@@ -1194,6 +1214,7 @@ class DeviceManager:
                 found = next((d for d in devs if d.serial == dev.address), None)
                 if found and found.status == "device":
                     dev.status = "device"
+                    _mark_connected()
                     self._adb_reconnect_attempts.pop(dev.id, None)
                     return f"ADB connected: {dev.id} ({dev.address})"
                 else:
