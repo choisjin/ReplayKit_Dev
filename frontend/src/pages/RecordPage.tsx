@@ -2338,6 +2338,7 @@ export default function RecordPage() {
                 ) : stepType === 'serial_command' ? (
                   <>
                     <TextArea
+                      size="small"
                       placeholder={t('record.serialPlaceholder')}
                       value={serialData}
                       onChange={(e) => setSerialData(e.target.value)}
@@ -2345,6 +2346,7 @@ export default function RecordPage() {
                       rows={3}
                     />
                     <Button
+                      size="small"
                       type="default"
                       icon={<ThunderboltOutlined />}
                       onClick={sendSerialCommand}
@@ -2367,6 +2369,7 @@ export default function RecordPage() {
                 ) : stepType === 'hkmc_key' ? (
                   <>
                     <Select
+                      size="small"
                       showSearch
                       placeholder={t('record.hkmcSelectKey')}
                       value={stepDesc || undefined}
@@ -2380,10 +2383,10 @@ export default function RecordPage() {
                   </>
                 ) : stepType === 'cmd_send' || stepType === 'cmd_check' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <Input placeholder={t('record.cmdPlaceholder')} value={stepDesc} onChange={(e) => setStepDesc(e.target.value)} />
+                    <Input size="small" placeholder={t('record.cmdPlaceholder')} value={stepDesc} onChange={(e) => setStepDesc(e.target.value)} />
                     {stepType === 'cmd_check' && (
                       <>
-                        <Input placeholder={t('record.cmdExpected')} value={cmdExpected} onChange={(e) => setCmdExpected(e.target.value)} />
+                        <Input size="small" placeholder={t('record.cmdExpected')} value={cmdExpected} onChange={(e) => setCmdExpected(e.target.value)} />
                         <Select size="small" value={cmdMatchMode} onChange={setCmdMatchMode} style={{ width: '100%' }}
                           options={[
                             { label: t('record.cmdContains'), value: 'contains' },
@@ -2399,6 +2402,7 @@ export default function RecordPage() {
                   </div>
                 ) : (
                   <Input
+                    size="small"
                     placeholder={
                       stepType === 'input_text' ? t('record.textPlaceholder') :
                       stepType === 'key_event' ? 'KEYCODE_BACK' :
