@@ -87,6 +87,43 @@ export default function DevicePage() {
     setConnectingAll(false);
   };
 
+  // 전체 연결 끊기
+  const [disconnectingAll, setDisconnectingAll] = useState(false);
+  const handleDisconnectAll = async () => {
+    setDisconnectingAll(true);
+    try {
+      for (const d of allDevices) {
+        if (d.status === 'device' || d.status === 'connected') {
+          await deviceApi.disconnectOne(d.id);
+        }
+      }
+      await fetchDevices();
+      message.success(t('device.disconnectAllSuccess'));
+    } catch {
+      message.error(t('device.disconnectFailed'));
+    }
+    setDisconnectingAll(false);
+  };
+
+  // 선택 연결 끊기
+  const handleDisconnectSelected = async () => {
+    if (selectedDeviceIds.size === 0) { message.warning(t('device.noSelection')); return; }
+    setDisconnectingAll(true);
+    try {
+      for (const id of selectedDeviceIds) {
+        const d = allDevices.find(dd => dd.id === id);
+        if (d && (d.status === 'device' || d.status === 'connected')) {
+          await deviceApi.disconnectOne(id);
+        }
+      }
+      await fetchDevices();
+      message.success(t('device.disconnectSelectedSuccess'));
+    } catch {
+      message.error(t('device.disconnectFailed'));
+    }
+    setDisconnectingAll(false);
+  };
+
   // 개별 연결
   const handleConnectOne = async (deviceId: string) => {
     setConnectingIds(prev => new Set(prev).add(deviceId));
@@ -579,6 +616,8 @@ export default function DevicePage() {
         <Button icon={<ReloadOutlined />} onClick={fetchDevices} loading={loading}>{t('common.refresh')}</Button>
         <Button icon={<ApiOutlined />} type="primary" onClick={handleConnectAll} loading={connectingAll}>{t('device.connectAll')}</Button>
         <Button icon={<LinkOutlined />} onClick={handleConnectSelected} loading={connectingAll} disabled={selectedDeviceIds.size === 0}>{t('device.connectSelected')} ({selectedDeviceIds.size})</Button>
+        <Button icon={<DisconnectOutlined />} danger onClick={handleDisconnectAll} loading={disconnectingAll}>{t('device.disconnectAll')}</Button>
+        <Button icon={<DisconnectOutlined />} onClick={handleDisconnectSelected} loading={disconnectingAll} disabled={selectedDeviceIds.size === 0}>{t('device.disconnectSelected')} ({selectedDeviceIds.size})</Button>
       </Space>
 
       <Card

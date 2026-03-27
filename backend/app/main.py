@@ -230,7 +230,6 @@ async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     # --- Startup ---
     reconnect_task = asyncio.create_task(_reconnect_loop())
-    auto_connect_task = asyncio.create_task(_auto_connect_all())
 
     # 관제 클라이언트 콜백 항상 등록 (URL은 나중에 Settings에서 설정 가능)
     monitor_client.set_status_callback(_get_monitor_status)
@@ -248,7 +247,6 @@ async def lifespan(app: FastAPI):
     # --- Shutdown ---
     await monitor_client.stop()
     reconnect_task.cancel()
-    auto_connect_task.cancel()
     scrcpy_manager.stop_all()
     logger.info("Closing all serial connections...")
     device_manager.close_all_serial_connections()
