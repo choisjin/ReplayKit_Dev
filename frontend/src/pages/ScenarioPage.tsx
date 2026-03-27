@@ -1227,7 +1227,7 @@ export default function ScenarioPage() {
                         else setSkipStepIds(new Set(previewSteps.map((s: any) => s.id)));
                       }}
                     />,
-                    key: 'check', width: 40, align: 'center' as const,
+                    key: 'check', width: 32, align: 'center' as const,
                     render: (_: any, r: any) => (
                       <Checkbox
                         checked={!skipStepIds.has(r.id)}
@@ -1242,18 +1242,18 @@ export default function ScenarioPage() {
                       />
                     ),
                   },
-                  { title: '#', dataIndex: 'id', key: 'id', width: 40, align: 'center' as const },
-                  { title: 'Type', dataIndex: 'type', key: 'type', width: 120, render: (v: string, row: any) => <Tag color={v === 'module_command' ? 'geekblue' : undefined}>{v === 'module_command' ? (row.params?.module || v) : v}</Tag> },
-                  { title: 'Device', dataIndex: 'device_id', key: 'device', width: 120, render: (v: string) => v ? <Tag color="blue">{v}</Tag> : '-' },
-                  { title: t('common.description'), dataIndex: 'description', key: 'desc', width: 120, ellipsis: true },
+                  { title: '#', dataIndex: 'id', key: 'id', width: 32, align: 'center' as const },
+                  { title: 'Type', dataIndex: 'type', key: 'type', width: 'auto' as any, ellipsis: true, render: (v: string, row: any) => <Tag color={v === 'module_command' ? 'geekblue' : undefined} style={{ margin: 0 }}>{v === 'module_command' ? (row.params?.module || v) : v}</Tag> },
+                  { title: 'Device', dataIndex: 'device_id', key: 'device', ellipsis: true, render: (v: string) => v ? <Tag color="blue" style={{ margin: 0 }}>{v}</Tag> : '-' },
+                  { title: t('common.description'), dataIndex: 'description', key: 'desc', ellipsis: true },
                   {
-                    title: 'Delay (ms)', dataIndex: 'delay_after_ms', key: 'delay', width: 120, align: 'center' as const,
+                    title: 'Delay', dataIndex: 'delay_after_ms', key: 'delay', width: 80, align: 'center' as const,
                     render: (v: number, _r: any, idx: number) => {
                       const isWait = _r.type === 'wait';
                       const displayVal = isWait ? (_r.params?.duration_ms ?? v) : v;
                       return (
                         <InputNumber
-                          size="small" min={0} step={100} value={displayVal} style={{ width: 100 }}
+                          size="small" min={0} step={100} value={displayVal} style={{ width: 70 }}
                           onChange={(val) => {
                             const updated = [...previewSteps];
                             if (isWait) {
@@ -1270,11 +1270,10 @@ export default function ScenarioPage() {
                       );
                     },
                   },
-                  { title: t('scenario.compare'), key: 'img', width: 70, align: 'center' as const, render: (_: any, r: any) => {
+                  { title: t('scenario.compare'), key: 'img', render: (_: any, r: any) => {
                     if (!r.expected_image) return '-';
                     const imgSrc = `/screenshots/${selectedName}/${r.expected_image}?v=${r.id}`;
                     const mode = r.compare_mode;
-                    // ROI/크롭/영역제외 영역이 있으면 캔버스 오버레이
                     const regions: { x: number; y: number; width: number; height: number }[] = [];
                     let regionColor = '#52c41a';
                     if (mode === 'single_crop' && r.roi) {
@@ -1286,7 +1285,7 @@ export default function ScenarioPage() {
                       regionColor = '#ff4d4f';
                     }
                     if (regions.length === 0) {
-                      return <Image src={imgSrc} alt="expected" style={{ height: 32, maxWidth: 56, objectFit: 'contain', borderRadius: 2 }} preview={{ mask: false }} />;
+                      return <Image src={imgSrc} alt="expected" style={{ height: 32, maxWidth: 80, objectFit: 'contain', borderRadius: 2 }} preview={{ mask: false }} />;
                     }
                     return (
                       <ExpectedThumbnail src={imgSrc} regions={regions} color={regionColor} height={32} />
