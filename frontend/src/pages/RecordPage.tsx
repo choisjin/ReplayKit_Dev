@@ -1954,8 +1954,13 @@ export default function RecordPage() {
   ), [steps, recording, updateStepJump, updateStepDescription, openEditStepModal, openRoiModal, screenshotDeviceId, scenarioName, saveExpectedFull, openCaptureModal, testStep, testingStepIndex, updateCompareMode, openExcludeRoiModal, openMultiCropModal, showAnnotatedPreview, selectCompareMode, compareModePopoverIndex, t]);
 
   return (
-    <div style={{ height: 'calc(100vh - 80px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
+    <div className="record-page" style={{ height: 'calc(100vh - 80px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <style>{`
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .record-page .ant-tag { line-height: 22px; }
+        .record-page .ant-input-sm, .record-page .ant-input-number-sm, .record-page .ant-select-sm { height: 24px; }
+        .record-page .ant-btn-sm { height: 24px; }
+      `}</style>
       <Splitter style={{ flex: 1, minHeight: 0 }}>
         <Splitter.Panel defaultSize="40%" min="20%" max="70%" style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
           {/* Left panel: Device screen + Webcam */}
@@ -2207,7 +2212,7 @@ export default function RecordPage() {
               <Input size="small" value={scenarioName} disabled style={{ flex: 1, minWidth: 100 }} />
               <Input size="small" placeholder={t('record.descriptionPlaceholder')} value={description} onChange={(e) => setDescription(e.target.value)} style={{ flex: 2, minWidth: 120 }} />
               <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-                <Tag color="red" style={{ margin: 0 }}>{t('record.recording')}</Tag>
+                <Tag color="red" style={{ margin: 0, lineHeight: '22px' }}>{t('record.recording')}</Tag>
                 <Button size="small" danger icon={<PauseOutlined />} onClick={stopRecording} disabled={hasPendingSteps}>
                   {hasPendingSteps ? t('record.savingSteps') : t('record.stopRecording')}
                 </Button>
