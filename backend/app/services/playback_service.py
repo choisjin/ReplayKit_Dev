@@ -181,10 +181,6 @@ class PlaybackService:
         if not aliases:
             return errors
 
-        # Refresh device statuses
-        await self.dm.refresh_adb()
-        await self.dm.refresh_auxiliary()
-
         for alias in sorted(aliases):
             real_id = device_map.get(alias, alias)
             dev = self.dm.get_device(real_id)
@@ -193,7 +189,7 @@ class PlaybackService:
                     errors.append(f"'{alias}' → 디바이스 '{real_id}'을(를) 찾을 수 없습니다")
                 else:
                     errors.append(f"디바이스 '{alias}'을(를) 찾을 수 없습니다 (매핑 없음)")
-            elif dev.status in ("offline", "disconnected"):
+            elif dev.status not in ("device", "connected"):
                 label = f"'{alias}' → " if alias != real_id else ""
                 errors.append(f"{label}디바이스 '{dev.name or real_id}'이(가) 연결되어 있지 않습니다 (상태: {dev.status})")
 
