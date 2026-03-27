@@ -1819,7 +1819,7 @@ export default function RecordPage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* 1행: 설명, 함수(인자), delay(우측정렬) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ flexShrink: 0, width: 32, textAlign: 'center', display: 'inline-block' }}><Tag color={s.type === 'wait' ? 'cyan' : 'blue'} style={{ margin: 0 }}>#{index + 1}</Tag></span>
+              <Tag color={s.type === 'wait' ? 'cyan' : 'blue'} style={{ margin: 0, minWidth: 28, textAlign: 'center', flexShrink: 0 }}>{index + 1}</Tag>
               <Input
                 size="small"
                 placeholder="Remark"
@@ -1865,7 +1865,8 @@ export default function RecordPage() {
               )}
             </div>
             {/* 2행: 디바이스/타입/이미지/태그 (좌측 정렬) */}
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 2, paddingLeft: 36, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
+              <span style={{ minWidth: 28, flexShrink: 0 }} />
               {getDeviceTag(s.device_id)}
               <Tag color={s.type === 'wait' ? 'cyan' : s.type === 'module_command' ? 'geekblue' : s.type.startsWith('hkmc_') ? 'volcano' : undefined}>{s.type === 'module_command' ? (s.params.module || 'module_command') : s.type}</Tag>
               {s.screen_type && <Tag color="geekblue" style={{ margin: 0 }}>{s.screen_type}</Tag>}
@@ -2205,10 +2206,12 @@ export default function RecordPage() {
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
               <Input size="small" value={scenarioName} disabled style={{ width: 120 }} />
               <Input size="small" placeholder={t('record.descriptionPlaceholder')} value={description} onChange={(e) => setDescription(e.target.value)} style={{ width: 140 }} />
-              <Tag color="red" style={{ margin: 0 }}>{t('record.recording')}</Tag>
-              <Button size="small" danger icon={<PauseOutlined />} onClick={stopRecording} disabled={hasPendingSteps}>
-                {hasPendingSteps ? t('record.savingSteps') : t('record.stopRecording')}
-              </Button>
+              <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+                <Tag color="red" style={{ margin: 0 }}>{t('record.recording')}</Tag>
+                <Button size="small" danger icon={<PauseOutlined />} onClick={stopRecording} disabled={hasPendingSteps}>
+                  {hasPendingSteps ? t('record.savingSteps') : t('record.stopRecording')}
+                </Button>
+              </span>
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
