@@ -406,14 +406,17 @@ class ServerManagerApp:
             safe_dir = PROJECT_ROOT.replace("\\", "/")
             git = ["git", "-c", f"safe.directory={safe_dir}"]
 
-            # 이전 빌드 .pyd 캐시 삭제 (backend 내부만)
-            import glob as _glob
-            _backend_dir = os.path.join(PROJECT_ROOT, "backend")
-            for _pyd in _glob.glob(os.path.join(_backend_dir, "**", "*.pyd"), recursive=True):
-                try:
-                    os.remove(_pyd)
-                except Exception:
-                    pass
+            # 개발 환경에서만 .pyd 캐시 삭제 (배포 환경에서는 .pyd가 핵심 바이너리)
+            _main_py = os.path.join(PROJECT_ROOT, "backend", "app", "main.py")
+            _is_dev = os.path.exists(_main_py)  # 소스 .py가 있으면 개발 환경
+            if _is_dev:
+                import glob as _glob
+                _backend_dir = os.path.join(PROJECT_ROOT, "backend")
+                for _pyd in _glob.glob(os.path.join(_backend_dir, "**", "*.pyd"), recursive=True):
+                    try:
+                        os.remove(_pyd)
+                    except Exception:
+                        pass
 
             # git 명령 사용 가능 여부 먼저 확인
             git_available = _run_cmd(["git", "--version"], timeout=5)[0] == 0
@@ -426,6 +429,28 @@ class ServerManagerApp:
                     log_callback(f"[동기화] {out}")
                 if code != 0:
                     log_callback("[동기화] git pull 실패 — 의존성 설치는 계속합니다")
+
+                # 배포 환경: git pull로 .py 소스가 들어왔으면 삭제 (.pyd 보호)
+                if not _is_dev:
+                    import glob as _glob
+                    _backend_app = os.path.join(PROJECT_ROOT, "backend", "app")
+                    _skip_py = {"__init__.py", "dependencies.py"}
+                    removed = 0
+                    for _py in _glob.glob(os.path.join(_backend_app, "**", "*.py"), recursive=True):
+                        fname = os.path.basename(_py)
+                        if fname in _skip_py:
+                            continue
+                        # .pyd가 존재하면 .py는 불필요 (소스 노출 방지)
+                        stem = os.path.splitext(fname)[0]
+                        pyd_exists = any(_glob.glob(os.path.join(os.path.dirname(_py), f"{stem}.*.pyd")))
+                        if pyd_exists:
+                            try:
+                                os.remove(_py)
+                                removed += 1
+                            except Exception:
+                                pass
+                    if removed:
+                        log_callback(f"[동기화] 배포 보호: .py 소스 {removed}개 삭제 (.pyd 우선)")
             else:
                 log_callback("[동기화] git 미설치 — git pull 건너뜀")
         else:
@@ -672,7 +697,7 @@ def _kill_existing_servers():
                     pass
 
 
-if __name__ == "__main__":
+def main():
     _hide_console()
 
     is_restart = "--restart" in sys.argv
@@ -700,3 +725,7 @@ if __name__ == "__main__":
         threading.Thread(target=_restart_and_open, daemon=True).start()
 
     app.run()
+
+
+if __name__ == "__main__":
+    main()

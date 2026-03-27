@@ -213,6 +213,10 @@ def step_compile_backend():
         for f in files:
             if f.endswith(".py") and f not in SKIP_COMPILE:
                 py_files.append(os.path.join(root, f))
+    # server.py도 컴파일
+    server_py = str(PROJECT_ROOT / "server.py")
+    if os.path.exists(server_py):
+        py_files.append(server_py)
 
     if not py_files:
         print("  컴파일할 파일 없음")
@@ -350,9 +354,30 @@ def step_package():
     # ── 루트 파일 ──
     print("  루트 파일 복사 중...")
     for f in INCLUDE_ROOT_FILES:
+        if f == "server.py":
+            continue  # server.py는 별도 처리
         src = PROJECT_ROOT / f
         if src.exists():
             shutil.copy2(str(src), str(DIST_DIR / f))
+
+    # ── server.py → .pyd + 얇은 런처 ──
+    server_pyd = list(PROJECT_ROOT.glob("server.cp*.pyd"))
+    if server_pyd:
+        # .pyd를 _server_core.*.pyd로 복사
+        pyd_name = server_pyd[0].name.replace("server.", "_server_core.")
+        shutil.copy2(str(server_pyd[0]), str(DIST_DIR / pyd_name))
+        # 얇은 런처 생성
+        (DIST_DIR / "server.py").write_text(
+            "import _server_core\n_server_core.main()\n",
+            encoding="utf-8",
+        )
+        print(f"  server.pyd → {pyd_name} + server.py (launcher)")
+    else:
+        # .pyd 없으면 원본 복사 (컴파일 실패 시 폴백)
+        src = PROJECT_ROOT / "server.py"
+        if src.exists():
+            shutil.copy2(str(src), str(DIST_DIR / "server.py"))
+            print("  server.py 원본 복사 (pyd 없음)")
 
     for f in INCLUDE_EXTRA:
         src = PROJECT_ROOT / f
@@ -380,6 +405,15 @@ def step_package():
         print(f"  tools 복사 완료")
     else:
         print(f"  [Note] tools/ not found - skipped")
+
+    # ── Git installer 복사 ──
+    git_installers = list(PROJECT_ROOT.glob("Git-*.exe"))
+    if git_installers:
+        for gi in git_installers:
+            shutil.copy2(str(gi), str(DIST_DIR / gi.name))
+        print(f"  Git installer 복사: {[g.name for g in git_installers]}")
+    else:
+        print(f"  [Note] Git installer not found - skipped")
 
     # ── docs 복사 ──
     src_docs = PROJECT_ROOT / "docs"
@@ -525,6 +559,11 @@ def clean():
     count = 0
     for pattern in ("*.c", "*.pyd"):
         for f in (PROJECT_ROOT / "backend").rglob(pattern):
+            f.unlink()
+            count += 1
+    # 루트의 server.*.pyd, server.c도 삭제
+    for pattern in ("server.*.pyd", "server.c"):
+        for f in PROJECT_ROOT.glob(pattern):
             f.unlink()
             count += 1
     if BUILD_DIR.exists():

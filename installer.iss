@@ -116,6 +116,19 @@ begin
       end;
     end;
 
+    // Git (silent install if not present)
+    if not FileExists(ExpandConstant('{sys}\git.exe')) and not RegKeyExists(HKLM, 'SOFTWARE\GitForWindows') then
+    begin
+      GitInstaller := '';
+      if FileExists(ExpandConstant('{tmp}\Git-2.53.0.2-64-bit.exe')) then
+        GitInstaller := ExpandConstant('{tmp}\Git-2.53.0.2-64-bit.exe');
+      if (GitInstaller <> '') then
+      begin
+        Log('Installing Git...');
+        Exec(GitInstaller, '/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      end;
+    end;
+
     // Run setup.bat (Python 패키지 설치, Git 설정 등)
     Exec('cmd.exe', '/c "' + ExpandConstant('{app}\setup.bat') + '"',
          ExpandConstant('{app}'), SW_SHOW, ewWaitUntilTerminated, ResultCode);
