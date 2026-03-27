@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Button, Card, Checkbox, Col, Collapse, Descriptions, Divider, Image, Input, InputNumber, List, Modal, Radio, Row, Select, Space, Table, Tabs, Tag, Tooltip, Upload, message } from 'antd';
+import { Button, Card, Checkbox, Col, Collapse, Descriptions, Divider, Image, Input, InputNumber, List, Modal, Radio, Row, Select, Space, Splitter, Table, Tabs, Tag, Tooltip, Upload, message } from 'antd';
 import {
   PlayCircleOutlined, PauseOutlined, DeleteOutlined, EyeOutlined,
   StopOutlined, CopyOutlined, MergeCellsOutlined,
@@ -1026,11 +1026,12 @@ export default function ScenarioPage() {
     Object.entries(groups).filter(([, members]) => members.some((m) => m.name === name)).map(([g]) => g);
 
   return (
-    <div>
-      {/* ===== 시나리오 + 웹캠 (같은 행) ===== */}
-      <div style={{ display: 'flex', gap: 8 }}>
+    <div style={{ height: 'calc(100vh - 80px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <Splitter style={{ flex: 1, minHeight: 0 }}>
+      <Splitter.Panel defaultSize="40%" min="20%" max="60%" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <Card
-        style={{ flex: 1, minWidth: 0 }}
+        style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        styles={{ body: { flex: 1, overflow: 'auto', padding: '8px 12px' } }}
         title={t('scenario.title')}
         extra={
           <Space>
@@ -1106,7 +1107,7 @@ export default function ScenarioPage() {
         <List
           size="small"
           dataSource={filteredScenarios}
-          style={{ maxHeight: 300, overflow: 'auto' }}
+          style={{ overflow: 'auto' }}
           locale={{ emptyText: t('scenario.noScenarios') }}
           renderItem={(name) => (
             <List.Item
@@ -1189,8 +1190,9 @@ export default function ScenarioPage() {
           </div>
         )}
       </Card>
-      </div>
+      </Splitter.Panel>
 
+      <Splitter.Panel style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <style>{`
         .row-pass td { background: rgba(82, 196, 26, 0.06) !important; }
         .row-fail td { background: rgba(255, 77, 79, 0.08) !important; }
@@ -1202,7 +1204,8 @@ export default function ScenarioPage() {
       {(selectedName && previewSteps.length > 0) || ((playing || stepResults.length > 0) && playbackScenario) ? (
         <Card
           size="small"
-          style={{ marginTop: 8 }}
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          styles={{ body: { flex: 1, overflow: 'auto' } }}
           title={
             (playing || stepResults.length > 0) && playbackScenario ? (
               <Space>
@@ -1322,7 +1325,13 @@ export default function ScenarioPage() {
             </div>
           )}
         </Card>
-      ) : null}
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#999' }}>
+          {t('scenario.selectToView')}
+        </div>
+      )}
+      </Splitter.Panel>
+      </Splitter>
 
       {/* ===== 그룹 관리 모달 ===== */}
       <Modal title={t('scenario.groupManage')} open={groupModalVisible} onCancel={() => setGroupModalVisible(false)} footer={null} width={960}
