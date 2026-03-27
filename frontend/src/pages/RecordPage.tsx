@@ -2200,6 +2200,17 @@ export default function RecordPage() {
 
         <Splitter.Panel style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', opacity: testingStepIndex != null ? 0.5 : 1, pointerEvents: testingStepIndex != null ? 'none' : 'auto' }}>
           {/* Right panel: Controls + Steps */}
+          {recording && (
+            /* 녹화 중: 1행 시나리오+설명+녹화상태 */
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+              <Input size="small" value={scenarioName} disabled style={{ width: 120 }} />
+              <Input size="small" placeholder={t('record.descriptionPlaceholder')} value={description} onChange={(e) => setDescription(e.target.value)} style={{ width: 140 }} />
+              <Tag color="red" style={{ margin: 0 }}>{t('record.recording')}</Tag>
+              <Button size="small" danger icon={<PauseOutlined />} onClick={stopRecording} disabled={hasPendingSteps}>
+                {hasPendingSteps ? t('record.savingSteps') : t('record.stopRecording')}
+              </Button>
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             {recording && (
             <Card
@@ -2410,79 +2421,54 @@ export default function RecordPage() {
               </div>
             </Card>
             )}
-            <Card
-              size="small"
-              title={recording ? undefined : t('record.control')}
-              extra={recording ? (
-                <Space size={4}>
-                  <Tag color="red" style={{ margin: 0 }}>{t('record.recording')}</Tag>
-                  <Button size="small" danger icon={<PauseOutlined />} onClick={stopRecording} disabled={hasPendingSteps}>
-                    {hasPendingSteps ? t('record.savingSteps') : t('record.stopRecording')}
-                  </Button>
-                </Space>
-              ) : undefined}
-              styles={recording ? { header: { borderBottom: 'none', minHeight: 32, padding: '0 12px' }, body: { padding: '4px 12px 8px' } } : undefined}
-              style={recording ? { flexShrink: 0 } : { flex: 1, minWidth: 0 }}
-            >
-              {recording ? (
-                /* 녹화 중: 1행 시나리오명, 2행 설명 */
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <Input size="small" value={scenarioName} disabled />
+            {!recording && (
+            <Card size="small" title={t('record.control')} style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Row 1: 시나리오 콤보 + 관리 버튼 */}
+                <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Select
+                    placeholder={t('record.loadScenario')}
+                    style={{ flex: 1, minWidth: 140 }}
+                    onChange={loadScenario}
+                    value={editingExisting ? scenarioName : undefined}
+                    onOpenChange={(open) => { if (open) fetchSavedScenarios(); }}
+                  >
+                    {savedScenarios.map(n => (
+                      <Option key={n} value={n}>{n}</Option>
+                    ))}
+                  </Select>
+                  {editingExisting && (
+                    <>
+                      <Button size="small" icon={<CopyOutlined />} title={t('record.copyScenario')} onClick={copyScenario} />
+                      <Button size="small" icon={<EditOutlined />} title={t('record.renameScenario')} onClick={renameScenario} />
+                      <Button size="small" danger icon={<DeleteOutlined />} title={t('common.delete')} onClick={deleteScenario} />
+                    </>
+                  )}
+                  <Button size="small" icon={<PlusOutlined />} onClick={createNewWithName}>{t('record.createNew')}</Button>
+                </div>
+                {/* Row 2: 설명 + 상태 + 녹화 버튼 */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Input
                     placeholder={t('record.descriptionPlaceholder')}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    size="small"
+                    style={{ flex: 1, minWidth: 120 }}
                   />
-                </div>
-              ) : (
-                /* 비녹화: 기존 2행 레이아웃 */
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {/* Row 1: 시나리오 콤보 + 관리 버튼 */}
-                  <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Select
-                      placeholder={t('record.loadScenario')}
-                      style={{ flex: 1, minWidth: 140 }}
-                      onChange={loadScenario}
-                      value={editingExisting ? scenarioName : undefined}
-                      onOpenChange={(open) => { if (open) fetchSavedScenarios(); }}
-                    >
-                      {savedScenarios.map(n => (
-                        <Option key={n} value={n}>{n}</Option>
-                      ))}
-                    </Select>
-                    {editingExisting && (
-                      <>
-                        <Button size="small" icon={<CopyOutlined />} title={t('record.copyScenario')} onClick={copyScenario} />
-                        <Button size="small" icon={<EditOutlined />} title={t('record.renameScenario')} onClick={renameScenario} />
-                        <Button size="small" danger icon={<DeleteOutlined />} title={t('common.delete')} onClick={deleteScenario} />
-                      </>
-                    )}
-                    <Button size="small" icon={<PlusOutlined />} onClick={createNewWithName}>{t('record.createNew')}</Button>
-                  </div>
-                  {/* Row 2: 설명 + 상태 + 녹화 버튼 */}
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Input
-                      placeholder={t('record.descriptionPlaceholder')}
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      style={{ flex: 1, minWidth: 120 }}
-                    />
-                    <Tag color={editingExisting ? 'blue' : 'default'} style={{ margin: 0 }}>
-                      {editingExisting ? t('record.editing') : t('record.waiting')}
-                    </Tag>
-                    <Button type="primary" icon={<PlayCircleOutlined />} onClick={startRecording}>
-                      {editingExisting ? t('record.resumeRecording') : t('record.startRecording')}
+                  <Tag color={editingExisting ? 'blue' : 'default'} style={{ margin: 0 }}>
+                    {editingExisting ? t('record.editing') : t('record.waiting')}
+                  </Tag>
+                  <Button type="primary" icon={<PlayCircleOutlined />} onClick={startRecording}>
+                    {editingExisting ? t('record.resumeRecording') : t('record.startRecording')}
+                  </Button>
+                  {steps.length > 0 && (
+                    <Button icon={<SaveOutlined />} onClick={saveScenario} type={isDirty() ? 'primary' : 'default'} danger={isDirty()}>
+                      {t('record.save')}{isDirty() ? ' *' : ''}
                     </Button>
-                    {steps.length > 0 && (
-                      <Button icon={<SaveOutlined />} onClick={saveScenario} type={isDirty() ? 'primary' : 'default'} danger={isDirty()}>
-                        {t('record.save')}{isDirty() ? ' *' : ''}
-                      </Button>
-                    )}
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
             </Card>
+            )}
           </div>
 
           <Card
