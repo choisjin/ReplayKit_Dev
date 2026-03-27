@@ -1510,47 +1510,44 @@ export default function RecordPage() {
     }
   };
 
-  const WaitModePopoverContent = ({ afterIndex }: { afterIndex?: number }) => {
-    const [wMode, setWMode] = useState<'basic' | 'cycle' | 'random'>('basic');
-    const [wDuration, setWDuration] = useState(1000);
-    const [wStart, setWStart] = useState(3000);
-    const [wInterval, setWInterval] = useState(3000);
-    const [wMin, setWMin] = useState(0);
-    const [wMax, setWMax] = useState(10000);
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200 }}>
-        <Radio.Group size="small" value={wMode} onChange={(e) => setWMode(e.target.value)} optionType="button" buttonStyle="solid"
-          options={[
-            { label: t('record.waitBasic'), value: 'basic' },
-            { label: t('record.waitCycle'), value: 'cycle' },
-            { label: t('record.waitRandom'), value: 'random' },
-          ]}
-        />
-        {wMode === 'basic' && (
-          <Space>
-            <InputNumber size="small" min={0} step={100} value={wDuration} onChange={(v) => setWDuration(v || 0)} suffix="ms" style={{ width: 130 }} />
-          </Space>
-        )}
-        {wMode === 'cycle' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Space><span style={{ fontSize: 12, minWidth: 30 }}>{t('record.waitStart')}:</span><InputNumber size="small" min={0} step={100} value={wStart} onChange={(v) => setWStart(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
-            <Space><span style={{ fontSize: 12, minWidth: 30 }}>{t('record.waitInterval')}:</span><InputNumber size="small" min={0} step={100} value={wInterval} onChange={(v) => setWInterval(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
-          </div>
-        )}
-        {wMode === 'random' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Space><span style={{ fontSize: 12, minWidth: 30 }}>Min:</span><InputNumber size="small" min={0} step={100} value={wMin} onChange={(v) => setWMin(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
-            <Space><span style={{ fontSize: 12, minWidth: 30 }}>Max:</span><InputNumber size="small" min={0} step={100} value={wMax} onChange={(v) => setWMax(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
-          </div>
-        )}
-        <Button size="small" type="primary" block onClick={() => {
-          if (wMode === 'basic') addWaitStepWithMode('basic', { duration_ms: wDuration }, afterIndex);
-          else if (wMode === 'cycle') addWaitStepWithMode('cycle', { start_ms: wStart, interval_ms: wInterval }, afterIndex);
-          else addWaitStepWithMode('random', { min_ms: wMin, max_ms: wMax }, afterIndex);
-        }}>{t('record.addWait')}</Button>
-      </div>
-    );
-  };
+  const [wMode, setWMode] = useState<'basic' | 'cycle' | 'random'>('basic');
+  const [wDuration, setWDuration] = useState(1000);
+  const [wStart, setWStart] = useState(3000);
+  const [wInterval, setWInterval] = useState(3000);
+  const [wMin, setWMin] = useState(0);
+  const [wMax, setWMax] = useState(10000);
+
+  const renderWaitPopoverContent = (afterIndex?: number) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200 }}>
+      <Radio.Group size="small" value={wMode} onChange={(e) => setWMode(e.target.value)} optionType="button" buttonStyle="solid"
+        options={[
+          { label: t('record.waitBasic'), value: 'basic' },
+          { label: t('record.waitCycle'), value: 'cycle' },
+          { label: t('record.waitRandom'), value: 'random' },
+        ]}
+      />
+      {wMode === 'basic' && (
+        <InputNumber size="small" min={0} step={100} value={wDuration} onChange={(v) => setWDuration(v || 0)} suffix="ms" style={{ width: '100%' }} />
+      )}
+      {wMode === 'cycle' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Space><span style={{ fontSize: 12, minWidth: 30 }}>{t('record.waitStart')}:</span><InputNumber size="small" min={0} step={100} value={wStart} onChange={(v) => setWStart(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
+          <Space><span style={{ fontSize: 12, minWidth: 30 }}>{t('record.waitInterval')}:</span><InputNumber size="small" min={0} step={100} value={wInterval} onChange={(v) => setWInterval(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
+        </div>
+      )}
+      {wMode === 'random' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Space><span style={{ fontSize: 12, minWidth: 30 }}>Min:</span><InputNumber size="small" min={0} step={100} value={wMin} onChange={(v) => setWMin(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
+          <Space><span style={{ fontSize: 12, minWidth: 30 }}>Max:</span><InputNumber size="small" min={0} step={100} value={wMax} onChange={(v) => setWMax(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
+        </div>
+      )}
+      <Button size="small" type="primary" block onClick={() => {
+        if (wMode === 'basic') addWaitStepWithMode('basic', { duration_ms: wDuration }, afterIndex);
+        else if (wMode === 'cycle') addWaitStepWithMode('cycle', { start_ms: wStart, interval_ms: wInterval }, afterIndex);
+        else addWaitStepWithMode('random', { min_ms: wMin, max_ms: wMax }, afterIndex);
+      }}>{t('record.addWait')}</Button>
+    </div>
+  );
 
   const updateStepJump = useCallback((index: number, field: 'on_pass_goto' | 'on_fail_goto', value: number | null) => {
     setSteps((prev) => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
@@ -1991,7 +1988,7 @@ export default function RecordPage() {
                 onOpenChange={(v) => setWaitPopoverIndex(v ? index : null)}
                 trigger="click"
                 placement="bottomRight"
-                content={<WaitModePopoverContent afterIndex={index} />}
+                content={renderWaitPopoverContent(index)}
               >
                 <Button size="small" type="text" title={t('record.insertWait')} style={{ width: 28 }}>W</Button>
               </Popover>
@@ -2027,7 +2024,7 @@ export default function RecordPage() {
       )}
       locale={{ emptyText: t('record.noSteps') }}
     />
-  ), [steps, recording, updateStepJump, updateStepDescription, openEditStepModal, openRoiModal, screenshotDeviceId, scenarioName, saveExpectedFull, openCaptureModal, testStep, testingStepIndex, updateCompareMode, openExcludeRoiModal, openMultiCropModal, showAnnotatedPreview, selectCompareMode, compareModePopoverIndex, waitPopoverIndex, allDevices, t]);
+  ), [steps, recording, updateStepJump, updateStepDescription, openEditStepModal, openRoiModal, screenshotDeviceId, scenarioName, saveExpectedFull, openCaptureModal, testStep, testingStepIndex, updateCompareMode, openExcludeRoiModal, openMultiCropModal, showAnnotatedPreview, selectCompareMode, compareModePopoverIndex, waitPopoverIndex, wMode, wDuration, wStart, wInterval, wMin, wMax, allDevices, t]);
 
   return (
     <div className="record-page" style={{ height: 'calc(100vh - 80px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -2576,7 +2573,7 @@ export default function RecordPage() {
                 onOpenChange={(v) => setWaitPopoverIndex(v ? 'end' : null)}
                 trigger="click"
                 placement="bottomRight"
-                content={<WaitModePopoverContent />}
+                content={renderWaitPopoverContent()}
               >
                 <Button size="small" icon={<PlusOutlined />}>{t('record.addWait')}</Button>
               </Popover>
