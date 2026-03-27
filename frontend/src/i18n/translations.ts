@@ -110,6 +110,13 @@ const translations = {
     'device.visionSubnet': '서브넷',
     'device.visionGateway': '게이트웨이',
     'device.pcInterfaces': 'PC 네트워크',
+    'device.connectAll': '전체 연결',
+    'device.connectSelected': '선택 연결',
+    'device.connectOne': '연결',
+    'device.connectAllSuccess': '전체 연결 완료',
+    'device.connectSelectedSuccess': '선택 연결 완료',
+    'device.connectOneSuccess': '연결 완료',
+    'device.noSelection': '연결할 디바이스를 선택하세요',
 
     // === DLT ===
     'dlt.moduleName': 'DLT Viewer',
@@ -663,6 +670,13 @@ const translations = {
     'device.visionSubnet': 'Subnet',
     'device.visionGateway': 'Gateway',
     'device.pcInterfaces': 'PC Network',
+    'device.connectAll': 'Connect All',
+    'device.connectSelected': 'Connect Selected',
+    'device.connectOne': 'Connect',
+    'device.connectAllSuccess': 'All devices connected',
+    'device.connectSelectedSuccess': 'Selected devices connected',
+    'device.connectOneSuccess': 'Device connected',
+    'device.noSelection': 'Select devices to connect',
 
     // === DLT ===
     'dlt.moduleName': 'DLT Viewer',

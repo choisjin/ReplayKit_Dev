@@ -214,8 +214,7 @@ async def _remote_play(scenario_name: str, repeat: int, verify: bool):
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     # --- Startup ---
-    logger.info("Opening persistent serial connections...")
-    await device_manager.open_all_serial_connections()
+    # 디바이스 자동 연결 제거 — 사용자가 디바이스 탭에서 수동 연결
     reconnect_task = asyncio.create_task(_reconnect_loop())
 
     # 관제 클라이언트 콜백 항상 등록 (URL은 나중에 Settings에서 설정 가능)

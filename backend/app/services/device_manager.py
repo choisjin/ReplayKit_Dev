@@ -1105,6 +1105,106 @@ class DeviceManager:
                     dev.status = "disconnected"
                     logger.warning("Failed to open VisionCamera %s (%s): %s", dev.id, mac, e)
 
+    async def connect_device_by_id(self, device_id: str) -> str:
+        """등록된 디바이스 1개를 연결. 결과 메시지 반환."""
+        dev = self._devices.get(device_id)
+        if not dev:
+            return f"Device {device_id} not found"
+        loop = asyncio.get_event_loop()
+
+        if dev.type == "serial":
+            try:
+                await loop.run_in_executor(None, self._get_serial_conn, dev.id)
+                dev.status = "connected"
+                return f"Serial connected: {dev.id} ({dev.address})"
+            except Exception as e:
+                dev.status = "disconnected"
+                return f"Serial connect failed: {dev.id} — {e}"
+
+        elif dev.type == "hkmc6th":
+            port = dev.info.get("port", 0)
+            if not port:
+                return f"HKMC {dev.id}: no port configured"
+            try:
+                from .hkmc6th_service import HKMC6thService
+                svc = HKMC6thService(dev.address, port, device_id=dev.id)
+                ok = await svc.async_connect()
+                if ok:
+                    self._hkmc_conns[dev.id] = svc
+                    dev.status = "connected"
+                    dev.info["agent_version"] = svc.agent_version
+                    dev.info["screens"] = svc.get_info()["screens"]
+                    return f"HKMC connected: {dev.id} ({dev.address}:{port})"
+                else:
+                    dev.status = "disconnected"
+                    return f"HKMC connect failed: {dev.id}"
+            except Exception as e:
+                dev.status = "disconnected"
+                return f"HKMC connect failed: {dev.id} — {e}"
+
+        elif dev.type == "module":
+            module_name = dev.info.get("module", "")
+            if not module_name:
+                return f"Module {dev.id}: no module configured"
+            try:
+                from .module_service import _get_instance, _is_connected
+                from ..routers.device import _build_constructor_kwargs
+                ctor_kwargs = _build_constructor_kwargs(dev)
+                shared_conn = self.get_serial_conn(dev.id)
+                instance = await loop.run_in_executor(
+                    None, functools.partial(_get_instance, module_name, ctor_kwargs, shared_conn),
+                )
+                if _is_connected(instance):
+                    dev.status = "connected"
+                    return f"Module connected: {dev.id} ({module_name})"
+                else:
+                    dev.status = "disconnected"
+                    return f"Module not connected: {dev.id} ({module_name})"
+            except Exception as e:
+                dev.status = "disconnected"
+                return f"Module connect failed: {dev.id} — {e}"
+
+        elif dev.type == "vision_camera":
+            mac = dev.info.get("mac", "")
+            if not mac:
+                return f"VisionCamera {dev.id}: no MAC configured"
+            try:
+                from ..plugins.VisionCamera import VisionCamera
+                cam = VisionCamera(
+                    mac=mac,
+                    model=dev.info.get("model", ""),
+                    serial=dev.info.get("serial_number", ""),
+                    ip=dev.info.get("ip", ""),
+                    subnetmask=dev.info.get("subnetmask", "255.255.0.0"),
+                )
+                await loop.run_in_executor(None, cam.Connect)
+                self._vision_cams[dev.id] = cam
+                dev.status = "connected"
+                return f"VisionCamera connected: {dev.id} ({mac})"
+            except Exception as e:
+                dev.status = "disconnected"
+                return f"VisionCamera connect failed: {dev.id} — {e}"
+
+        elif dev.type == "adb":
+            # ADB는 reconnect_disconnected 루프에서 자동 관리됨
+            try:
+                if ":" in dev.address:
+                    await self.adb.connect_device(dev.address)
+                devs = await self.adb.list_devices()
+                found = next((d for d in devs if d.serial == dev.address), None)
+                if found and found.status == "device":
+                    dev.status = "device"
+                    self._adb_reconnect_attempts.pop(dev.id, None)
+                    return f"ADB connected: {dev.id} ({dev.address})"
+                else:
+                    dev.status = found.status if found else "offline"
+                    return f"ADB not ready: {dev.id} ({dev.status})"
+            except Exception as e:
+                dev.status = "offline"
+                return f"ADB connect failed: {dev.id} — {e}"
+
+        return f"Unknown device type: {dev.type}"
+
     def close_all_serial_connections(self) -> None:
         """Close all persistent serial/HKMC/VisionCamera connections (called on shutdown)."""
         for device_id in list(self._serial_conns.keys()):

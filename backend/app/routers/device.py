@@ -366,6 +366,32 @@ async def restart_adb_server():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ConnectRegisteredRequest(BaseModel):
+    device_ids: list[str] = []  # 빈 리스트면 전체 연결
+
+
+@router.post("/connect-registered")
+async def connect_registered_devices(req: ConnectRegisteredRequest):
+    """등록된 디바이스를 연결. device_ids가 비어있으면 전체 연결."""
+    all_devices = dm.list_all()
+    if req.device_ids:
+        targets = [d for d in all_devices if d.id in req.device_ids]
+    else:
+        targets = all_devices
+
+    results = []
+    for dev in targets:
+        msg = await dm.connect_device_by_id(dev.id)
+        results.append({"device_id": dev.id, "message": msg})
+        logger.info("connect-registered: %s", msg)
+
+    return {
+        "results": results,
+        "primary": [d.to_dict() for d in dm.list_primary()],
+        "auxiliary": [d.to_dict() for d in dm.list_auxiliary()],
+    }
+
+
 class UpdateDeviceRequest(BaseModel):
     device_id: str
     name: Optional[str] = None

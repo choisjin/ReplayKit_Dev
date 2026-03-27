@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Button, Card, Col, Input, InputNumber, List, Modal, Row, Select, Space, Table, Tabs, Tag, message } from 'antd';
-import { ReloadOutlined, MobileOutlined, PlusOutlined, DisconnectOutlined, UsbOutlined, WifiOutlined, SearchOutlined, EditOutlined, SyncOutlined } from '@ant-design/icons';
+import { Button, Card, Checkbox, Col, Input, InputNumber, List, Modal, Row, Select, Space, Table, Tabs, Tag, message } from 'antd';
+import { ReloadOutlined, MobileOutlined, PlusOutlined, DisconnectOutlined, UsbOutlined, WifiOutlined, SearchOutlined, EditOutlined, SyncOutlined, ApiOutlined, LinkOutlined } from '@ant-design/icons';
 import { useDevice, ManagedDevice } from '../context/DeviceContext';
 import { deviceApi } from '../services/api';
 import { useTranslation } from '../i18n';
@@ -38,6 +38,13 @@ export default function DevicePage() {
   // ADB reconnect state
   const [reconnecting, setReconnecting] = useState(false);
 
+  // 체크박스 선택 & 연결 상태
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<Set<string>>(new Set());
+  const [connectingAll, setConnectingAll] = useState(false);
+  const [connectingIds, setConnectingIds] = useState<Set<string>>(new Set());
+
+  const allDevices = [...primaryDevices, ...auxiliaryDevices];
+
   const handleAdbReconnect = async () => {
     setReconnecting(true);
     try {
@@ -48,6 +55,71 @@ export default function DevicePage() {
       message.error(t('device.adbRestartFailed'));
     }
     setReconnecting(false);
+  };
+
+  // 전체 연결
+  const handleConnectAll = async () => {
+    setConnectingAll(true);
+    try {
+      const res = await deviceApi.connectRegistered();
+      if (res.data.primary) fetchDevices();
+      message.success(t('device.connectAllSuccess'));
+    } catch {
+      message.error(t('device.connectFailed'));
+    }
+    setConnectingAll(false);
+  };
+
+  // 선택 연결
+  const handleConnectSelected = async () => {
+    if (selectedDeviceIds.size === 0) {
+      message.warning(t('device.noSelection'));
+      return;
+    }
+    setConnectingAll(true);
+    try {
+      const res = await deviceApi.connectRegistered(Array.from(selectedDeviceIds));
+      if (res.data.primary) fetchDevices();
+      message.success(t('device.connectSelectedSuccess'));
+    } catch {
+      message.error(t('device.connectFailed'));
+    }
+    setConnectingAll(false);
+  };
+
+  // 개별 연결
+  const handleConnectOne = async (deviceId: string) => {
+    setConnectingIds(prev => new Set(prev).add(deviceId));
+    try {
+      const res = await deviceApi.connectRegistered([deviceId]);
+      if (res.data.primary) fetchDevices();
+      message.success(t('device.connectOneSuccess'));
+    } catch {
+      message.error(t('device.connectFailed'));
+    }
+    setConnectingIds(prev => {
+      const next = new Set(prev);
+      next.delete(deviceId);
+      return next;
+    });
+  };
+
+  // 체크박스 토글
+  const toggleDeviceSelection = (deviceId: string, checked: boolean) => {
+    setSelectedDeviceIds(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(deviceId);
+      else next.delete(deviceId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedDeviceIds(new Set(allDevices.map(d => d.id)));
+    } else {
+      setSelectedDeviceIds(new Set());
+    }
   };
 
   // Modal state
@@ -324,12 +396,12 @@ export default function DevicePage() {
     return <Tag>USB</Tag>;
   };
 
-  const allDevices = [...primaryDevices, ...auxiliaryDevices];
-
   const getCategoryTag = (category: string) => {
     if (category === 'primary') return <Tag color="blue">{t('device.primary')}</Tag>;
     return <Tag color="orange">{t('device.auxiliary')}</Tag>;
   };
+
+  const isDeviceConnected = (d: ManagedDevice) => d.status === 'device' || d.status === 'connected';
 
   const renderDeviceList = () => (
     <List
@@ -337,6 +409,17 @@ export default function DevicePage() {
       renderItem={(d) => (
         <List.Item
           actions={[
+            ...(!isDeviceConnected(d) ? [
+              <Button
+                size="small"
+                type="primary"
+                icon={<LinkOutlined />}
+                loading={connectingIds.has(d.id)}
+                onClick={() => handleConnectOne(d.id)}
+              >
+                {t('device.connectOne')}
+              </Button>,
+            ] : []),
             ...(d.type === 'adb' ? [
               <Button
                 size="small"
@@ -364,38 +447,44 @@ export default function DevicePage() {
             </Button>,
           ]}
         >
-          <List.Item.Meta
-            avatar={getDeviceIcon(d.type)}
-            title={<>{d.info?.module || d.name || d.id} <Tag color="default" style={{ fontSize: 11, fontWeight: 'normal' }}>{d.id}</Tag></>}
-            description={
-              <>
-                <Tag color={d.status === 'device' || d.status === 'connected' ? 'green' : d.status === 'offline' ? 'red' : 'orange'}>
-                  {d.status}
-                </Tag>
-                {getCategoryTag(d.category)}
-                {getTypeTag(d)}
-                <span style={{ color: '#888' }}>{d.address}</span>
-                {d.info?.baudrate && (
-                  <Tag style={{ marginLeft: 4 }}>{d.info.baudrate} baud</Tag>
-                )}
-                {d.info?.module && (
-                  <Tag color="cyan" style={{ marginLeft: 4 }}>{d.info.module}</Tag>
-                )}
-                {d.info?.bitrate && (
-                  <Tag color="orange" style={{ marginLeft: 4 }}>{d.info.bitrate} bps</Tag>
-                )}
-                {d.info?.interface && (
-                  <Tag style={{ marginLeft: 4 }}>{d.info.interface}</Tag>
-                )}
-                {d.info?.channel && (
-                  <Tag style={{ marginLeft: 4 }}>{d.info.channel}</Tag>
-                )}
-                {d.info?.resolution && (
-                  <Tag style={{ marginLeft: 4 }}>{d.info.resolution.width}x{d.info.resolution.height}</Tag>
-                )}
-              </>
-            }
-          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+            <Checkbox
+              checked={selectedDeviceIds.has(d.id)}
+              onChange={(e) => toggleDeviceSelection(d.id, e.target.checked)}
+            />
+            <List.Item.Meta
+              avatar={getDeviceIcon(d.type)}
+              title={<>{d.info?.module || d.name || d.id} <Tag color="default" style={{ fontSize: 11, fontWeight: 'normal' }}>{d.id}</Tag></>}
+              description={
+                <>
+                  <Tag color={isDeviceConnected(d) ? 'green' : d.status === 'offline' || d.status === 'error' ? 'red' : 'orange'}>
+                    {d.status}
+                  </Tag>
+                  {getCategoryTag(d.category)}
+                  {getTypeTag(d)}
+                  <span style={{ color: '#888' }}>{d.address}</span>
+                  {d.info?.baudrate && (
+                    <Tag style={{ marginLeft: 4 }}>{d.info.baudrate} baud</Tag>
+                  )}
+                  {d.info?.module && (
+                    <Tag color="cyan" style={{ marginLeft: 4 }}>{d.info.module}</Tag>
+                  )}
+                  {d.info?.bitrate && (
+                    <Tag color="orange" style={{ marginLeft: 4 }}>{d.info.bitrate} bps</Tag>
+                  )}
+                  {d.info?.interface && (
+                    <Tag style={{ marginLeft: 4 }}>{d.info.interface}</Tag>
+                  )}
+                  {d.info?.channel && (
+                    <Tag style={{ marginLeft: 4 }}>{d.info.channel}</Tag>
+                  )}
+                  {d.info?.resolution && (
+                    <Tag style={{ marginLeft: 4 }}>{d.info.resolution.width}x{d.info.resolution.height}</Tag>
+                  )}
+                </>
+              }
+            />
+          </div>
         </List.Item>
       )}
       locale={{ emptyText: t('device.noDevicesRegistered') }}
@@ -452,12 +541,23 @@ export default function DevicePage() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 8 }}>
+      <Space style={{ marginBottom: 8 }} wrap>
         <Button icon={<ReloadOutlined />} onClick={fetchDevices} loading={loading}>{t('common.refresh')}</Button>
+        <Button icon={<ApiOutlined />} type="primary" onClick={handleConnectAll} loading={connectingAll}>{t('device.connectAll')}</Button>
+        <Button icon={<LinkOutlined />} onClick={handleConnectSelected} loading={connectingAll} disabled={selectedDeviceIds.size === 0}>{t('device.connectSelected')} ({selectedDeviceIds.size})</Button>
       </Space>
 
       <Card
-        title={`${t('device.title')} (${allDevices.length})`}
+        title={
+          <Space>
+            <Checkbox
+              indeterminate={selectedDeviceIds.size > 0 && selectedDeviceIds.size < allDevices.length}
+              checked={allDevices.length > 0 && selectedDeviceIds.size === allDevices.length}
+              onChange={(e) => toggleSelectAll(e.target.checked)}
+            />
+            {`${t('device.title')} (${allDevices.length})`}
+          </Space>
+        }
         extra={
           <Space>
             <Button icon={<PlusOutlined />} type="primary" size="small" onClick={() => openAddModal('primary')}>{t('device.addPrimary')}</Button>

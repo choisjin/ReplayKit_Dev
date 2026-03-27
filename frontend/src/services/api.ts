@@ -27,6 +27,8 @@ export const deviceApi = {
   dltViewerLaunch: (projectFile?: string, logFile?: string) =>
     api.post('/device/dlt-viewer/launch', { project_file: projectFile || '', log_file: logFile || '' }),
   dltViewerClose: () => api.post('/device/dlt-viewer/close'),
+  connectRegistered: (deviceIds?: string[]) =>
+    api.post('/device/connect-registered', { device_ids: deviceIds || [] }),
 };
 
 // Scenario APIs
