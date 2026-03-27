@@ -363,15 +363,22 @@ def step_package():
     # ── server.py → .pyd + 얇은 런처 ──
     server_pyd = list(PROJECT_ROOT.glob("server.cp*.pyd"))
     if server_pyd:
+        pyd_filename = server_pyd[0].name  # e.g. server.cp310-win_amd64.pyd
         # .pyd를 원래 이름 그대로 복사 (PyInit_server 유지)
-        shutil.copy2(str(server_pyd[0]), str(DIST_DIR / server_pyd[0].name))
-        # 런처: server.py 제거, _launcher.py 생성 (.pyd와 이름 충돌 방지)
-        (DIST_DIR / "server.py").unlink(missing_ok=True)
-        (DIST_DIR / "_launcher.py").write_text(
-            "import os, sys\nsys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))\nimport server\nserver.main()\n",
-            encoding="utf-8",
-        )
-        print(f"  {server_pyd[0].name} + _launcher.py")
+        shutil.copy2(str(server_pyd[0]), str(DIST_DIR / pyd_filename))
+        # 런처: importlib로 .pyd를 직접 로드 (server.py와 이름 충돌 회피)
+        launcher_code = f"""import os, sys, importlib.util
+_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _dir)
+_spec = importlib.util.spec_from_file_location("server", os.path.join(_dir, "{pyd_filename}"))
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+_mod.main()
+"""
+        # server.py + _launcher.py 둘 다 생성 (구버전 .bat 호환)
+        (DIST_DIR / "server.py").write_text(launcher_code, encoding="utf-8")
+        (DIST_DIR / "_launcher.py").write_text(launcher_code, encoding="utf-8")
+        print(f"  {pyd_filename} + server.py + _launcher.py (launcher)")
     else:
         # .pyd 없으면 원본 복사 (컴파일 실패 시 폴백)
         src = PROJECT_ROOT / "server.py"
