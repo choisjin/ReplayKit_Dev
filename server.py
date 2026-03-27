@@ -563,7 +563,7 @@ class ServerManagerApp:
             self._wait_and_open_web()
 
     def _start_all(self):
-        threading.Thread(target=self._start_all_sync, daemon=True).start()
+        threading.Thread(target=lambda: self._start_all_sync(auto_open_web=True), daemon=True).start()
 
     def _open_web(self):
         url = self.backend.url if self._production else self.frontend.url
@@ -600,9 +600,7 @@ class ServerManagerApp:
             if not self._production:
                 self.frontend.stop(self._log)
             time.sleep(1)
-            self.backend.start(self._log)
-            if not self._production:
-                self.frontend.start(self._log)
+            self._start_all_sync(auto_open_web=True)
         threading.Thread(target=_do, daemon=True).start()
 
     def _sync_and_start(self):
@@ -613,9 +611,7 @@ class ServerManagerApp:
                 self.frontend.stop(self._log)
             time.sleep(1)
             if self._sync(self._log):
-                self.backend.start(self._log)
-                if not self._production:
-                    self.frontend.start(self._log)
+                self._start_all_sync(auto_open_web=True)
         threading.Thread(target=_do, daemon=True).start()
 
     def _on_close(self):
