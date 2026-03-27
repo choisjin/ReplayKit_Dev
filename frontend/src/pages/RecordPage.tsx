@@ -2428,6 +2428,7 @@ export default function RecordPage() {
                 {/* Row 1: 시나리오 콤보 + 관리 버튼 */}
                 <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Select
+                    size="small"
                     placeholder={t('record.loadScenario')}
                     style={{ flex: 1, minWidth: 140 }}
                     onChange={loadScenario}
@@ -2450,6 +2451,7 @@ export default function RecordPage() {
                 {/* Row 2: 설명 + 상태 + 녹화 버튼 */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Input
+                    size="small"
                     placeholder={t('record.descriptionPlaceholder')}
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
@@ -2458,11 +2460,11 @@ export default function RecordPage() {
                   <Tag color={editingExisting ? 'blue' : 'default'} style={{ margin: 0 }}>
                     {editingExisting ? t('record.editing') : t('record.waiting')}
                   </Tag>
-                  <Button type="primary" icon={<PlayCircleOutlined />} onClick={startRecording}>
+                  <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={startRecording}>
                     {editingExisting ? t('record.resumeRecording') : t('record.startRecording')}
                   </Button>
                   {steps.length > 0 && (
-                    <Button icon={<SaveOutlined />} onClick={saveScenario} type={isDirty() ? 'primary' : 'default'} danger={isDirty()}>
+                    <Button size="small" icon={<SaveOutlined />} onClick={saveScenario} type={isDirty() ? 'primary' : 'default'} danger={isDirty()}>
                       {t('record.save')}{isDirty() ? ' *' : ''}
                     </Button>
                   )}
