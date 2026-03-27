@@ -293,6 +293,7 @@ class PlaybackService:
         self._device_map = self._resolve_device_map(scenario, device_map_override)
         self._running = True
         self._should_stop = False
+        self._current_iteration = repeat_index - 1  # 0-based for cycle wait
 
         # Build step lookup by ID for conditional jumps
         step_by_id: dict[int, int] = {}  # step.id -> index
@@ -341,6 +342,7 @@ class PlaybackService:
     async def execute_single_step(self, step: Step, scenario_name: str, device_map: Optional[dict[str, str]] = None) -> StepResult:
         """Execute a single step with verification (for testing individual steps)."""
         self._device_map = device_map or {}
+        self._current_iteration = 0  # 단일 테스트는 항상 0번째
         return await self._execute_step(step, scenario_name, verify=True)
 
     # ------------------------------------------------------------------
@@ -936,7 +938,24 @@ class PlaybackService:
                     else:
                         raise  # 재시도 후에도 실패 → 상위 except에서 "error" 처리
         elif step.type == StepType.WAIT:
-            await self._interruptible_sleep(params.get("duration_ms", 1000) / 1000.0)
+            wait_mode = params.get("wait_mode", "basic")
+            if wait_mode == "cycle":
+                start_ms = params.get("wait_start", 3000)
+                interval_ms = params.get("wait_interval", 3000)
+                # current_iteration은 0-based (execute_scenario에서 설정)
+                cycle_idx = getattr(self, '_current_iteration', 0)
+                actual_ms = start_ms + interval_ms * cycle_idx
+                logger.info("Wait cycle: iteration=%d, wait=%dms (start=%d + interval=%d × %d)", cycle_idx, actual_ms, start_ms, interval_ms, cycle_idx)
+                await self._interruptible_sleep(actual_ms / 1000.0)
+            elif wait_mode == "random":
+                import random
+                wait_min = params.get("wait_min", 0)
+                wait_max = params.get("wait_max", 10000)
+                actual_ms = random.randint(wait_min, wait_max)
+                logger.info("Wait random: %dms (range %d~%d)", actual_ms, wait_min, wait_max)
+                await self._interruptible_sleep(actual_ms / 1000.0)
+            else:
+                await self._interruptible_sleep(params.get("duration_ms", 1000) / 1000.0)
         elif step.type in (StepType.CMD_SEND, StepType.CMD_CHECK):
             cmd = params.get("command", "")
             background = params.get("background", False)
