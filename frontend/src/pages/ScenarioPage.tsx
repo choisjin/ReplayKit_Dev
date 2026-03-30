@@ -1090,7 +1090,6 @@ export default function ScenarioPage() {
         styles={{ body: { flex: 1, overflow: 'auto', padding: '8px 12px' } }}
         title={t('scenario.title')}
       >
-        {/* Group tabs */}
         <Tabs
           activeKey={selectedGroup ?? '__all__'}
           onChange={(key) => setSelectedGroup(key === '__all__' ? null : key)}
@@ -1098,81 +1097,125 @@ export default function ScenarioPage() {
           tabBarStyle={{ marginBottom: 8 }}
           items={[
             { key: '__all__', label: `${t('scenario.all')} (${scenarios.length})` },
-            ...Object.entries(groups).map(([gName, members]) => {
+            { key: '__groups__', label: `${t('scenario.groupLabel')} (${Object.keys(groups).length})` },
+          ]}
+        />
+
+        {selectedGroup === '__groups__' ? (
+          /* ===== 그룹 리스트 ===== */
+          <List
+            size="small"
+            dataSource={Object.entries(groups)}
+            style={{ overflow: 'auto' }}
+            locale={{ emptyText: t('scenario.noGroups') }}
+            renderItem={([gName, members]) => {
               const validCount = members.filter((m) => scenarios.includes(m.name)).length;
-              return {
-                key: gName,
-                label: (
-                  <Space size={4}>
-                    <FolderOutlined />
-                    <span>{gName} ({validCount})</span>
+              return (
+                <List.Item
+                  onClick={() => { setSelectedGroup(gName); }}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '6px 12px',
+                    borderRadius: 4,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                    <FolderOutlined style={{ color: '#1677ff' }} />
+                    <span style={{ flex: 1, fontWeight: 500 }}>{gName}</span>
+                    <Tag color="blue">{validCount}</Tag>
                     {validCount > 0 && !playing && (
                       <Tooltip title={t('scenario.playGroupAll', { name: gName })}>
                         <PlayCircleOutlined
                           onClick={(e) => { e.stopPropagation(); playGroup(gName); }}
-                          style={{ color: '#1677ff', marginLeft: 2 }}
+                          style={{ color: '#1677ff' }}
                         />
                       </Tooltip>
                     )}
-                  </Space>
-                ),
-              };
-            }),
-          ]}
-        />
-
-        {/* Group play repeat */}
-        {selectedGroup && (groups[selectedGroup] || []).length > 0 && (
-          <Space style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: 13, color: '#888' }}>{t('scenario.groupPlay')}:</span>
-            <InputNumber
-              min={1} max={999} size="small"
-              value={getRepeatCount(selectedGroup)}
-              onChange={(v) => setRepeatCount(selectedGroup, v || 1)}
-              style={{ width: 60 }}
-              disabled={playing}
-            />
-            <span style={{ fontSize: 12, color: '#888' }}>{t('scenario.times')}</span>
-            {playing && playingGroupName === selectedGroup ? (
-              <Button danger size="small" icon={<StopOutlined />} onClick={stopPlayback}>{t('scenario.stop')}</Button>
-            ) : (
-              <Button type="primary" size="small" icon={<PlayCircleOutlined />}
+                  </div>
+                </List.Item>
+              );
+            }}
+          />
+        ) : selectedGroup && selectedGroup !== '__all__' ? (
+          /* ===== 그룹 상세 (멤버 목록 + 재생) ===== */
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Button size="small" onClick={() => setSelectedGroup('__groups__')}>{t('common.back')}</Button>
+              <FolderOutlined style={{ color: '#1677ff' }} />
+              <span style={{ fontWeight: 600 }}>{selectedGroup}</span>
+              <span style={{ color: '#888', fontSize: 12 }}>({(groups[selectedGroup] || []).length})</span>
+              <span style={{ flex: 1 }} />
+              <InputNumber
+                min={1} max={999} size="small"
+                value={getRepeatCount(selectedGroup)}
+                onChange={(v) => setRepeatCount(selectedGroup, v || 1)}
+                style={{ width: 60 }}
                 disabled={playing}
-                onClick={() => playGroup(selectedGroup)}
+              />
+              <span style={{ fontSize: 12, color: '#888' }}>{t('scenario.times')}</span>
+              {playing && playingGroupName === selectedGroup ? (
+                <Button danger size="small" icon={<StopOutlined />} onClick={stopPlayback}>{t('scenario.stop')}</Button>
+              ) : (
+                <Button type="primary" size="small" icon={<PlayCircleOutlined />}
+                  disabled={playing}
+                  onClick={() => playGroup(selectedGroup)}
+                >
+                  {t('scenario.play')}
+                </Button>
+              )}
+            </div>
+            <List
+              size="small"
+              dataSource={(groups[selectedGroup] || []).filter((m) => scenarios.includes(m.name))}
+              style={{ overflow: 'auto' }}
+              renderItem={(m, idx) => (
+                <List.Item
+                  onClick={() => {
+                    setSelectedName(prev => prev === m.name ? null : m.name);
+                    if (!playing) { setStepResults([]); setPlaybackScenario(null); }
+                  }}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '6px 12px',
+                    background: selectedName === m.name ? 'rgba(22,119,255,0.12)' : undefined,
+                    borderRadius: 4,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                    <Tag style={{ margin: 0 }}>{idx + 1}</Tag>
+                    <span style={{ flex: 1, fontWeight: selectedName === m.name ? 600 : 400 }}>{m.name}</span>
+                  </div>
+                </List.Item>
+              )}
+            />
+          </>
+        ) : (
+          /* ===== 전체 시나리오 리스트 ===== */
+          <List
+            size="small"
+            dataSource={filteredScenarios}
+            style={{ overflow: 'auto' }}
+            locale={{ emptyText: t('scenario.noScenarios') }}
+            renderItem={(name) => (
+              <List.Item
+                onClick={() => {
+                  setSelectedName(prev => prev === name ? null : name);
+                  if (!playing) { setStepResults([]); setPlaybackScenario(null); }
+                }}
+                style={{
+                  cursor: 'pointer',
+                  padding: '6px 12px',
+                  background: selectedName === name ? 'rgba(22,119,255,0.12)' : undefined,
+                  borderRadius: 4,
+                }}
               >
-                {t('scenario.groupPlay')} ({(groups[selectedGroup] || []).length})
-              </Button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                  <span style={{ flex: 1, fontWeight: selectedName === name ? 600 : 400 }}>{name}</span>
+                </div>
+              </List.Item>
             )}
-          </Space>
+          />
         )}
-
-        {/* Scenario list */}
-        <List
-          size="small"
-          dataSource={filteredScenarios}
-          style={{ overflow: 'auto' }}
-          locale={{ emptyText: t('scenario.noScenarios') }}
-          renderItem={(name) => (
-            <List.Item
-              onClick={() => {
-                setSelectedName(prev => prev === name ? null : name);
-                // 재생 완료 결과를 초기화하여 선택한 시나리오의 미리보기 표시
-                if (!playing) { setStepResults([]); setPlaybackScenario(null); }
-              }}
-              style={{
-                cursor: 'pointer',
-                padding: '6px 12px',
-                background: selectedName === name ? 'rgba(22,119,255,0.12)' : undefined,
-                borderRadius: 4,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-                <span style={{ flex: 1, fontWeight: selectedName === name ? 600 : 400 }}>{name}</span>
-                {scenarioGroups(name).map((g) => <Tag key={g} color="blue" style={{ fontSize: 11 }}>{g}</Tag>)}
-              </div>
-            </List.Item>
-          )}
-        />
 
       </Card>
       </Splitter.Panel>
@@ -1217,17 +1260,6 @@ export default function ScenarioPage() {
                   </>
                 )}
                 <Button danger size="small" icon={<DeleteOutlined />} disabled={playing} onClick={() => deleteScenario(selectedName!)}>{t('common.delete')}</Button>
-                {Object.keys(groups).length > 0 && (
-                  <>
-                    <Select placeholder={t('scenario.addToGroup')} style={{ width: 140 }} size="small" value={undefined}
-                      onChange={(gName: string) => { if (gName && selectedName) addToGroup(gName, selectedName); }}
-                      options={Object.keys(groups).filter((g) => !(groups[g] || []).some((m) => m.name === selectedName!)).map((g) => ({ label: g, value: g }))}
-                    />
-                    {scenarioGroups(selectedName!).map((g) => (
-                      <Tag key={g} closable onClose={() => removeFromGroup(g, selectedName!)} color="blue">{g}</Tag>
-                    ))}
-                  </>
-                )}
               </Space>
             )
           }
