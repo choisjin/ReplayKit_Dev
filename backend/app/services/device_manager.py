@@ -887,6 +887,47 @@ class DeviceManager:
         self._save_auxiliary_devices()
         return dev
 
+    def swap_device_ids(self, id_a: str, id_b: str) -> None:
+        """두 디바이스의 ID를 서로 교체합니다."""
+        dev_a = self._devices.pop(id_a, None)
+        dev_b = self._devices.pop(id_b, None)
+        if not dev_a or not dev_b:
+            raise ValueError(f"Device {id_a} or {id_b} not found")
+        dev_a.id = id_b
+        dev_b.id = id_a
+        self._devices[id_b] = dev_a
+        self._devices[id_a] = dev_b
+        # 연결 객체도 교체
+        for store in (self._serial_conns, self._hkmc_conns, self._vision_cams):
+            a_val = store.pop(id_a, None)
+            b_val = store.pop(id_b, None)
+            if a_val is not None:
+                store[id_b] = a_val
+            if b_val is not None:
+                store[id_a] = b_val
+        self._save_auxiliary_devices()
+        logger.info("Device IDs swapped: %s <-> %s", id_a, id_b)
+
+    def rename_device(self, old_id: str, new_id: str) -> None:
+        """디바이스 ID를 변경합니다."""
+        dev = self._devices.pop(old_id, None)
+        if not dev:
+            raise ValueError(f"Device {old_id} not found")
+        dev.id = new_id
+        self._devices[new_id] = dev
+        # 시리얼 연결도 이관
+        if old_id in self._serial_conns:
+            self._serial_conns[new_id] = self._serial_conns.pop(old_id)
+        if old_id in self._hkmc_conns:
+            self._hkmc_conns[new_id] = self._hkmc_conns.pop(old_id)
+        if old_id in self._vision_cams:
+            self._vision_cams[new_id] = self._vision_cams.pop(old_id)
+        if old_id in self._ever_connected:
+            self._ever_connected.discard(old_id)
+            self._ever_connected.add(new_id)
+        self._save_auxiliary_devices()
+        logger.info("Device renamed: %s → %s", old_id, new_id)
+
     async def remove_device(self, device_id: str) -> str:
         """Remove a device from managed list."""
         dev = self.get_device(device_id)

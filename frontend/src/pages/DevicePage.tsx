@@ -198,6 +198,7 @@ export default function DevicePage() {
   // Edit device modal
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editDevice, setEditDevice] = useState<ManagedDevice | null>(null);
+  const [editDeviceId, setEditDeviceId] = useState('');
   const [editName, setEditName] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editBaudrate, setEditBaudrate] = useState(115200);
@@ -373,6 +374,7 @@ export default function DevicePage() {
   // --- Edit device ---
   const openEditModal = (dev: ManagedDevice) => {
     setEditDevice(dev);
+    setEditDeviceId(dev.id);
     setEditName(dev.name);
     setEditAddress(dev.address);
     setEditBaudrate(dev.info?.baudrate || 115200);
@@ -397,6 +399,7 @@ export default function DevicePage() {
     setEditSaving(true);
     try {
       const updates: Record<string, any> = {};
+      if (editDeviceId.trim() && editDeviceId.trim() !== editDevice.id) updates.new_device_id = editDeviceId.trim();
       if (editName !== editDevice.name) updates.name = editName;
       if (editAddress !== editDevice.address) updates.address = editAddress;
       if (editBaudrate !== (editDevice.info?.baudrate || 115200)) updates.baudrate = editBaudrate;
@@ -1067,6 +1070,10 @@ export default function DevicePage() {
       >
         {editDevice && (
           <Space direction="vertical" style={{ width: '100%' }}>
+            <div>
+              <span style={{ fontSize: 12, color: '#888' }}>Device ID:</span>
+              <Input value={editDeviceId} onChange={(e) => setEditDeviceId(e.target.value)} onFocus={(e) => e.target.select()} />
+            </div>
             <div>
               <span style={{ fontSize: 12, color: '#888' }}>{`${t('common.name')}:`}</span>
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} />

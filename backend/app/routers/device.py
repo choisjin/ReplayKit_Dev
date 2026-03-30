@@ -413,6 +413,7 @@ async def connect_registered_devices(req: ConnectRegisteredRequest):
 
 class UpdateDeviceRequest(BaseModel):
     device_id: str
+    new_device_id: Optional[str] = None
     name: Optional[str] = None
     address: Optional[str] = None
     baudrate: Optional[int] = None
@@ -427,6 +428,19 @@ async def update_device(req: UpdateDeviceRequest):
     dev = dm.get_device(req.device_id)
     if not dev:
         raise HTTPException(status_code=404, detail=f"Device {req.device_id} not found")
+
+    # ID 변경
+    if req.new_device_id and req.new_device_id != req.device_id:
+        new_id = req.new_device_id.strip()
+        existing = dm.get_device(new_id)
+        if existing:
+            # 기존 디바이스와 ID 교체(swap)
+            dm.swap_device_ids(req.device_id, new_id)
+        else:
+            dm.rename_device(req.device_id, new_id)
+        dev = dm.get_device(new_id)
+        if not dev:
+            raise HTTPException(status_code=500, detail="Device rename failed")
 
     need_serial_reconnect = False
     if req.name is not None:
