@@ -373,8 +373,8 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
                         module_name, existing_host, new_host)
             _instances.pop(module_name, None)
 
-    # 기존 인스턴스가 연결 끊어진 경우에만 재생성 (auto-connect된 모듈만 검사)
-    if module_name in _instances and module_name in _auto_connected:
+    # 기존 인스턴스가 연결 끊어진 경우 재생성
+    if module_name in _instances:
         if not _is_connected(_instances[module_name]):
             logger.info("Connection lost for %s, recreating instance", module_name)
             _instances.pop(module_name, None)
