@@ -758,7 +758,7 @@ export default function ResultsPage() {
               </Descriptions.Item>
             </Descriptions>
 
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 8, maxHeight: 'calc(90vh - 200px)', overflow: 'hidden' }}>
               {/* 좌측: 웹캠 녹화 패널 (접힘/펼침) */}
               {recordings.length > 0 && (
                 <div style={{ width: webcamPanelOpen ? (webcamExpanded ? '60%' : 300) : 36, flexShrink: 0, transition: 'width 0.2s' }}>
@@ -853,8 +853,8 @@ export default function ResultsPage() {
                 </div>
               )}
 
-              {/* 우측: 스텝 결과 테이블 */}
-              <div style={{ flex: 1, minWidth: 0 }}>
+              {/* 우측: 스텝 결과 테이블 (스크롤) */}
+              <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
                 <Table
                   columns={stepColumns}
                   dataSource={detail.step_results}

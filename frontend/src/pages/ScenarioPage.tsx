@@ -213,6 +213,14 @@ export default function ScenarioPage() {
   const [webcamAutoRecord, setWebcamAutoRecord] = useState(false);
   const webcamBlobsRef = useRef<{ repeatIndex: number; blob: Blob }[]>([]);
   const webcamRecordingActiveRef = useRef(false);
+  const playbackScrollRef = useRef<HTMLDivElement>(null);
+
+  // 재생 중 스텝 추가 시 자동 최하단 스크롤
+  useEffect(() => {
+    if (playing && playbackScrollRef.current) {
+      playbackScrollRef.current.scrollTop = playbackScrollRef.current.scrollHeight;
+    }
+  }, [stepResults, playing]);
 
   // 시나리오 스텝 미리보기
   const [previewSteps, setPreviewSteps] = useState<any[]>([]);
@@ -1205,9 +1213,11 @@ export default function ScenarioPage() {
           }
         >
           {(playing || stepResults.length > 0) ? (
-            /* 재생 중 / 완료: 결과 테이블 */
+            /* 재생 중 / 완료: 결과 테이블 (스텝만 스크롤, 자동 최하단) */
+            <div ref={playbackScrollRef} style={{ flex: 1, overflow: 'auto' }}>
             <Table columns={makeStepResultColumns(totalIterations)} dataSource={stepResults} rowKey={(_r, idx) => `${idx}`} size="small" pagination={false}
               rowClassName={(r: StepResultData) => r.status === 'running' ? 'row-running' : r.status === 'fail' ? 'row-fail' : r.status === 'error' ? 'row-error' : r.status === 'pass' ? 'row-pass' : ''} />
+            </div>
           ) : (
             /* 미리보기: 스텝 편집 테이블 */
             <div style={{ maxHeight: 400, overflow: 'auto' }}>
