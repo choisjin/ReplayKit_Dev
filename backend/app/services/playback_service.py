@@ -980,15 +980,17 @@ class PlaybackService:
                     adb_serial = dev.address  # 커스텀 ID → 실제 ADB 시리얼
 
             # screen_type이 숫자면 ADB display_id로 사용
+            # 멀티 디스플레이: display 0도 명시적으로 전달 (input -d 0 필수)
             adb_display_id = None
             st = step.screen_type or params.get("screen_type")
             if st is not None:
                 try:
                     adb_display_id = int(st)
-                    if adb_display_id == 0:
-                        adb_display_id = None
                 except (ValueError, TypeError):
                     pass
+            # 멀티 디스플레이인데 display_id 미지정이면 0으로 기본값
+            if adb_display_id is None and dev and len(dev.info.get("displays", [])) > 1:
+                adb_display_id = 0
 
             if step.type == StepType.TAP:
                 await self.adb.tap(params["x"], params["y"], serial=adb_serial, display_id=adb_display_id)
