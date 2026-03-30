@@ -2559,7 +2559,7 @@ export default function RecordPage() {
                       <Option key={n} value={n}>{n}</Option>
                     ))}
                   </Select>
-                  {editingExisting && (
+                  {scenarioName && (
                     <>
                       <Button size="small" icon={<CopyOutlined />} title={t('record.copyScenario')} onClick={copyScenario} />
                       <Button size="small" icon={<EditOutlined />} title={t('record.renameScenario')} onClick={renameScenario} />

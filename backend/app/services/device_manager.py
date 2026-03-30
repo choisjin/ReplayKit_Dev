@@ -1151,20 +1151,31 @@ class DeviceManager:
                 return f"VisionCamera connect failed: {dev.id} — {e}"
 
         elif dev.type == "adb":
-            # ADB는 reconnect_disconnected 루프에서 자동 관리됨
             try:
+                # WiFi: adb connect, USB: adb reconnect
                 if ":" in dev.address:
                     await self.adb.connect_device(dev.address)
-                devs = await self.adb.list_devices()
-                found = next((d for d in devs if d.serial == dev.address), None)
-                if found and found.status == "device":
-                    dev.status = "device"
-                    _mark_connected()
-                    self._adb_reconnect_attempts.pop(dev.id, None)
-                    return f"ADB connected: {dev.id} ({dev.address})"
                 else:
-                    dev.status = found.status if found else "offline"
-                    return f"ADB not ready: {dev.id} ({dev.status})"
+                    # USB 디바이스: reconnect 시도 (connecting 상태 해결)
+                    try:
+                        await self.adb._run(f"-s {dev.address} reconnect")
+                    except Exception:
+                        pass
+
+                # 연결 확인 (최대 3회 재시도)
+                for attempt in range(3):
+                    devs = await self.adb.list_devices()
+                    found = next((d for d in devs if d.serial == dev.address), None)
+                    if found and found.status == "device":
+                        dev.status = "device"
+                        _mark_connected()
+                        self._adb_reconnect_attempts.pop(dev.id, None)
+                        return f"ADB connected: {dev.id} ({dev.address})"
+                    if attempt < 2:
+                        await asyncio.sleep(1)
+
+                dev.status = found.status if found else "offline"
+                return f"ADB not ready: {dev.id} ({dev.status})"
             except Exception as e:
                 dev.status = "offline"
                 return f"ADB connect failed: {dev.id} — {e}"
