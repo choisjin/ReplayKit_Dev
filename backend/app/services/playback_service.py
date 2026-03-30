@@ -399,12 +399,13 @@ class PlaybackService:
             await self._run_action(step)
             t2 = time.time()
 
-            # Module command 결과 반영 (PASS:/FAIL: 접두사로 판정)
+            # Module command 결과 반영 (이미지 비교가 없을 때만 PASS/FAIL 판정)
             if step.type == StepType.MODULE_COMMAND and hasattr(self, '_last_module_result'):
                 mod_result = str(self._last_module_result)
                 del self._last_module_result
                 step_result.message = mod_result
-                if mod_result.startswith("FAIL:"):
+                has_expected = step.expected_image or (step.compare_mode == CompareMode.MULTI_CROP and step.expected_images)
+                if not has_expected and mod_result.startswith("FAIL:"):
                     step_result.status = "fail"
 
             # CMD 결과 반영
