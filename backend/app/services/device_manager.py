@@ -1074,34 +1074,50 @@ class DeviceManager:
             self._ever_connected.add(device_id)
 
         if dev.type == "serial":
-            try:
-                await loop.run_in_executor(None, self._get_serial_conn, dev.id)
-                dev.status = "connected"
-                _mark_connected()
-            except Exception as e:
-                dev.status = "disconnected"
-                return f"Serial connect failed: {dev.id} — {e}"
-
-            # 시리얼 디바이스에 모듈이 연결된 경우 모듈 init도 수행
             module_name = dev.info.get("module", "")
+
+            # DLL 기반 모듈(CANAT 등)은 자체적으로 COM 포트를 관리하므로
+            # pyserial로 포트를 열면 충돌 발생 — 모듈 init만 수행
             if module_name:
                 try:
                     from .module_service import _get_instance, _is_connected
                     from ..routers.device import _build_constructor_kwargs
                     ctor_kwargs = _build_constructor_kwargs(dev)
-                    shared_conn = self.get_serial_conn(dev.id)
                     instance = await loop.run_in_executor(
-                        None, functools.partial(_get_instance, module_name, ctor_kwargs, shared_conn),
+                        None, functools.partial(_get_instance, module_name, ctor_kwargs, None),
                     )
                     if _is_connected(instance):
-                        return f"Serial connected: {dev.id} ({dev.address}) + {module_name} init OK"
+                        dev.status = "connected"
+                        _mark_connected()
+                        return f"Module connected: {dev.id} ({dev.address}) + {module_name} init OK"
                     else:
-                        return f"Serial connected: {dev.id} ({dev.address}) + {module_name} init incomplete"
+                        # DLL이 없는 모듈은 shared_serial_conn 방식으로 폴백
+                        try:
+                            await loop.run_in_executor(None, self._get_serial_conn, dev.id)
+                            shared_conn = self.get_serial_conn(dev.id)
+                            instance = await loop.run_in_executor(
+                                None, functools.partial(_get_instance, module_name, ctor_kwargs, shared_conn),
+                            )
+                            dev.status = "connected"
+                            _mark_connected()
+                            return f"Serial connected: {dev.id} ({dev.address}) + {module_name}"
+                        except Exception as e2:
+                            dev.status = "disconnected"
+                            return f"Module connect failed: {dev.id} — {e2}"
                 except Exception as e:
                     logger.warning("Module init failed for %s on %s: %s", module_name, dev.id, e)
-                    return f"Serial connected: {dev.id} ({dev.address}) + {module_name} init failed: {e}"
+                    dev.status = "disconnected"
+                    return f"Module connect failed: {dev.id} ({module_name}) — {e}"
 
-            return f"Serial connected: {dev.id} ({dev.address})"
+            # 순수 시리얼 디바이스 (모듈 없음)
+            try:
+                await loop.run_in_executor(None, self._get_serial_conn, dev.id)
+                dev.status = "connected"
+                _mark_connected()
+                return f"Serial connected: {dev.id} ({dev.address})"
+            except Exception as e:
+                dev.status = "disconnected"
+                return f"Serial connect failed: {dev.id} — {e}"
 
         elif dev.type == "hkmc6th":
             port = dev.info.get("port", 0)
