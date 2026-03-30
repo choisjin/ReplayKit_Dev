@@ -545,16 +545,28 @@ def deploy(commit_msg=None):
         return True
 
     _run(["git", "commit", "-m", commit_msg], cwd=DIST_DIR, check=False)
-    result = _run(["git", "push", "-u", "origin", "main"], cwd=DIST_DIR, check=False)
-    if result.returncode != 0:
-        # 최초 push 시 main 브랜치가 없을 수 있음
-        _run(["git", "branch", "-M", "main"], cwd=DIST_DIR, check=False)
-        result = _run(["git", "push", "-u", "origin", "main"], cwd=DIST_DIR, check=False)
-        if result.returncode != 0:
-            print(f"  push 실패:\n{result.stderr[:300]}")
-            return False
 
-    print("  push 완료")
+    # 등록된 모든 remote에 push
+    r_remotes = _run(["git", "remote"], cwd=DIST_DIR, check=False)
+    remotes = [name.strip() for name in r_remotes.stdout.strip().splitlines() if name.strip()]
+    if not remotes:
+        remotes = ["origin"]
+
+    all_ok = True
+    for remote in remotes:
+        print(f"  push → {remote} ...", end=" ")
+        result = _run(["git", "push", "-u", remote, "main"], cwd=DIST_DIR, check=False)
+        if result.returncode != 0:
+            _run(["git", "branch", "-M", "main"], cwd=DIST_DIR, check=False)
+            result = _run(["git", "push", "-u", remote, "main"], cwd=DIST_DIR, check=False)
+            if result.returncode != 0:
+                print(f"실패: {result.stderr[:200]}")
+                all_ok = False
+                continue
+        print("완료")
+
+    if not all_ok:
+        return False
     return True
 
 
