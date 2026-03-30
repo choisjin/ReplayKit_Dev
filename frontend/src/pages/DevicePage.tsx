@@ -1072,7 +1072,18 @@ export default function DevicePage() {
           <Space direction="vertical" style={{ width: '100%' }}>
             <div>
               <span style={{ fontSize: 12, color: '#888' }}>Device ID:</span>
-              <Input value={editDeviceId} onChange={(e) => setEditDeviceId(e.target.value)} onFocus={(e) => e.target.select()} />
+              <Select
+                showSearch
+                value={editDeviceId}
+                onChange={(v) => setEditDeviceId(v)}
+                style={{ width: '100%' }}
+                options={(() => {
+                  const prefix = editDeviceId.replace(/_\d+$/, '');
+                  const ids = Array.from({ length: 10 }, (_, i) => `${prefix}_${i + 1}`);
+                  if (!ids.includes(editDeviceId)) ids.unshift(editDeviceId);
+                  return ids.map(id => ({ label: id, value: id }));
+                })()}
+              />
             </div>
             <div>
               <span style={{ fontSize: 12, color: '#888' }}>{`${t('common.name')}:`}</span>
