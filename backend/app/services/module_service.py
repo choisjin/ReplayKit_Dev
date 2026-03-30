@@ -33,7 +33,8 @@ _MODULES_DIR = Path(__file__).resolve().parent.parent / "modules"
 
 def _load_plugin_from_file(py_file: Path):
     """Load a plugin module directly from file path (no package dependency)."""
-    module_name = py_file.stem
+    # .pyd: "CCIC_BENCH.cp310-win_amd64.pyd" → module_name "CCIC_BENCH"
+    module_name = py_file.stem.split(".")[0] if py_file.suffix == ".pyd" else py_file.stem
     spec = importlib.util.spec_from_file_location(f"plugins.{module_name}", str(py_file))
     if spec is None or spec.loader is None:
         return None
