@@ -47,10 +47,15 @@ def _list_plugin_modules() -> list[dict]:
     plugins = []
     if not _PLUGINS_DIR.is_dir():
         return plugins
-    for py_file in _PLUGINS_DIR.glob("*.py"):
+    seen = set()
+    for py_file in list(_PLUGINS_DIR.glob("*.py")) + list(_PLUGINS_DIR.glob("*.pyd")):
         if py_file.name.startswith("_"):
             continue
-        module_name = py_file.stem
+        # .pyd: "CCIC_BENCH.cp310-win_amd64.pyd" → stem "CCIC_BENCH.cp310-win_amd64" → 첫 점 앞
+        module_name = py_file.stem.split(".")[0] if py_file.suffix == ".pyd" else py_file.stem
+        if module_name in seen:
+            continue
+        seen.add(module_name)
         try:
             mod = _load_plugin_from_file(py_file)
             if mod is None:
@@ -194,7 +199,12 @@ def _ensure_module_deps(module_name: str, module_dir: Path) -> None:
 def _import_module_class(module_name: str):
     """Import and return the class for a given module name (lge.auto or plugin)."""
     # Try local plugin first (file-based loading to avoid package path issues)
+    # .py 우선, 없으면 .pyd (배포 환경)
     py_file = _PLUGINS_DIR / f"{module_name}.py"
+    if not py_file.is_file():
+        pyd_files = list(_PLUGINS_DIR.glob(f"{module_name}.*.pyd"))
+        if pyd_files:
+            py_file = pyd_files[0]
     if py_file.is_file():
         try:
             _ensure_module_deps(module_name, _PLUGINS_DIR)
