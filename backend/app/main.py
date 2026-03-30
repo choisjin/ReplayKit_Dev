@@ -780,7 +780,16 @@ async def websocket_playback(websocket: WebSocket):
                                     "iteration": iteration,
                                     "total": repeat,
                                 })
-                            async for step_result in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, start_step=start_step, device_map_override=device_map_override):
+                            async for item in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, start_step=start_step, device_map_override=device_map_override):
+                                if isinstance(item, dict) and item.get("_type") == "step_start":
+                                    await websocket.send_json({
+                                        "type": "step_start",
+                                        "data": {k: v for k, v in item.items() if k != "_type"},
+                                        "iteration": iteration,
+                                        "scenario_name": sc_name,
+                                    })
+                                    continue
+                                step_result = item
                                 result.step_results.append(step_result)
                                 if step_result.status == "pass":
                                     result.passed_steps += 1

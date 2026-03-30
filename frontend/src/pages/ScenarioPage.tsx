@@ -210,7 +210,7 @@ export default function ScenarioPage() {
   };
 
   // 웹캠 자동 녹화
-  const [webcamAutoRecord, setWebcamAutoRecord] = useState(false);
+  const [webcamAutoRecord, setWebcamAutoRecord] = useState(true);
   const webcamBlobsRef = useRef<{ repeatIndex: number; blob: Blob }[]>([]);
   const webcamRecordingActiveRef = useRef(false);
   const playbackScrollRef = useRef<HTMLDivElement>(null);
@@ -636,23 +636,18 @@ export default function ScenarioPage() {
       setPlaybackScenario(scenarioData);
     } catch { message.error(t('scenario.loadFailed')); return; }
 
-    // If scenario has device_map, show mapping modal for confirmation
+    // 재생 확인 모달 표시 (디바이스 매핑 + 웹캠 녹화 설정)
     const dmap = scenarioData.device_map || {};
-    if (Object.keys(dmap).length > 0) {
-      try {
-        const devRes = await deviceApi.list();
-        setConnectedDevices([
-          ...(devRes.data.primary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
-          ...(devRes.data.auxiliary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
-        ]);
-      } catch { /* ignore */ }
-      setDeviceMapEditing({ ...dmap });
-      setDeviceMapScenarioName(name);
-      setDeviceMapModalVisible(true);
-      return;
-    }
-
-    startPlayback(name, {});
+    try {
+      const devRes = await deviceApi.list();
+      setConnectedDevices([
+        ...(devRes.data.primary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
+        ...(devRes.data.auxiliary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
+      ]);
+    } catch { /* ignore */ }
+    setDeviceMapEditing({ ...dmap });
+    setDeviceMapScenarioName(name);
+    setDeviceMapModalVisible(true);
   };
 
   const startPlayback = async (name: string, deviceMap: Record<string, string>) => {
@@ -808,21 +803,16 @@ export default function ScenarioPage() {
       } catch { /* ignore */ }
     }
 
-    if (Object.keys(mergedMap).length > 0) {
-      try {
-        const devRes = await deviceApi.list();
-        setConnectedDevices([
-          ...(devRes.data.primary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
-          ...(devRes.data.auxiliary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
-        ]);
-      } catch { /* ignore */ }
-      setDeviceMapEditing({ ...mergedMap });
-      setDeviceMapScenarioName(`group:${gName}`);
-      setDeviceMapModalVisible(true);
-      return;
-    }
-
-    startGroupPlayback(gName, {});
+    try {
+      const devRes = await deviceApi.list();
+      setConnectedDevices([
+        ...(devRes.data.primary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
+        ...(devRes.data.auxiliary || []).map((d: any) => ({ id: d.id, name: d.name || d.id, type: d.type, status: d.status })),
+      ]);
+    } catch { /* ignore */ }
+    setDeviceMapEditing({ ...mergedMap });
+    setDeviceMapScenarioName(`group:${gName}`);
+    setDeviceMapModalVisible(true);
   };
 
   const startGroupPlayback = async (gName: string, deviceMap: Record<string, string>) => {
@@ -1196,11 +1186,6 @@ export default function ScenarioPage() {
                     <Button type="primary" size="small" icon={<PlayCircleOutlined />} loading={playing && playingName === selectedName} disabled={playing} onClick={() => playScenario(selectedName!)}>{t('scenario.play')}</Button>
                   </>
                 )}
-                <Tooltip title={t('webcam.autoRecordHint')}>
-                  <Checkbox checked={webcamAutoRecord} onChange={(e) => setWebcamAutoRecord(e.target.checked)} disabled={playing}>
-                    <VideoCameraOutlined style={{ color: webcamAutoRecord ? '#ff4d4f' : undefined }} /> {t('webcam.autoRecord')}
-                  </Checkbox>
-                </Tooltip>
                 <Button danger size="small" icon={<DeleteOutlined />} disabled={playing} onClick={() => deleteScenario(selectedName!)}>{t('common.delete')}</Button>
                 {Object.keys(groups).length > 0 && (
                   <>
@@ -1754,6 +1739,11 @@ export default function ScenarioPage() {
             );
           })}
         </div>
+        <Divider style={{ margin: '12px 0' }} />
+        <Checkbox checked={webcamAutoRecord} onChange={(e) => setWebcamAutoRecord(e.target.checked)}>
+          <VideoCameraOutlined style={{ color: webcamAutoRecord ? '#ff4d4f' : undefined, marginRight: 4 }} />
+          {t('webcam.autoRecord')}
+        </Checkbox>
       </Modal>
 
       {/* ===== 내보내기 모달 ===== */}

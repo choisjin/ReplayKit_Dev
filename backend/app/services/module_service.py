@@ -458,6 +458,11 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
                                 else:
                                     # 필수 인자 없으면 빈 문자열로 채움
                                     init_args[pname] = ""
+                            # log_path 기본값: {프로젝트루트}/results/CANAT_Log
+                            if "log_path" in init_args and not init_args["log_path"]:
+                                default_log = Path(__file__).resolve().parent.parent.parent / "results" / "CANAT_Log"
+                                default_log.mkdir(parents=True, exist_ok=True)
+                                init_args["log_path"] = str(default_log)
                             result = init_fn(**init_args)
                             logger.info("Auto-called %s.init(%s) → %s", module_name, init_args, result)
                             _auto_connected.add(module_name)
