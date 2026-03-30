@@ -181,8 +181,21 @@ class ADBService:
         displays: list[dict] = []
         seen_sf_ids: set[str] = set()
 
-        # DisplayDeviceInfo 라인에서 SF ID, 해상도, 이름 추출
-        # (등장 순서 = logical display ID 0, 1, 2 …)
+        # 1) mViewports에서 논리 크기(회전 적용) 추출
+        viewport_map: dict[str, dict] = {}  # uniqueId → {deviceWidth, deviceHeight}
+        for line in disp_output.split("\n"):
+            if "DisplayViewport{" not in line:
+                continue
+            for vp_m in re.finditer(
+                r"DisplayViewport\{[^}]*uniqueId='local:(\d+)'[^}]*deviceWidth=(\d+)[^}]*deviceHeight=(\d+)",
+                line
+            ):
+                viewport_map[vp_m.group(1)] = {
+                    "width": int(vp_m.group(2)),
+                    "height": int(vp_m.group(3)),
+                }
+
+        # 2) DisplayDeviceInfo 라인에서 SF ID, 해상도, 이름 추출
         for line in disp_output.split("\n"):
             if "DisplayDeviceInfo" not in line or 'uniqueId="local:' not in line:
                 continue
@@ -195,9 +208,15 @@ class ADBService:
             res_m = re.search(r"(\d{3,5})\s*x\s*(\d{3,5})", line)
             name_m = re.search(r"DeviceProductInfo\{name=(\S+?)[,}]", line)
 
-            w = int(res_m.group(1)) if res_m else 0
-            h = int(res_m.group(2)) if res_m else 0
+            # 물리 해상도 (회전 전)
+            phys_w = int(res_m.group(1)) if res_m else 0
+            phys_h = int(res_m.group(2)) if res_m else 0
             name = name_m.group(1) if name_m else f"Display {len(displays)}"
+
+            # viewport에서 논리 크기(회전 적용) 가져오기, 없으면 물리 크기 사용
+            vp = viewport_map.get(sf_id)
+            w = vp["width"] if vp else phys_w
+            h = vp["height"] if vp else phys_h
 
             displays.append({
                 "id": len(displays),
