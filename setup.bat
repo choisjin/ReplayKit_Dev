@@ -233,6 +233,12 @@ if exist "frontend\package.json" (
 :: -------------------------------------------------------
 if not "%PRODUCTION%"=="1" goto :git_done
 
+:: Refresh PATH (Git may have been installed by the installer just before this)
+for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%b"
+for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%b"
+if defined SYS_PATH set "PATH=%SYS_PATH%"
+if defined USR_PATH set "PATH=%PATH%;%USR_PATH%"
+
 where git.exe >nul 2>&1
 if %ERRORLEVEL% equ 0 goto :git_installed
 
