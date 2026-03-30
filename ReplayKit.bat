@@ -1,9 +1,16 @@
 @echo off
 cd /d "%~dp0"
 
-:: git pull은 server.py 동기화에서 수행 (중복 방지)
+if exist ".git" (
+    where git.exe >nul 2>nul
+    if not errorlevel 1 (
+        echo [UPDATE] Fetching latest...
+        git fetch origin main
+        git reset --hard origin/main
+        echo [UPDATE] Done.
+    )
+)
 
-:: Detect entry point
 set "ENTRY=server.py"
 if exist "_launcher.py" set "ENTRY=_launcher.py"
 
