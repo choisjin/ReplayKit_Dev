@@ -1,19 +1,7 @@
 @echo off
 cd /d "%~dp0"
 
-:: Auto-update from git if available
-if exist ".git" (
-    where git.exe >nul 2>&1
-    if %ERRORLEVEL% equ 0 (
-        echo [UPDATE] Pulling latest changes...
-        git pull origin main --ff-only 2>nul
-        if %ERRORLEVEL% equ 0 (
-            echo [UPDATE] Up to date.
-        ) else (
-            echo [UPDATE] Pull failed - starting with current version.
-        )
-    )
-)
+:: git pull은 server.py 동기화에서 수행 (중복 방지)
 
 :: Detect entry point
 set "ENTRY=server.py"
