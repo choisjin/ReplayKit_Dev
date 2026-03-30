@@ -138,7 +138,13 @@ def list_available_modules() -> list[dict]:
         {"name": "CANOE", "label": "CANOE", "connect_type": "none",
          "connect_fields": []},
         {"name": "CANAT", "label": "CANAT", "connect_type": "serial",
-         "connect_fields": []},
+         "connect_fields": [
+             {"name": "log_path", "label": "Log Path", "type": "text", "default": ""},
+             {"name": "ch1_fd", "label": "CH1 CAN FD", "type": "select", "default": "True",
+              "options": ["True", "False"]},
+             {"name": "ch2_fd", "label": "CH2 CAN FD", "type": "select", "default": "False",
+              "options": ["True", "False"]},
+         ]},
         {"name": "BENCH", "label": "BENCH", "connect_type": "socket",
          "connect_fields": []},
         {"name": "CCIC_BENCH", "label": "CCIC_BENCH", "connect_type": "socket",
@@ -419,16 +425,44 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
                 if module_name not in _auto_connected and _is_connected(instance):
                     _auto_connected.add(module_name)
             else:
-                # Constructor doesn't accept the provided kwargs (e.g. BENCH)
-                # Create instance normally, then try auto-connect if host is provided
+                # Constructor doesn't accept the provided kwargs (e.g. BENCH, CANAT)
+                # Create instance normally, then try auto-connect/init
                 instance = cls()
+                connected = False
                 if "host" in constructor_kwargs:
                     # Socket-based modules: auto-call connect method
                     for method_name in ("socket_connect", "connect", "Connect"):
                         connect_fn = getattr(instance, method_name, None)
                         if callable(connect_fn):
                             connect_fn(constructor_kwargs["host"])
+                            connected = True
                             break
+                # init() 메서드가 있는 모듈 (e.g. CANAT): constructor_kwargs에서 매핑
+                if not connected:
+                    init_fn = getattr(instance, "init", None)
+                    if callable(init_fn):
+                        try:
+                            init_sig = inspect.signature(init_fn)
+                            init_args = {}
+                            # comport ← port 매핑
+                            kwarg_aliases = {"comport": "port", "port": "port"}
+                            for pname, p in init_sig.parameters.items():
+                                if pname == "self":
+                                    continue
+                                if pname in constructor_kwargs:
+                                    init_args[pname] = constructor_kwargs[pname]
+                                elif pname in kwarg_aliases and kwarg_aliases[pname] in constructor_kwargs:
+                                    init_args[pname] = constructor_kwargs[kwarg_aliases[pname]]
+                                elif p.default is not inspect.Parameter.empty:
+                                    pass  # 기본값 사용
+                                else:
+                                    # 필수 인자 없으면 빈 문자열로 채움
+                                    init_args[pname] = ""
+                            result = init_fn(**init_args)
+                            logger.info("Auto-called %s.init(%s) → %s", module_name, init_args, result)
+                            _auto_connected.add(module_name)
+                        except Exception as e:
+                            logger.warning("Auto-init %s.init() failed: %s", module_name, e)
                 _instances[module_name] = instance
         else:
             _instances[module_name] = cls()
