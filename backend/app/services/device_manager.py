@@ -1078,10 +1078,30 @@ class DeviceManager:
                 await loop.run_in_executor(None, self._get_serial_conn, dev.id)
                 dev.status = "connected"
                 _mark_connected()
-                return f"Serial connected: {dev.id} ({dev.address})"
             except Exception as e:
                 dev.status = "disconnected"
                 return f"Serial connect failed: {dev.id} — {e}"
+
+            # 시리얼 디바이스에 모듈이 연결된 경우 모듈 init도 수행
+            module_name = dev.info.get("module", "")
+            if module_name:
+                try:
+                    from .module_service import _get_instance, _is_connected
+                    from ..routers.device import _build_constructor_kwargs
+                    ctor_kwargs = _build_constructor_kwargs(dev)
+                    shared_conn = self.get_serial_conn(dev.id)
+                    instance = await loop.run_in_executor(
+                        None, functools.partial(_get_instance, module_name, ctor_kwargs, shared_conn),
+                    )
+                    if _is_connected(instance):
+                        return f"Serial connected: {dev.id} ({dev.address}) + {module_name} init OK"
+                    else:
+                        return f"Serial connected: {dev.id} ({dev.address}) + {module_name} init incomplete"
+                except Exception as e:
+                    logger.warning("Module init failed for %s on %s: %s", module_name, dev.id, e)
+                    return f"Serial connected: {dev.id} ({dev.address}) + {module_name} init failed: {e}"
+
+            return f"Serial connected: {dev.id} ({dev.address})"
 
         elif dev.type == "hkmc6th":
             port = dev.info.get("port", 0)
