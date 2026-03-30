@@ -1950,6 +1950,7 @@ export default function RecordPage() {
                   step={100}
                   value={s.delay_after_ms}
                   onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, delay_after_ms: v || 0 } : st))}
+                  onFocus={(e) => (e.target as HTMLInputElement).select()}
                   suffix="ms"
                   style={{ width: 110, flexShrink: 0, marginLeft: 'auto' }}
                 />
@@ -2566,6 +2567,7 @@ export default function RecordPage() {
                       step={100}
                       value={delayMs}
                       onChange={(v) => setDelayMs(v || 1000)}
+                      onFocus={(e) => (e.target as HTMLInputElement).select()}
                       suffix="ms"
                       style={{ width: 120 }}
                     />
