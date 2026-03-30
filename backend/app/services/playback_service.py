@@ -399,6 +399,14 @@ class PlaybackService:
             await self._run_action(step)
             t2 = time.time()
 
+            # Module command 결과 반영 (PASS:/FAIL: 접두사로 판정)
+            if step.type == StepType.MODULE_COMMAND and hasattr(self, '_last_module_result'):
+                mod_result = str(self._last_module_result)
+                del self._last_module_result
+                step_result.message = mod_result
+                if mod_result.startswith("FAIL:"):
+                    step_result.status = "fail"
+
             # CMD 결과 반영
             if step.type == StepType.CMD_SEND and hasattr(self, '_last_cmd_result'):
                 stdout, _, _ = self._last_cmd_result
@@ -895,7 +903,8 @@ class PlaybackService:
                     shared_conn = self.dm.get_serial_conn(real_id)
             logger.info("Module exec: %s.%s device=%s ctor=%s shared_conn=%s",
                         module_name, func_name, real_id, ctor_kwargs, shared_conn is not None)
-            await execute_module_function(module_name, func_name, func_args, ctor_kwargs, shared_conn)
+            result = await execute_module_function(module_name, func_name, func_args, ctor_kwargs, shared_conn)
+            self._last_module_result = result
         elif step.type == StepType.SERIAL_COMMAND:
             if not real_id:
                 raise ValueError("serial_command requires device_id")

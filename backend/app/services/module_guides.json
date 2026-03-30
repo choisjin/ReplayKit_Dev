@@ -1894,6 +1894,32 @@
       "GetPortInfo": {
         "description": "현재 시리얼 포트 정보를 반환합니다.",
         "params": {}
+      },
+      "LOG_SERIAL": {
+        "description": "시리얼 수신 데이터에서 키워드가 나타날 때까지 대기합니다(블로킹). 수신된 모든 로그를 함께 반환합니다. 공백으로 여러 키워드 지정 시 AND 조건.",
+        "params": {
+          "keyword": "검색할 키워드. 예: 'Pass', 'TTI_PASS'. 공백 구분 시 AND 조건",
+          "timeout": "최대 대기 시간 (초). 기본값: 30"
+        }
+      },
+      "StartMonitor": {
+        "description": "백그라운드에서 시리얼 키워드를 감시합니다(논블로킹). 다음 스텝으로 즉시 넘어가며, 결과는 GetMonitorResult로 확인.",
+        "params": {
+          "keyword": "감시할 키워드. 공백 구분 시 AND 조건",
+          "timeout": "최대 감시 시간 (초). 기본값: 60"
+        }
+      },
+      "StopMonitor": {
+        "description": "백그라운드 모니터링을 중지합니다.",
+        "params": {
+          "monitor_id": "모니터 ID (예: 'mon_1'). 비워두면 전체 중지"
+        }
+      },
+      "GetMonitorResult": {
+        "description": "백그라운드 모니터링 결과를 확인합니다. PASS/FAIL/RUNNING 상태와 수집된 로그를 반환.",
+        "params": {
+          "monitor_id": "모니터 ID. 비워두면 전체 결과"
+        }
       }
     }
   },
