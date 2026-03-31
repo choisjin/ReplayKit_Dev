@@ -159,6 +159,10 @@ export default function ResultsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [compareStep, setCompareStep] = useState<StepResultDetail | null>(null);
 
+  // 그룹 상세 뷰 (사이클별 통합)
+  const [groupDetail, setGroupDetail] = useState<ResultDetail[] | null>(null);
+  const [groupDetailCycle, setGroupDetailCycle] = useState(1);
+
   // 백그라운드 CMD 폴링
   const bgPollTimers = useRef<ReturnType<typeof setInterval>[]>([]);
 
@@ -292,6 +296,28 @@ export default function ResultsPage() {
       message.error(t('results.listFailed'));
     }
     setLoading(false);
+  };
+
+  const viewGroupDetail = async (group: ResultGroup) => {
+    setDetailLoading(true);
+    setDetailVisible(true);
+    setDetail(null);
+    setGroupDetail(null);
+    setGroupDetailCycle(1);
+    setDetailFilename(group.items[0].filename);
+    try {
+      const details: ResultDetail[] = [];
+      for (const item of group.items) {
+        const res = await resultsApi.get(item.filename);
+        details.push(res.data);
+      }
+      setGroupDetail(details);
+      // 첫 번째 시나리오의 녹화 파일 로드 (사이클별 웹캠은 같은 타임스탬프)
+      fetchRecordings(group.items[0].filename);
+    } catch {
+      message.error(t('results.detailFailed'));
+    }
+    setDetailLoading(false);
   };
 
   const viewDetail = async (filename: string) => {
@@ -598,6 +624,7 @@ export default function ResultsPage() {
         }
         return (
           <Space size={4}>
+            <Button size="small" icon={<EyeOutlined />} onClick={() => viewGroupDetail(g)}>{t('common.details')}</Button>
             <Button size="small" danger icon={<DeleteOutlined />} onClick={() => {
               Modal.confirm({
                 title: t('results.deleteTitle'),
@@ -800,7 +827,7 @@ export default function ResultsPage() {
           </Space>
         }
         open={detailVisible}
-        onCancel={() => { setDetailVisible(false); setWebcamPanelOpen(false); setWebcamExpanded(false); setCurrentPlayingStepId(null); }}
+        onCancel={() => { setDetailVisible(false); setWebcamPanelOpen(false); setWebcamExpanded(false); setCurrentPlayingStepId(null); setGroupDetail(null); }}
         width="90vw"
         style={{ top: 20 }}
         footer={
@@ -821,12 +848,89 @@ export default function ResultsPage() {
           </Space>
         }
       >
-        {detailLoading && !detail && (
+        {detailLoading && !detail && !groupDetail && (
           <div style={{ textAlign: 'center', padding: '60px 0' }}>
             <Spin size="large" tip={t('results.loading')} />
           </div>
         )}
-        {detail && (
+        {groupDetail && groupDetail.length > 0 && (() => {
+          const totalRepeat = Math.max(...groupDetail.map(d => d.total_repeat || 1));
+          // 현재 사이클의 스텝들을 시나리오 순서대로 합침
+          const cycleSteps: StepResultDetail[] = [];
+          for (const d of groupDetail) {
+            const stepsForCycle = d.step_results.filter(sr => sr.repeat_index === groupDetailCycle);
+            cycleSteps.push(...stepsForCycle);
+          }
+          const cyclePass = cycleSteps.filter(s => s.status === 'pass').length;
+          const cycleFail = cycleSteps.filter(s => s.status === 'fail').length;
+          const cycleWarn = cycleSteps.filter(s => s.status === 'warning').length;
+          const cycleErr = cycleSteps.filter(s => s.status !== 'pass' && s.status !== 'fail' && s.status !== 'warning').length;
+          return (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <span style={{ fontWeight: 600 }}>Cycle:</span>
+                {Array.from({ length: totalRepeat }, (_, i) => i + 1).map(c => (
+                  <Button key={c} size="small" type={groupDetailCycle === c ? 'primary' : 'default'} onClick={() => setGroupDetailCycle(c)}>
+                    {c}
+                  </Button>
+                ))}
+                <span style={{ marginLeft: 'auto', color: '#888' }}>
+                  {groupDetail.map(d => d.scenario_name).join(' → ')}
+                </span>
+              </div>
+              <Space size={8} style={{ marginBottom: 12 }}>
+                <Tag color="green">{cyclePass} Pass</Tag>
+                <Tag color="red">{cycleFail} Fail</Tag>
+                {cycleWarn > 0 && <Tag color="orange">{cycleWarn} Warning</Tag>}
+                {cycleErr > 0 && <Tag color="volcano">{cycleErr} Error</Tag>}
+                <span style={{ color: '#888' }}>/ {cycleSteps.length} steps</span>
+              </Space>
+              {/* 웹캠 패널 */}
+              {recordings.length > 0 && (
+                <Collapse
+                  activeKey={webcamPanelOpen ? ['webcam'] : []}
+                  onChange={(keys) => setWebcamPanelOpen(keys.includes('webcam'))}
+                  style={{ marginBottom: 12 }}
+                  items={[{
+                    key: 'webcam',
+                    label: <Space><VideoCameraOutlined /> {t('webcam.recordings')} ({recordings.length})</Space>,
+                    children: (
+                      <div>
+                        <Space style={{ marginBottom: 8 }}>
+                          {recordings.map((rec, i) => {
+                            const m = rec.filename.match(/_webcam_r(\d+)\.webm$/);
+                            const recCycle = m ? parseInt(m[1]) : i + 1;
+                            return (
+                              <Button key={rec.filename} size="small"
+                                type={activeRecUrl === rec.url ? 'primary' : 'default'}
+                                onClick={() => { setActiveRecUrl(rec.url); setActiveRecRepeat(recCycle); setGroupDetailCycle(recCycle); }}
+                              >
+                                Cycle {recCycle}
+                              </Button>
+                            );
+                          })}
+                        </Space>
+                        {activeRecUrl && <video ref={detailVideoRef} src={activeRecUrl} controls style={{ width: '100%', maxHeight: 400 }} />}
+                      </div>
+                    ),
+                  }]}
+                />
+              )}
+              <Table
+                columns={stepColumns as any}
+                dataSource={cycleSteps}
+                rowKey={(r) => `${r.step_id}_${r.repeat_index}_${r.device_id}`}
+                size="small"
+                pagination={false}
+                scroll={{ y: 500 }}
+                rowClassName={(r: StepResultDetail) =>
+                  r.status === 'pass' ? 'row-pass' : r.status === 'fail' ? 'row-fail' : r.status === 'error' ? 'row-error' : ''
+                }
+              />
+            </>
+          );
+        })()}
+        {!groupDetail && detail && (
           <>
             <Descriptions
               bordered
