@@ -764,41 +764,49 @@ async def websocket_playback(websocket: WebSocket):
                         continue
 
                     saved_result_filenames: list[str] = []
-                    sc_idx = 0
-                    start_step = 0  # step index to start from within current scenario
-                    while sc_idx < len(entries):
+                    # 시나리오별 결과 누적 (세트 반복 시 합산)
+                    scenario_results: dict[str, ScenarioResult] = {}
+
+                    for iteration in range(1, repeat + 1):
                         if playback_service._should_stop:
                             break
-                        entry = entries[sc_idx]
-                        sc_name = entry["name"]
-                        scen = await recording_service.load_scenario(sc_name)
-                        await websocket.send_json({
-                            "type": "group_scenario_start",
-                            "scenario_name": sc_name,
-                            "scenario_index": sc_idx + 1,
-                            "total_scenarios": len(entries),
-                            "start_step": start_step,
-                        })
+                        if repeat > 1:
+                            await websocket.send_json({
+                                "type": "iteration_start",
+                                "iteration": iteration,
+                                "total": repeat,
+                            })
 
-                        result = ScenarioResult(
-                            scenario_name=sc_name,
-                            device_serial="multi-device",
-                            status="pass",
-                            total_steps=len(scen.steps),
-                            total_repeat=repeat,
-                            started_at=datetime.now(timezone.utc).isoformat(),
-                        )
+                        sc_idx = 0
+                        start_step = 0
+                        while sc_idx < len(entries):
+                            if playback_service._should_stop:
+                                break
+                            entry = entries[sc_idx]
+                            sc_name = entry["name"]
+                            scen = await recording_service.load_scenario(sc_name)
+                            await websocket.send_json({
+                                "type": "group_scenario_start",
+                                "scenario_name": sc_name,
+                                "scenario_index": sc_idx + 1,
+                                "total_scenarios": len(entries),
+                                "start_step": start_step,
+                            })
 
-                        step_jumps = entry.get("step_jumps", {})
-                        step_jump_target = None  # set if a step-level jump fires
+                            if sc_name not in scenario_results:
+                                scenario_results[sc_name] = ScenarioResult(
+                                    scenario_name=sc_name,
+                                    device_serial="multi-device",
+                                    status="pass",
+                                    total_steps=len(scen.steps),
+                                    total_repeat=repeat,
+                                    started_at=datetime.now(timezone.utc).isoformat(),
+                                )
+                            result = scenario_results[sc_name]
 
-                        for iteration in range(1, repeat + 1):
-                            if repeat > 1:
-                                await websocket.send_json({
-                                    "type": "iteration_start",
-                                    "iteration": iteration,
-                                    "total": repeat,
-                                })
+                            step_jumps = entry.get("step_jumps", {})
+                            step_jump_target = None
+
                             async for item in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, start_step=start_step, device_map_override=device_map_override):
                                 if isinstance(item, dict) and item.get("_type") == "step_start":
                                     await websocket.send_json({
@@ -825,7 +833,6 @@ async def websocket_playback(websocket: WebSocket):
                                     "scenario_name": sc_name,
                                 })
 
-                                # Check step-level jumps (keyed by step_id)
                                 sj = step_jumps.get(str(step_result.step_id))
                                 if sj:
                                     if step_result.status in ("pass", "warning"):
@@ -834,11 +841,41 @@ async def websocket_playback(websocket: WebSocket):
                                         sj_jump = sj.get("on_fail_goto")
                                     if sj_jump is not None:
                                         step_jump_target = sj_jump
-                                        break  # break out of step stream
+                                        break
 
-                            if step_jump_target or playback_service._should_stop:
+                            if playback_service._should_stop:
                                 break
 
+                            # Determine jump target
+                            next_idx = sc_idx + 1
+                            start_step = 0
+                            jump = None
+
+                            if step_jump_target is not None:
+                                jump = step_jump_target
+                            else:
+                                last_status = result.step_results[-1].status if result.step_results else "pass"
+                                if last_status in ("pass", "warning"):
+                                    jump = entry.get("on_pass_goto")
+                                else:
+                                    jump = entry.get("on_fail_goto")
+
+                            if jump is not None:
+                                if isinstance(jump, dict):
+                                    target_sc = jump.get("scenario", -1)
+                                    target_step = jump.get("step", 0)
+                                else:
+                                    target_sc = jump
+                                    target_step = 0
+                                if target_sc == -1:
+                                    break  # END
+                                next_idx = target_sc
+                                start_step = target_step
+
+                            sc_idx = next_idx
+
+                    # 전체 반복 완료 후 시나리오별 결과 저장
+                    for sc_name, result in scenario_results.items():
                         result.finished_at = datetime.now(timezone.utc).isoformat()
                         if result.failed_steps > 0 or result.error_steps > 0:
                             result.status = "fail"
@@ -848,37 +885,6 @@ async def websocket_playback(websocket: WebSocket):
                             result.status = "pass"
                         result_path = await playback_service._save_result(result)
                         saved_result_filenames.append(Path(result_path).name)
-
-                        if playback_service._should_stop:
-                            break
-
-                        # Determine jump target: step-level takes priority over scenario-level
-                        next_idx = sc_idx + 1
-                        start_step = 0  # reset for next scenario
-                        jump = None
-
-                        if step_jump_target is not None:
-                            jump = step_jump_target
-                        else:
-                            # Scenario-level conditional jump
-                            if result.status in ("pass", "warning"):
-                                jump = entry.get("on_pass_goto")
-                            else:
-                                jump = entry.get("on_fail_goto")
-
-                        if jump is not None:
-                            if isinstance(jump, dict):
-                                target_sc = jump.get("scenario", -1)
-                                target_step = jump.get("step", 0)
-                            else:
-                                target_sc = jump
-                                target_step = 0
-                            if target_sc == -1:
-                                break  # END
-                            next_idx = target_sc
-                            start_step = target_step
-
-                        sc_idx = next_idx
 
                     rf = saved_result_filenames[-1] if saved_result_filenames else ""
                     if playback_service._should_stop:
