@@ -758,7 +758,7 @@ class PlaybackService:
             return f"hkmc_key {key}"
         return step.type.value
 
-    async def _ensure_device_connected(self, device_id: str, max_retries: int = 10, retry_interval: float = 5.0) -> None:
+    async def _ensure_device_connected(self, device_id: str, max_retries: int = 24, retry_interval: float = 5.0) -> None:
         """특정 디바이스의 연결 상태 확인 + 끊어진 경우 재연결 시도.
 
         Args:
@@ -815,17 +815,10 @@ class PlaybackService:
             except Exception:
                 pass
 
-            # 연결 안 됨 → 재연결 시도 (전원 껐다 켜진 경우 부팅 대기)
+            # 연결 안 됨 → 재연결 대기 (백그라운드 루프가 상태 갱신 중)
             adb_serial = dev.address
             self.dm.reset_reconnect_attempts(device_id)
-            # 먼저 ADB 서버 리셋 (전원 off/on 후 디바이스 재인식 유도)
-            try:
-                await self.adb._run("kill-server")
-                await asyncio.sleep(1)
-                await self.adb._run("start-server")
-                await asyncio.sleep(1)
-            except Exception:
-                pass
+            server_reset_done = False
             for attempt in range(1, max_retries + 1):
                 if self._should_stop:
                     return
@@ -838,6 +831,20 @@ class PlaybackService:
                         self.dm.reset_reconnect_attempts(device_id)
                         logger.info("Playback: ADB reconnected %s", device_id)
                         return
+                    elif found:
+                        logger.info("Playback: ADB %s status=%s, waiting...", device_id, found.status)
+                    else:
+                        # 디바이스 목록에 없으면 ADB 서버 리셋 시도 (1회만)
+                        if not server_reset_done:
+                            logger.info("Playback: ADB server reset for %s", device_id)
+                            try:
+                                await self.adb._run("kill-server")
+                                await asyncio.sleep(1)
+                                await self.adb._run("start-server")
+                                await asyncio.sleep(2)
+                            except Exception:
+                                pass
+                            server_reset_done = True
                 except Exception as e:
                     logger.debug("Playback: ADB reconnect %s failed: %s", device_id, e)
                 if attempt < max_retries:

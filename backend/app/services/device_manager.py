@@ -685,8 +685,14 @@ class DeviceManager:
     HKMC_MAX_RECONNECT_ATTEMPTS = 12  # 5초 × 12 = 60초간 실패하면 error
     ADB_MAX_RECONNECT_ATTEMPTS = 12   # 5초 × 12 = 60초간 실패하면 error
 
-    async def reconnect_disconnected(self) -> None:
-        """끊어진 디바이스 재연결 시도 (백그라운드 태스크용, 5초 간격 호출)."""
+    async def reconnect_disconnected(self, passive: bool = False) -> None:
+        """끊어진 디바이스 재연결 시도 (백그라운드 태스크용, 5초 간격 호출).
+
+        Args:
+            passive: True이면 상태 확인만 수행 (adb devices 조회).
+                     reconnect/connect 등 파괴적 명령은 실행하지 않음.
+                     디바이스가 스스로 복귀하면 상태를 갱신하여 재생에서 사용 가능.
+        """
         # ADB 상태 일괄 갱신 (adb devices -l 1회 호출)
         try:
             adb_devices = await self.adb.list_devices()
@@ -705,10 +711,17 @@ class DeviceManager:
                 current_adb_status = adb_dev.status if adb_dev else "offline"
 
                 if current_adb_status == "device":
-                    # 정상 연결 — 카운터 리셋
+                    # 정상 연결 — 카운터 리셋 + 상태 갱신
+                    if dev.status != "device":
+                        logger.info("ADB device back online: %s", dev.id)
                     self._adb_reconnect_attempts.pop(dev.id, None)
-                    dev.status = "connected" if dev.status != "device" else dev.status
                     dev.status = "device"
+                    continue
+
+                # passive 모드: 상태 갱신만 하고 reconnect 명령 실행 안 함
+                if passive:
+                    if current_adb_status != dev.status and dev.status not in ("error",):
+                        dev.status = current_adb_status or "offline"
                     continue
 
                 # error 상태면 재시도 안 함

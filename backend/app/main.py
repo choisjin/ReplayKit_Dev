@@ -25,14 +25,12 @@ logger = logging.getLogger(__name__)
 
 async def _reconnect_loop():
     """백그라운드: 끊어진 디바이스 주기적 재연결 시도 (5초 간격).
-    재생 중에는 재연결 시도를 건너뜀 (ADB 서버 간섭 방지).
+    재생 중에는 상태 확인만 수행 (파괴적 명령 스킵).
     """
     while True:
         await asyncio.sleep(5)
-        if playback_service.is_running:
-            continue
         try:
-            await device_manager.reconnect_disconnected()
+            await device_manager.reconnect_disconnected(passive=playback_service.is_running)
         except Exception as e:
             logger.debug("Reconnect loop error: %s", e)
 
