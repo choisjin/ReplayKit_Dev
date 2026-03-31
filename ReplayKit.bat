@@ -20,11 +20,15 @@ if exist ".git" (
 set "ENTRY=server.py"
 if exist "_launcher.py" set "ENTRY=_launcher.py"
 
-if exist "python\python.exe" (
-    start "" "python\python.exe" %ENTRY%
-) else if exist "venv\Scripts\python.exe" (
-    start "" "venv\Scripts\python.exe" %ENTRY%
-) else (
+set "PY="
+if exist "python\python.exe" set "PY=python\python.exe"
+if not defined PY if exist "venv\Scripts\python.exe" set "PY=venv\Scripts\python.exe"
+
+if not defined PY (
     echo [ERROR] Python not found. Run setup.bat first.
     pause
+    exit /b 1
 )
+
+echo [START] %PY% %ENTRY%
+start "" cmd /c ""%PY%" %ENTRY% || (echo. & echo [ERROR] Server crashed. Press any key to close. & pause >nul)"
