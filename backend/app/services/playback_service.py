@@ -113,6 +113,7 @@ class PlaybackService:
         self._pause_event = asyncio.Event()
         self._pause_event.set()  # 초기: 일시정지 아님
         self._device_map: dict[str, str] = {}  # alias -> real device id for current playback
+        self._result_timestamp: str = ""  # 재생 세션별 고유 타임스탬프 (actual 이미지 폴더용)
 
     @property
     def is_running(self) -> bool:
@@ -208,6 +209,7 @@ class PlaybackService:
         self._device_map = self._resolve_device_map(scenario, device_map_override)
         self._running = True
         self._should_stop = False
+        self._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         started_at = datetime.now(timezone.utc).isoformat()
 
         result = ScenarioResult(
@@ -263,6 +265,7 @@ class PlaybackService:
             result.status = "error"
         finally:
             self._running = False
+            self._result_timestamp = ""
             result.finished_at = datetime.now(timezone.utc).isoformat()
 
         # Determine overall status
@@ -294,6 +297,8 @@ class PlaybackService:
         self._running = True
         self._should_stop = False
         self._current_iteration = repeat_index - 1  # 0-based for cycle wait
+        if not self._result_timestamp:
+            self._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Build step lookup by ID for conditional jumps
         step_by_id: dict[int, int] = {}  # step.id -> index
@@ -338,6 +343,7 @@ class PlaybackService:
                 idx = next_idx
         finally:
             self._running = False
+            self._result_timestamp = ""
 
     async def execute_single_step(self, step: Step, scenario_name: str, device_map: Optional[dict[str, str]] = None) -> StepResult:
         """Execute a single step with verification (for testing individual steps)."""
@@ -443,7 +449,8 @@ class PlaybackService:
             t4 = time.time()
             actual_path = None
             if ss_device:
-                actual_dir = SCREENSHOTS_DIR / scenario_name / "actual"
+                actual_subdir = f"actual_{self._result_timestamp}" if self._result_timestamp else "actual"
+                actual_dir = SCREENSHOTS_DIR / scenario_name / actual_subdir
                 actual_dir.mkdir(parents=True, exist_ok=True)
                 actual_path = str(actual_dir / f"{file_prefix}.png")
 
@@ -482,7 +489,7 @@ class PlaybackService:
                             None, cam.CaptureToFile, actual_path
                         )
 
-                actual_rel = f"{scenario_name}/actual/{file_prefix}.png"
+                actual_rel = f"{scenario_name}/{actual_subdir}/{file_prefix}.png"
                 step_result.actual_image = actual_rel
 
                 # Verify against expected image
@@ -525,7 +532,7 @@ class PlaybackService:
                                 self.image_compare.generate_multi_crop_annotated(
                                     actual_path, judgement.get("sub_results", []), annotated_path
                                 )
-                                step_result.actual_annotated_image = f"{scenario_name}/actual/{file_prefix}_annotated.png"
+                                step_result.actual_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_annotated.png"
                             except Exception as e:
                                 logger.warning("Failed to generate multi-crop annotated image: %s", e)
 
@@ -543,7 +550,7 @@ class PlaybackService:
                                                 cv2.rectangle(dark, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 255, 0), 2)
                                         exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
                                         cv2.imwrite(exp_ann_path, dark)
-                                        step_result.expected_annotated_image = f"{scenario_name}/actual/{file_prefix}_expected_annotated.png"
+                                        step_result.expected_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_expected_annotated.png"
                                 except Exception as e:
                                     logger.warning("Failed to generate multi-crop expected annotated: %s", e)
 
@@ -581,13 +588,13 @@ class PlaybackService:
                                         cv2.rectangle(img_annotated, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 2)
                                     annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
                                     cv2.imwrite(annotated_path, img_annotated)
-                                    step_result.actual_annotated_image = f"{scenario_name}/actual/{file_prefix}_annotated.png"
+                                    step_result.actual_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_annotated.png"
                             except Exception as e:
                                 logger.warning("Failed to generate exclude annotated image: %s", e)
 
                             if step_result.status != "pass":
                                 diff_path = str(actual_dir / f"diff_{file_prefix}.png")
-                                diff_rel = f"{scenario_name}/actual/diff_{file_prefix}.png"
+                                diff_rel = f"{scenario_name}/{actual_subdir}/diff_{file_prefix}.png"
                                 try:
                                     self.image_compare.generate_diff_heatmap(
                                         expected_path, actual_path, diff_path,
@@ -611,7 +618,7 @@ class PlaybackService:
                                             cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 2)
                                         exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
                                         cv2.imwrite(exp_ann_path, overlay)
-                                        step_result.expected_annotated_image = f"{scenario_name}/actual/{file_prefix}_expected_annotated.png"
+                                        step_result.expected_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_expected_annotated.png"
                                 except Exception as e:
                                     logger.warning("Failed to generate exclude expected annotated: %s", e)
 
@@ -655,7 +662,7 @@ class PlaybackService:
                                         cv2.rectangle(img_annotated, (x, y), (x + w, y + h), (0, 0, 255), 3)
                                         annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
                                         cv2.imwrite(annotated_path, img_annotated)
-                                        step_result.actual_annotated_image = f"{scenario_name}/actual/{file_prefix}_annotated.png"
+                                        step_result.actual_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_annotated.png"
                                 except Exception as e:
                                     logger.warning("Failed to generate annotated image: %s", e)
                             elif step.roi:
@@ -667,14 +674,14 @@ class PlaybackService:
                                         cv2.rectangle(img_annotated, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 3)
                                         annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
                                         cv2.imwrite(annotated_path, img_annotated)
-                                        step_result.actual_annotated_image = f"{scenario_name}/actual/{file_prefix}_annotated.png"
+                                        step_result.actual_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_annotated.png"
                                         step_result.match_location = {"x": r.x, "y": r.y, "width": r.width, "height": r.height}
                                 except Exception as e:
                                     logger.warning("Failed to generate annotated image: %s", e)
 
                             if step_result.status != "pass":
                                 diff_path = str(actual_dir / f"diff_{file_prefix}.png")
-                                diff_rel = f"{scenario_name}/actual/diff_{file_prefix}.png"
+                                diff_rel = f"{scenario_name}/{actual_subdir}/diff_{file_prefix}.png"
                                 try:
                                     self.image_compare.generate_diff_heatmap(
                                         expected_path, compare_actual, diff_path
@@ -1023,7 +1030,7 @@ class PlaybackService:
     async def _save_result(self, result: ScenarioResult) -> str:
         """Save execution result to JSON."""
         RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = self._result_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
         filepath = RESULTS_DIR / f"{result.scenario_name}_{timestamp}.json"
         filepath.write_text(result.model_dump_json(indent=2), encoding="utf-8")
         logger.info("Result saved: %s", filepath)
