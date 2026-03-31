@@ -836,8 +836,10 @@ class PlaybackService:
             return None
 
         # screenshot_device_id가 저장되어 있으면 해당 디바이스 우선 사용
+        # device_map을 통해 실제 디바이스 ID로 매핑
         if step.screenshot_device_id:
-            ss_dev = self.dm.get_device(step.screenshot_device_id)
+            resolved_ss_id = self._resolve_alias(step.screenshot_device_id, self._device_map)
+            ss_dev = self.dm.get_device(resolved_ss_id)
             if ss_dev:
                 if ss_dev.type == "hkmc6th":
                     screen_type = step.screen_type or "front_center"
