@@ -20,12 +20,8 @@ if exist ".git" (
 set "ENTRY=server.py"
 if exist "_launcher.py" set "ENTRY=_launcher.py"
 
-if exist "python\pythonw.exe" (
-    start "" "python\pythonw.exe" %ENTRY%
-) else if exist "python\python.exe" (
+if exist "python\python.exe" (
     start "" "python\python.exe" %ENTRY%
-) else if exist "venv\Scripts\pythonw.exe" (
-    start "" "venv\Scripts\pythonw.exe" %ENTRY%
 ) else if exist "venv\Scripts\python.exe" (
     start "" "venv\Scripts\python.exe" %ENTRY%
 ) else (
