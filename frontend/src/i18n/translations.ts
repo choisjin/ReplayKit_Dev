@@ -62,6 +62,20 @@ const translations = {
     'nav.scenario': '시나리오',
     'nav.results': '테스트 결과',
     'nav.settings': '설정',
+    'nav.changelog': '업데이트 내역',
+
+    // === Changelog ===
+    'changelog.title': '업데이트 내역',
+    'changelog.branch': '브랜치',
+    'changelog.totalCommits': '총 커밋',
+    'changelog.hash': '해시',
+    'changelog.message': '변경 내용',
+    'changelog.author': '작성자',
+    'changelog.date': '날짜',
+    'changelog.loadFailed': '커밋 내역을 불러오지 못했습니다',
+    'changelog.noCommits': '커밋 내역이 없습니다',
+    'changelog.search': '커밋 메시지 검색...',
+    'changelog.tags': '태그',
 
     // === Device Page ===
     'device.title': '디바이스',
@@ -652,6 +666,20 @@ const translations = {
     'nav.scenario': 'Scenarios',
     'nav.results': 'Results',
     'nav.settings': 'Settings',
+    'nav.changelog': 'Changelog',
+
+    // === Changelog ===
+    'changelog.title': 'Changelog',
+    'changelog.branch': 'Branch',
+    'changelog.totalCommits': 'Total Commits',
+    'changelog.hash': 'Hash',
+    'changelog.message': 'Message',
+    'changelog.author': 'Author',
+    'changelog.date': 'Date',
+    'changelog.loadFailed': 'Failed to load commit history',
+    'changelog.noCommits': 'No commits found',
+    'changelog.search': 'Search commits...',
+    'changelog.tags': 'Tags',
 
     // === Device Page ===
     'device.title': 'Devices',

@@ -9,6 +9,7 @@ import {
   DesktopOutlined,
   FolderOpenOutlined,
   FundProjectionScreenOutlined,
+  HistoryOutlined,
   LoadingOutlined,
   PlayCircleOutlined,
   SettingOutlined,
@@ -25,6 +26,7 @@ import RecordPage from './pages/RecordPage';
 import ScenarioPage from './pages/ScenarioPage';
 import ResultsPage from './pages/ResultsPage';
 import SettingsPage from './pages/SettingsPage';
+import ChangelogPage from './pages/ChangelogPage';
 import WebcamPip from './components/WebcamPip';
 import { WebcamProvider } from './context/WebcamContext';
 
@@ -36,6 +38,7 @@ const pageKeys = [
   { key: '/scenarios', icon: <PlayCircleOutlined />, labelKey: 'nav.scenario' as const, component: <ScenarioPage /> },
   { key: '/results', icon: <BarChartOutlined />, labelKey: 'nav.results' as const, component: <ResultsPage /> },
   { key: '/settings', icon: <SettingOutlined />, labelKey: 'nav.settings' as const, component: <SettingsPage /> },
+  { key: '/changelog', icon: <HistoryOutlined />, labelKey: 'nav.changelog' as const, component: <ChangelogPage /> },
 ];
 
 function AppContent() {

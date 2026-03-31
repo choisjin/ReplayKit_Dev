@@ -407,6 +407,54 @@ async def disk_usage():
     return drives
 
 
+@router.get("/git-log")
+async def git_log(limit: int = 100):
+    """Git 커밋 내역 조회."""
+    try:
+        r = subprocess.run(
+            ["git", "log", f"-{limit}", "--pretty=format:%H||%h||%an||%ae||%aI||%s"],
+            cwd=str(_PROJECT_ROOT),
+            capture_output=True, text=True, timeout=10,
+        )
+        if r.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"git log failed: {r.stderr.strip()}")
+
+        commits = []
+        for line in r.stdout.strip().split("\n"):
+            if not line:
+                continue
+            parts = line.split("||", 5)
+            if len(parts) < 6:
+                continue
+            commits.append({
+                "hash": parts[0],
+                "short_hash": parts[1],
+                "author": parts[2],
+                "email": parts[3],
+                "date": parts[4],
+                "message": parts[5],
+            })
+
+        # 현재 브랜치, 태그 정보
+        branch_r = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(_PROJECT_ROOT), capture_output=True, text=True, timeout=5,
+        )
+        branch = branch_r.stdout.strip() if branch_r.returncode == 0 else "unknown"
+
+        tag_r = subprocess.run(
+            ["git", "tag", "--sort=-creatordate"],
+            cwd=str(_PROJECT_ROOT), capture_output=True, text=True, timeout=5,
+        )
+        tags = [t for t in tag_r.stdout.strip().split("\n") if t] if tag_r.returncode == 0 else []
+
+        return {"branch": branch, "tags": tags, "commits": commits}
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="git command timed out")
+    except FileNotFoundError:
+        raise HTTPException(status_code=500, detail="git not found")
+
+
 @router.post("/open-results-folder")
 async def open_results_folder():
     """Results 폴더를 파일 탐색기로 열기."""
