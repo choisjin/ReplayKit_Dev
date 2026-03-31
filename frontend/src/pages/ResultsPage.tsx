@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Button, Card, Collapse, Col, Descriptions, Image, Input, InputNumber, Modal, Row, Select, Space, Table, Tag, Tooltip, message } from 'antd';
+import { Button, Card, Collapse, Col, Descriptions, Image, Input, InputNumber, Modal, Row, Select, Space, Spin, Table, Tag, Tooltip, message } from 'antd';
 import { DeleteOutlined, DownloadOutlined, ExpandOutlined, EyeOutlined, PlayCircleOutlined, ReloadOutlined, ScissorOutlined, SearchOutlined, ShrinkOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { resultsApi, scenarioApi } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
@@ -156,6 +156,7 @@ export default function ResultsPage() {
   const [detail, setDetail] = useState<ResultDetail | null>(null);
   const [detailFilename, setDetailFilename] = useState('');
   const [detailVisible, setDetailVisible] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [compareStep, setCompareStep] = useState<StepResultDetail | null>(null);
 
   // 백그라운드 CMD 폴링
@@ -294,15 +295,18 @@ export default function ResultsPage() {
   };
 
   const viewDetail = async (filename: string) => {
+    setDetailLoading(true);
+    setDetailFilename(filename);
+    setDetailVisible(true);
+    setDetail(null);
     try {
       const res = await resultsApi.get(filename);
       setDetail(res.data);
-      setDetailFilename(filename);
-      setDetailVisible(true);
       fetchRecordings(filename);
     } catch {
       message.error(t('results.detailFailed'));
     }
+    setDetailLoading(false);
   };
 
   const deleteResult = (filename: string) => {
@@ -817,6 +821,11 @@ export default function ResultsPage() {
           </Space>
         }
       >
+        {detailLoading && !detail && (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <Spin size="large" tip={t('results.loading')} />
+          </div>
+        )}
         {detail && (
           <>
             <Descriptions

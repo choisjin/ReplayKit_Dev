@@ -313,6 +313,16 @@ export function useWebcam() {
     setUploadFn,
     startRecordingAuto,
     stopRecordingAuto,
+    pauseRecording: useCallback(() => {
+      if (webcamRecorderRef.current && webcamRecorderRef.current.state === 'recording') {
+        webcamRecorderRef.current.pause();
+      }
+    }, []),
+    resumeRecording: useCallback(() => {
+      if (webcamRecorderRef.current && webcamRecorderRef.current.state === 'paused') {
+        webcamRecorderRef.current.resume();
+      }
+    }, []),
     /** 스트림이 활성 상태인지 확인 */
     isStreamReady: useCallback(() => {
       const stream = webcamStreamRef.current;

@@ -819,11 +819,15 @@ export default function ScenarioPage() {
       } else if (msg.type === 'playback_paused') {
         setPaused(true);
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
+        if (doAutoRecord && webcamRecordingActiveRef.current) webcam.pauseRecording();
+        pauseScreenStream();
       } else if (msg.type === 'playback_resumed') {
         setPaused(false);
+        if (doAutoRecord && webcamRecordingActiveRef.current) webcam.resumeRecording();
+        resumeScreenStream();
       }
     };
-    ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setPaused(false); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
+    ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setPaused(false); setCurrentStepId(null); resumeScreenStream(); message.error(t('scenario.websocketFailed')); };
     ws.onclose = () => { wsRef.current = null; };
   };
 
@@ -1013,8 +1017,12 @@ export default function ScenarioPage() {
       } else if (msg.type === 'playback_paused') {
         setPaused(true);
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
+        if (doAutoRecord && webcamRecordingActiveRef.current) webcam.pauseRecording();
+        pauseScreenStream();
       } else if (msg.type === 'playback_resumed') {
         setPaused(false);
+        if (doAutoRecord && webcamRecordingActiveRef.current) webcam.resumeRecording();
+        resumeScreenStream();
       }
     };
     ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setPaused(false); setPlayingGroupName(null); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
