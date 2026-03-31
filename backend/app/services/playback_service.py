@@ -818,16 +818,19 @@ class PlaybackService:
             # 연결 안 됨 → 재연결 시도 (전원 껐다 켜진 경우 부팅 대기)
             adb_serial = dev.address
             self.dm.reset_reconnect_attempts(device_id)
+            # 먼저 ADB 서버 리셋 (전원 off/on 후 디바이스 재인식 유도)
+            try:
+                await self.adb._run("kill-server")
+                await asyncio.sleep(1)
+                await self.adb._run("start-server")
+                await asyncio.sleep(1)
+            except Exception:
+                pass
             for attempt in range(1, max_retries + 1):
                 if self._should_stop:
                     return
                 logger.info("Playback: ADB reconnect %s attempt %d/%d", device_id, attempt, max_retries)
                 try:
-                    if ":" in adb_serial:
-                        await self.adb.connect_device(adb_serial)
-                    else:
-                        await self.adb._run(f"-s {adb_serial} reconnect")
-                    await asyncio.sleep(2)
                     adb_devices = await self.adb.list_devices()
                     found = next((d for d in adb_devices if d.serial == adb_serial), None)
                     if found and found.status == "device":
