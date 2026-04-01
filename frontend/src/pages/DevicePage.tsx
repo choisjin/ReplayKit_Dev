@@ -1255,96 +1255,97 @@ export default function DevicePage() {
         onOk={saveScanSettings}
         okText={t('common.save')}
         cancelText={t('common.cancel')}
-        width={520}
+        width={620}
       >
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>{t('device.builtinScan')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
+        {/* 기본 + 커스텀 통합 테이블 */}
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ borderBottom: '2px solid #d9d9d9', textAlign: 'left' }}>
+              <th style={{ padding: '6px 4px', width: 40 }}></th>
+              <th style={{ padding: '6px 4px' }}>{t('common.name')}</th>
+              <th style={{ padding: '6px 4px', width: 80 }}>Protocol</th>
+              <th style={{ padding: '6px 4px', width: 90 }}>Port</th>
+              <th style={{ padding: '6px 4px', width: 140 }}>Module</th>
+              <th style={{ padding: '6px 4px', width: 40 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {/* 기본 스캔 항목 */}
             {[
-              { key: 'adb', label: 'ADB (USB/WiFi)' },
-              { key: 'serial', label: 'Serial (COM)' },
-              { key: 'hkmc', label: 'HKMC (TCP 6655/5000)' },
-              { key: 'dlt', label: 'DLT (TCP 3490)' },
-              { key: 'bench', label: 'Bench (UDP 25000)' },
-              { key: 'vision_camera', label: 'Vision Camera (GigE)' },
+              { key: 'adb', label: 'ADB', proto: 'USB/WiFi', port: '-' },
+              { key: 'serial', label: 'Serial', proto: 'COM', port: '-' },
+              { key: 'hkmc', label: 'HKMC', proto: 'TCP', port: '6655/5000' },
+              { key: 'dlt', label: 'DLT', proto: 'TCP', port: '3490' },
+              { key: 'bench', label: 'Bench', proto: 'UDP', port: '25000' },
+              { key: 'vision_camera', label: 'Vision Camera', proto: 'GigE', port: '-' },
             ].map(item => {
               const v = scanBuiltin[item.key] || { enabled: true, module: '' };
               return (
-                <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Checkbox
-                    checked={v.enabled !== false}
-                    onChange={e => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, enabled: e.target.checked } })}
-                  >
-                    {item.label}
-                  </Checkbox>
-                  <Select
-                    size="small"
-                    allowClear
-                    placeholder="Module"
-                    value={v.module || undefined}
-                    onChange={val => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, module: val || '' } })}
-                    style={{ width: 130, flexShrink: 0 }}
-                    options={modules.map(m => ({ label: m.label, value: m.name }))}
-                  />
-                </div>
+                <tr key={item.key} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                  <td style={{ padding: '4px' }}>
+                    <Checkbox checked={v.enabled !== false}
+                      onChange={e => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, enabled: e.target.checked } })} />
+                  </td>
+                  <td style={{ padding: '4px' }}>{item.label}</td>
+                  <td style={{ padding: '4px' }}><Tag>{item.proto}</Tag></td>
+                  <td style={{ padding: '4px' }}>{item.port}</td>
+                  <td style={{ padding: '4px' }}>
+                    <Select size="small" allowClear placeholder="-" value={v.module || undefined}
+                      onChange={val => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, module: val || '' } })}
+                      style={{ width: '100%' }} options={modules.map(m => ({ label: m.label, value: m.name }))} />
+                  </td>
+                  <td></td>
+                </tr>
               );
             })}
-          </div>
-        </div>
-
-        <div>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>{t('device.customScan')}</div>
-          {scanCustom.map((entry, idx) => (
-            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Checkbox
-                checked={entry.enabled}
-                onChange={e => {
-                  const next = [...scanCustom];
-                  next[idx] = { ...entry, enabled: e.target.checked };
-                  setScanCustom(next);
-                }}
-              />
-              <Tag color={entry.type === 'udp' ? 'orange' : 'blue'}>{entry.type.toUpperCase()}</Tag>
-              <span>{entry.label} (:{entry.port})</span>
-              <Tag style={{ marginLeft: 'auto' }}>{entry.module || '-'}</Tag>
-              <Button size="small" danger onClick={() => setScanCustom(scanCustom.filter((_, i) => i !== idx))}>
-                <DeleteOutlined />
-              </Button>
-            </div>
-          ))}
-          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-            <Select size="small" value={newCustomType} onChange={setNewCustomType} style={{ width: 80 }}
-              options={[{ label: 'TCP', value: 'tcp' }, { label: 'UDP', value: 'udp' }]}
-            />
-            <InputNumber
-              size="small"
-              placeholder={t('device.customPort')}
-              value={newCustomPort}
-              onChange={v => setNewCustomPort(v)}
-              min={1} max={65535}
-              style={{ width: 90 }}
-            />
-            <Input
-              size="small"
-              placeholder={t('device.customLabel')}
-              value={newCustomLabel}
-              onChange={e => setNewCustomLabel(e.target.value)}
-              style={{ width: 120 }}
-            />
-            <Select
-              size="small"
-              allowClear
-              placeholder="Module"
-              value={newCustomModule || undefined}
-              onChange={v => setNewCustomModule(v || '')}
-              style={{ width: 130 }}
-              options={modules.map(m => ({ label: m.label, value: m.name }))}
-            />
-            <Button size="small" icon={<PlusOutlined />} onClick={addCustomScan} disabled={!newCustomPort}>
-              {t('common.add')}
-            </Button>
-          </div>
-        </div>
+            {/* 커스텀 스캔 항목 */}
+            {scanCustom.map((entry, idx) => (
+              <tr key={`c_${idx}`} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <td style={{ padding: '4px' }}>
+                  <Checkbox checked={entry.enabled}
+                    onChange={e => { const n = [...scanCustom]; n[idx] = { ...entry, enabled: e.target.checked }; setScanCustom(n); }} />
+                </td>
+                <td style={{ padding: '4px' }}>{entry.label}</td>
+                <td style={{ padding: '4px' }}><Tag color={entry.type === 'udp' ? 'orange' : 'blue'}>{entry.type.toUpperCase()}</Tag></td>
+                <td style={{ padding: '4px' }}>{entry.port}</td>
+                <td style={{ padding: '4px' }}>
+                  <Select size="small" allowClear placeholder="-" value={entry.module || undefined}
+                    onChange={val => { const n = [...scanCustom]; n[idx] = { ...entry, module: val || '' }; setScanCustom(n); }}
+                    style={{ width: '100%' }} options={modules.map(m => ({ label: m.label, value: m.name }))} />
+                </td>
+                <td style={{ padding: '4px' }}>
+                  <Button size="small" type="text" danger icon={<DeleteOutlined />}
+                    onClick={() => setScanCustom(scanCustom.filter((_, i) => i !== idx))} />
+                </td>
+              </tr>
+            ))}
+            {/* 추가 행 */}
+            <tr style={{ borderTop: '1px solid #d9d9d9' }}>
+              <td></td>
+              <td style={{ padding: '4px' }}>
+                <Input size="small" placeholder={t('device.customLabel')} value={newCustomLabel}
+                  onChange={e => setNewCustomLabel(e.target.value)} />
+              </td>
+              <td style={{ padding: '4px' }}>
+                <Select size="small" value={newCustomType} onChange={setNewCustomType} style={{ width: '100%' }}
+                  options={[{ label: 'TCP', value: 'tcp' }, { label: 'UDP', value: 'udp' }]} />
+              </td>
+              <td style={{ padding: '4px' }}>
+                <InputNumber size="small" placeholder="Port" value={newCustomPort}
+                  onChange={v => setNewCustomPort(v)} min={1} max={65535} style={{ width: '100%' }} />
+              </td>
+              <td style={{ padding: '4px' }}>
+                <Select size="small" allowClear placeholder="Module" value={newCustomModule || undefined}
+                  onChange={v => setNewCustomModule(v || '')} style={{ width: '100%' }}
+                  options={modules.map(m => ({ label: m.label, value: m.name }))} />
+              </td>
+              <td style={{ padding: '4px' }}>
+                <Button size="small" type="primary" icon={<PlusOutlined />}
+                  onClick={addCustomScan} disabled={!newCustomPort} />
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </Modal>
     </div>
   );
