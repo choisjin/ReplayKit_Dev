@@ -98,10 +98,16 @@ class SmartBench:
     # 내부 통신
     # ------------------------------------------------------------------
 
-    def _send(self, command: str) -> str:
-        """TCP 텍스트 명령 전송 후 응답 수신."""
+    def _send(self, command: str, _retry: bool = True) -> str:
+        """TCP 텍스트 명령 전송 후 응답 수신. 연결 끊김 시 1회 재연결."""
         if not self._sock:
-            raise RuntimeError("Not connected — call Connect() first")
+            if not self._host:
+                return "ERROR: not connected"
+            # 자동 재연결
+            result = self.Connect()
+            if result.startswith("ERROR"):
+                return result
+
         try:
             self._sock.sendall((command + "\n").encode("utf-8"))
             data = self._sock.recv(4096)
@@ -110,6 +116,15 @@ class SmartBench:
             return resp
         except Exception as e:
             logger.error("[SmartBench] Send failed: %s", e)
+            # 연결 끊김 → 소켓 정리 후 1회 재시도
+            try:
+                self._sock.close()
+            except Exception:
+                pass
+            self._sock = None
+            if _retry:
+                logger.info("[SmartBench] Reconnecting...")
+                return self._send(command, _retry=False)
             return f"ERROR: {e}"
 
     # ------------------------------------------------------------------
