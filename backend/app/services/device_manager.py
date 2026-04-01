@@ -681,6 +681,11 @@ class DeviceManager:
 
     async def refresh_adb(self) -> None:
         """Sync ADB device statuses — only update already-registered ADB devices."""
+        # 등록된 ADB 디바이스가 없으면 ADB 호출 안 함
+        has_adb = any(v.type == "adb" and v.id in self._ever_connected
+                      for v in self._devices.values())
+        if not has_adb:
+            return
         adb_devices = await self.adb.list_devices()
         adb_status_map = {d.serial: d for d in adb_devices}
 
