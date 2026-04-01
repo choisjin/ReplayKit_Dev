@@ -170,6 +170,7 @@ export default function DevicePage() {
   const [scannedBench, setScannedBench] = useState<{ ip: string; port: number; verified?: boolean }[]>([]);
   const [scannedVision, setScannedVision] = useState<{ id: string; mac: string; model: string; serial: string; vendor: string; tl_type: string; ip: string; subnet?: string; gateway?: string }[]>([]);
   const [scannedDlt, setScannedDlt] = useState<{ ip: string; port: number }[]>([]);
+  const [scannedCustom, setScannedCustom] = useState<{ label: string; hosts: { ip: string; port: number }[] }[]>([]);
   const [pcInterfaces, setPcInterfaces] = useState<{ name: string; ip: string; prefix: number }[]>([]);
   const [forceIpModal, setForceIpModal] = useState<{ mac: string; currentIp: string } | null>(null);
   const [forceIpAddr, setForceIpAddr] = useState('');
@@ -311,6 +312,7 @@ export default function DevicePage() {
       setScannedBench(res.data.bench_devices || []);
       setScannedVision(res.data.vision_cameras || []);
       setScannedDlt(res.data.dlt_devices || []);
+      setScannedCustom(res.data.custom_results || []);
       setPcInterfaces(ifRes.data.interfaces || []);
     } catch {
       message.error(t('device.scanFailed'));
@@ -944,7 +946,51 @@ export default function DevicePage() {
                     );
                   })()}
 
-                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && scannedBench.length === 0 && scannedVision.length === 0 && scannedDlt.length === 0 && !scanning && (
+                  {/* 커스텀 스캔 결과 */}
+                  {scannedCustom.map((group, gi) => {
+                    if (group.hosts.length === 0) return null;
+                    // 스캔 설정에서 모듈명 찾기
+                    const customEntry = scanCustom.find(c => c.label === group.label);
+                    const moduleName = customEntry?.module || '';
+                    return (
+                      <div key={gi}>
+                        <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{group.label} ({group.hosts.length})</div>
+                        <List
+                          size="small"
+                          bordered
+                          dataSource={group.hosts}
+                          renderItem={(h) => (
+                            <List.Item
+                              actions={[
+                                <Button
+                                  size="small"
+                                  type="primary"
+                                  onClick={async () => {
+                                    try {
+                                      const devId = moduleName ? `${moduleName}_${h.ip}` : `tcp_${h.ip}_${h.port}`;
+                                      await connectDevice('module', h.ip, undefined, devId, 'auxiliary', moduleName || undefined, 'socket', { port: h.port });
+                                      message.success(`${group.label} ${h.ip}:${h.port} ${t('common.connect')}`);
+                                      closeAddModal();
+                                    } catch (e: any) {
+                                      message.error(e.response?.data?.detail || 'Connect failed');
+                                    }
+                                  }}
+                                >{t('common.connect')}</Button>,
+                              ]}
+                            >
+                              <div>
+                                <Tag color="cyan">{group.label}</Tag>
+                                <strong>{h.ip}</strong>:{h.port}
+                                {moduleName && <Tag style={{ marginLeft: 8 }}>{moduleName}</Tag>}
+                              </div>
+                            </List.Item>
+                          )}
+                        />
+                      </div>
+                    );
+                  })}
+
+                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && scannedBench.length === 0 && scannedVision.length === 0 && scannedDlt.length === 0 && scannedCustom.every(g => g.hosts.length === 0) && !scanning && (
                     <div style={{ color: '#666', textAlign: 'center', padding: 24 }}>
                       {t('device.noDevicesFound')}
                     </div>

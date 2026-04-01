@@ -92,10 +92,10 @@ def _list_plugin_modules() -> list[dict]:
             # Determine connect_type from constructor signature
             sig = inspect.signature(cls.__init__)
             params = [p for p in sig.parameters if p != "self"]
-            if "port" in params or "bps" in params:
-                connect_type = "serial"
-            elif "host" in params:
+            if "host" in params:
                 connect_type = "socket"
+            elif "port" in params or "bps" in params:
+                connect_type = "serial"
             else:
                 connect_type = "none"
             # Use a cleaner label: strip "Plugin" suffix if present
