@@ -13,6 +13,8 @@ import os
 import random
 import socket
 import struct
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -37,8 +39,6 @@ except ImportError:
 
 # ADB 경로 (adb_service와 동일)
 ADB_PATH = os.environ.get("ADB_PATH", "adb")
-
-import sys
 _NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 # scrcpy-server 탐색 순서
