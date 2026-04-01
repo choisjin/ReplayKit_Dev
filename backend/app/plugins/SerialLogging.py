@@ -306,6 +306,62 @@ class SerialLogging:
         return f"FAIL: keyword '{keyword}' not found within {int(timeout_sec)}s"
 
     # ------------------------------------------------------------------
+    # 명령어 전송
+    # ------------------------------------------------------------------
+
+    def SendCommand(self, command: str, encoding: str = "utf-8", append_newline: bool = True) -> str:
+        """시리얼 포트로 문자열 명령어를 전송합니다.
+
+        Args:
+            command: 전송할 명령어
+            encoding: 인코딩 (기본 utf-8)
+            append_newline: 개행 문자 자동 추가 (기본 True)
+
+        Returns:
+            결과 메시지
+        """
+        if not self._serial or not self._serial.is_open:
+            return "ERROR: 시리얼 포트가 연결되어 있지 않습니다. StartSave() 먼저 호출하세요."
+        data = command
+        if append_newline and not data.endswith("\n"):
+            data += "\n"
+        self._serial.write(data.encode(encoding))
+        logger.info("[SerialLogging] SendCommand: %s", command.strip())
+        return "OK"
+
+    def SendHex(self, hex_string: str) -> str:
+        """시리얼 포트로 HEX 바이트를 전송합니다.
+
+        Args:
+            hex_string: 전송할 HEX 문자열 (예: 'FF 01 A0')
+
+        Returns:
+            결과 메시지
+        """
+        if not self._serial or not self._serial.is_open:
+            return "ERROR: 시리얼 포트가 연결되어 있지 않습니다. StartSave() 먼저 호출하세요."
+        raw = bytes.fromhex(hex_string.replace(" ", ""))
+        self._serial.write(raw)
+        logger.info("[SerialLogging] SendHex: %d bytes", len(raw))
+        return f"Sent {len(raw)} bytes"
+
+    def SendAndWait(self, command: str, keyword: str, timeout: int = 10) -> str:
+        """명령어를 전송하고 키워드가 포함된 응답을 대기합니다 (블로킹).
+
+        Args:
+            command: 전송할 명령어
+            keyword: 응답에서 검색할 키워드 (공백 구분 시 AND 조건)
+            timeout: 최대 대기 시간 (초, 기본 10)
+
+        Returns:
+            "PASS: (매칭된 응답)" 또는 "FAIL: keyword not found within {timeout}s"
+        """
+        send_result = self.SendCommand(command)
+        if send_result != "OK":
+            return send_result
+        return self.WaitLog(keyword, timeout)
+
+    # ------------------------------------------------------------------
     # 상태 조회
     # ------------------------------------------------------------------
 

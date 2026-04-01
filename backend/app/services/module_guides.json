@@ -1514,6 +1514,28 @@
           "timeout": "최대 대기 시간 (초, 기본 30)"
         }
       },
+      "SendCommand": {
+        "description": "시리얼 포트로 문자열 명령어를 전송합니다.",
+        "params": {
+          "command": "전송할 명령어. 예: 'reboot', 'cat /proc/version'",
+          "encoding": "인코딩 (기본 utf-8)",
+          "append_newline": "개행 문자 자동 추가. true/false (기본 true)"
+        }
+      },
+      "SendHex": {
+        "description": "시리얼 포트로 HEX 바이트를 전송합니다.",
+        "params": {
+          "hex_string": "전송할 HEX 문자열. 예: 'FF 01 A0'"
+        }
+      },
+      "SendAndWait": {
+        "description": "명령어를 전송하고 키워드가 포함된 응답을 대기합니다 (블로킹).",
+        "params": {
+          "command": "전송할 명령어",
+          "keyword": "응답에서 검색할 키워드 (공백 구분 시 AND 조건)",
+          "timeout": "최대 대기 시간 (초, 기본 10)"
+        }
+      },
       "GetStatus": {
         "description": "현재 모듈 상태를 조회합니다 (포트, 캡처, 저장, 스텝마크 등).",
         "params": {}
