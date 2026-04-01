@@ -38,6 +38,9 @@ except ImportError:
 # ADB 경로 (adb_service와 동일)
 ADB_PATH = os.environ.get("ADB_PATH", "adb")
 
+import sys
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
 # scrcpy-server 탐색 순서
 _SERVER_FILENAME = "scrcpy-server"
 _SERVER_FILENAME_JAR = "scrcpy-server.jar"
@@ -172,7 +175,7 @@ class ScrcpyStream:
                 subprocess.run(
                     f"{ADB_PATH} -s {self.serial} forward --remove tcp:{self._port}",
                     shell=True, timeout=5,
-                    capture_output=True,
+                    capture_output=True, creationflags=_NO_WINDOW,
                 )
             except Exception:
                 pass
@@ -212,13 +215,13 @@ class ScrcpyStream:
         # 1. Push server to device (이미 존재하면 스킵)
         check = subprocess.run(
             f'{ADB_PATH} -s {serial} shell ls -l /data/local/tmp/scrcpy-server',
-            shell=True, capture_output=True, timeout=5,
+            shell=True, capture_output=True, timeout=5, creationflags=_NO_WINDOW,
         )
         if check.returncode != 0 or b"No such file" in check.stdout + check.stderr:
             logger.info("Pushing scrcpy-server to %s", serial)
             result = subprocess.run(
                 f'{ADB_PATH} -s {serial} push "{server_path}" /data/local/tmp/scrcpy-server',
-                shell=True, capture_output=True, timeout=30,
+                shell=True, capture_output=True, timeout=30, creationflags=_NO_WINDOW,
             )
             if result.returncode != 0:
                 raise RuntimeError(f"Push failed: {result.stderr.decode(errors='replace')}")
@@ -232,7 +235,7 @@ class ScrcpyStream:
 
         result = subprocess.run(
             f"{ADB_PATH} -s {serial} forward tcp:{self._port} localabstract:{abstract_name}",
-            shell=True, capture_output=True, timeout=10,
+            shell=True, capture_output=True, timeout=10, creationflags=_NO_WINDOW,
         )
         if result.returncode != 0:
             raise RuntimeError(f"Forward failed: {result.stderr.decode(errors='replace')}")
@@ -254,6 +257,7 @@ class ScrcpyStream:
         self._server_proc = subprocess.Popen(
             v2_cmd, shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            creationflags=_NO_WINDOW,
         )
 
         # 4. Connect to video socket (고정 대기 대신 즉시 폴링)
@@ -286,6 +290,7 @@ class ScrcpyStream:
         self._server_proc = subprocess.Popen(
             v1_cmd, shell=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            creationflags=_NO_WINDOW,
         )
 
     def _connect_video_socket(self, retries: int = 5, delay: float = 0.5) -> Optional[socket.socket]:

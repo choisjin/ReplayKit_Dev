@@ -513,6 +513,7 @@ async def trim_recording(
             [ffmpeg_path, "-i", str(filepath), "-ss", str(start), "-to", str(end),
              "-c", "copy", str(output_path), "-y"],
             check=True, capture_output=True,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=500, detail=f"ffmpeg error: {e.stderr.decode(errors='replace')[:300]}")

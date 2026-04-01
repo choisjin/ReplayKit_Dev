@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,6 +19,7 @@ from .module_service import execute_module_function
 
 logger = logging.getLogger(__name__)
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent.parent / "screenshots"
 
 
@@ -35,7 +37,7 @@ def _bg_cmd_start(cmd: str) -> str:
 
     def _run():
         try:
-            proc = subprocess.run(cmd, shell=True, capture_output=True, timeout=300)
+            proc = subprocess.run(cmd, shell=True, capture_output=True, timeout=300, creationflags=_NO_WINDOW)
             for enc in ("utf-8", "cp949", "euc-kr"):
                 try:
                     stdout = proc.stdout.decode(enc)
@@ -68,7 +70,7 @@ def bg_cmd_cleanup(task_id: str) -> None:
 def _cmd_run_sync(cmd: str, timeout: int = 30) -> tuple[str, str, int]:
     """CMD 명령어 실행 (subprocess). Windows cp949 인코딩 대응."""
     try:
-        proc = subprocess.run(cmd, shell=True, capture_output=True, timeout=timeout)
+        proc = subprocess.run(cmd, shell=True, capture_output=True, timeout=timeout, creationflags=_NO_WINDOW)
         # Windows cmd는 cp949, 실패 시 utf-8 폴백
         for enc in ("utf-8", "cp949", "euc-kr"):
             try:
