@@ -23,6 +23,7 @@ export function useWebcam() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (overlayAnimFrameRef.current) cancelAnimationFrame(overlayAnimFrameRef.current);
       if (webcamStreamRef.current) {
         webcamStreamRef.current.getTracks().forEach(t => t.stop());
         webcamStreamRef.current = null;
@@ -142,6 +143,95 @@ export function useWebcam() {
     await startWebcam(webcamIndex, res);
   }, [webcamIndex, startWebcam]);
 
+  // 타임스탬프 오버레이
+  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayAnimFrameRef = useRef<number>(0);
+  const [timestampPosition, setTimestampPosition] = useState<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'off'>('bottom-right');
+  const timestampPosRef = useRef(timestampPosition);
+  timestampPosRef.current = timestampPosition;
+
+  /**
+   * 웹캠 스트림 위에 타임스탬프를 오버레이하여 새 MediaStream을 반환.
+   * 우측 하단에 yyyy-MM-dd HH:mm:ss 형식으로 표시.
+   */
+  const createOverlayStream = useCallback((sourceStream: MediaStream): MediaStream => {
+    const videoTrack = sourceStream.getVideoTracks()[0];
+    if (!videoTrack) return sourceStream;
+
+    const settings = videoTrack.getSettings();
+    const w = settings.width || 640;
+    const h = settings.height || 480;
+
+    let canvas = overlayCanvasRef.current;
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      overlayCanvasRef.current = canvas;
+    }
+    canvas.width = w;
+    canvas.height = h;
+
+    const ctx = canvas.getContext('2d')!;
+    const video = webcamVideoRef.current;
+
+    const drawFrame = () => {
+      if (!video || video.paused || video.ended) {
+        overlayAnimFrameRef.current = requestAnimationFrame(drawFrame);
+        return;
+      }
+      ctx.drawImage(video, 0, 0, w, h);
+
+      const pos = timestampPosRef.current;
+      if (pos !== 'off') {
+        const now = new Date();
+        const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+        const fontSize = Math.max(14, Math.round(h * 0.03));
+        ctx.font = `${fontSize}px monospace`;
+        const metrics = ctx.measureText(ts);
+        const pad = 4;
+        const margin = 6;
+        const boxW = metrics.width + pad * 2;
+        const boxH = fontSize + pad * 2;
+
+        let bx: number, by: number, tx: number, ty: number;
+        if (pos === 'top-left') {
+          bx = margin; by = margin;
+          ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+          tx = margin + pad; ty = margin + pad;
+        } else if (pos === 'top-right') {
+          bx = w - boxW - margin; by = margin;
+          ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+          tx = w - margin - pad; ty = margin + pad;
+        } else if (pos === 'bottom-left') {
+          bx = margin; by = h - boxH - margin;
+          ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+          tx = margin + pad; ty = h - margin - pad;
+        } else {
+          bx = w - boxW - margin; by = h - boxH - margin;
+          ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+          tx = w - margin - pad; ty = h - margin - pad;
+        }
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        ctx.fillRect(bx, by, boxW, boxH);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(ts, tx, ty);
+      }
+
+      overlayAnimFrameRef.current = requestAnimationFrame(drawFrame);
+    };
+
+    overlayAnimFrameRef.current = requestAnimationFrame(drawFrame);
+    return canvas.captureStream(30);
+  }, []);
+
+  const stopOverlay = useCallback(() => {
+    if (overlayAnimFrameRef.current) {
+      cancelAnimationFrame(overlayAnimFrameRef.current);
+      overlayAnimFrameRef.current = 0;
+    }
+  }, []);
+
   // Auto-recording: resolve promise with blob when stopped
   const autoRecordResolveRef = useRef<((blob: Blob) => void) | null>(null);
 
@@ -151,14 +241,17 @@ export function useWebcam() {
     if (webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') {
       webcamRecorderRef.current.stop();
     }
+    stopOverlay();
     webcamChunksRef.current = [];
+    const overlayStream = createOverlayStream(webcamStreamRef.current);
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
       ? 'video/webm;codecs=vp9' : 'video/webm';
-    const recorder = new MediaRecorder(webcamStreamRef.current, { mimeType });
+    const recorder = new MediaRecorder(overlayStream, { mimeType });
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) webcamChunksRef.current.push(e.data);
     };
     recorder.onstop = () => {
+      stopOverlay();
       const blob = new Blob(webcamChunksRef.current, { type: mimeType });
       webcamChunksRef.current = [];
       if (autoRecordResolveRef.current) {
@@ -170,7 +263,7 @@ export function useWebcam() {
     webcamRecorderRef.current = recorder;
     setWebcamRecording(true);
     return true;
-  }, []);
+  }, [createOverlayStream, stopOverlay]);
 
   const stopRecordingAuto = useCallback((): Promise<Blob> => {
     return new Promise((resolve) => {
@@ -211,15 +304,18 @@ export function useWebcam() {
       }
     }
 
+    stopOverlay();
     webcamChunksRef.current = [];
+    const overlayStream = createOverlayStream(webcamStreamRef.current);
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
       ? 'video/webm;codecs=vp9'
       : 'video/webm';
-    const recorder = new MediaRecorder(webcamStreamRef.current, { mimeType });
+    const recorder = new MediaRecorder(overlayStream, { mimeType });
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) webcamChunksRef.current.push(e.data);
     };
     recorder.onstop = async () => {
+      stopOverlay();
       const blob = new Blob(webcamChunksRef.current, { type: mimeType });
       webcamChunksRef.current = [];
       try {
@@ -245,7 +341,7 @@ export function useWebcam() {
     webcamRecorderRef.current = recorder;
     setWebcamRecording(true);
     message.success(t('webcam.recordStart'));
-  }, [t]);
+  }, [t, createOverlayStream, stopOverlay]);
 
   const stopWebcamRecording = useCallback(() => {
     if (webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') {
@@ -311,6 +407,8 @@ export function useWebcam() {
     applyWebcamSetting,
     stopWebcam,
     setUploadFn,
+    timestampPosition,
+    setTimestampPosition,
     startRecordingAuto,
     stopRecordingAuto,
     pauseRecording: useCallback(() => {

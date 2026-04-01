@@ -26,6 +26,7 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
     webcamResolution, webcamResolutions,
     handleWebcamChange, handleWebcamResolutionChange,
     startWebcamRecording, stopWebcamRecording, loadWebcamCapabilities, applyWebcamSetting,
+    timestampPosition, setTimestampPosition,
   } = webcam;
 
   const [minimized, setMinimized] = useState(false);
@@ -178,6 +179,24 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
                   />
                 </div>
               )}
+              {/* 타임스탬프 위치 */}
+              <div style={{ marginBottom: 6 }}>
+                <div style={{ fontSize: 11, marginBottom: 2, color: subColor }}>{t('webcam.timestampPosition')}</div>
+                <Select
+                  size="small"
+                  value={timestampPosition}
+                  onChange={setTimestampPosition}
+                  style={{ width: '100%' }}
+                  getPopupContainer={getContainer}
+                  options={[
+                    { value: 'top-left', label: '↖ Top Left' },
+                    { value: 'top-right', label: '↗ Top Right' },
+                    { value: 'bottom-left', label: '↙ Bottom Left' },
+                    { value: 'bottom-right', label: '↘ Bottom Right' },
+                    { value: 'off', label: t('webcam.timestampOff') },
+                  ]}
+                />
+              </div>
               {Object.keys(webcamCapabilities).length === 0 && webcamResolutions.length === 0 ? (
                 <div style={{ color: subColor, fontSize: 11, textAlign: 'center', padding: 4 }}>{t('webcam.noSettings')}</div>
               ) : (
