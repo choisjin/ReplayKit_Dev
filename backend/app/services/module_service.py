@@ -525,7 +525,9 @@ def _execute_sync(module_name: str, function_name: str, args: dict,
             raise ValueError(f"Missing required parameter: {pname}")
 
     # 런 폴더 활성 시 빈 경로 파라미터를 런 폴더 logs/로 리다이렉트
-    _redirect_path_args_to_run_dir(call_args, module_name, function_name)
+    # DLTLogging/SerialLogging은 자체 런 폴더 로직이 있으므로 제외
+    if module_name not in ("DLTLogging", "SerialLogging"):
+        _redirect_path_args_to_run_dir(call_args, module_name, function_name)
 
     result = func(**call_args)
     return result
@@ -568,7 +570,7 @@ def _redirect_path_args_to_run_dir(call_args: dict, module_name: str, function_n
                 ext = ".log"
                 if "csv" in param_name:
                     ext = ".csv"
-                elif any(k in param_name for k in ("image", "save_path")):
+                elif "image" in param_name:
                     ext = ".png"
                 call_args[param_name] = str(log_dir / f"{safe_mod}_{safe_func}_{ts}{ext}")
 
