@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import socket
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -420,8 +421,9 @@ def _get_arp_hosts() -> set[str]:
     import subprocess
     hosts: set[str] = set()
     try:
+        _nw = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
         result = subprocess.run("arp -a", capture_output=True, text=True,
-                                shell=True, timeout=5)
+                                shell=True, timeout=5, creationflags=_nw)
         for line in result.stdout.splitlines():
             m = re.search(r"(\d+\.\d+\.\d+\.\d+)", line)
             if m:

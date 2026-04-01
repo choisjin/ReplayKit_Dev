@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -44,6 +45,9 @@ def resolve_sf_display_id(dev_info: dict | None, logical_id: int | None) -> str 
     return None
 
 
+_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+
 def _run_sync(cmd: str, timeout: int = 10) -> tuple[str, str, int]:
     """Run a command synchronously and return (stdout, stderr, returncode)."""
     try:
@@ -52,6 +56,7 @@ def _run_sync(cmd: str, timeout: int = 10) -> tuple[str, str, int]:
             shell=True,
             capture_output=True,
             timeout=timeout,
+            creationflags=_NO_WINDOW,
         )
         return (
             proc.stdout.decode(errors="replace"),
@@ -70,6 +75,7 @@ def _run_sync_bytes(cmd: str, timeout: int = 10) -> tuple[bytes, str, int]:
             shell=True,
             capture_output=True,
             timeout=timeout,
+            creationflags=_NO_WINDOW,
         )
         return (
             proc.stdout,
