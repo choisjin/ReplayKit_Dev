@@ -5,7 +5,7 @@ import json as _json
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 from pydantic import BaseModel
 from typing import Optional
 
@@ -20,14 +20,16 @@ _SCAN_SETTINGS_FILE = Path(__file__).resolve().parent.parent.parent / "scan_sett
 
 _DEFAULT_SCAN_SETTINGS = {
     "builtin": {
-        "adb": True,
-        "serial": True,
-        "hkmc": True,
-        "dlt": True,
-        "bench": True,
-        "vision_camera": True,
+        "adb":            {"enabled": True,  "module": ""},
+        "serial":         {"enabled": True,  "module": "SerialLogging"},
+        "hkmc":           {"enabled": True,  "module": ""},
+        "dlt":            {"enabled": True,  "module": "DLTLogging"},
+        "bench":          {"enabled": True,  "module": "CCIC_BENCH"},
+        "vision_camera":  {"enabled": False, "module": "VisionCamera"},
     },
-    "custom": [],  # [{"label": "My TCP", "type": "tcp", "port": 8080, "enabled": True}, ...]
+    # type: "tcp" | "udp"
+    # [{"label": "MLP", "type": "tcp", "port": 5001, "module": "MLP", "enabled": true}, ...]
+    "custom": [],
 }
 
 
@@ -129,7 +131,7 @@ async def get_scan_settings():
 
 
 @router.post("/scan-settings")
-async def save_scan_settings(body: dict):
+async def save_scan_settings(body: dict = Body(...)):
     """스캔 설정 저장."""
     _save_scan_settings(body)
     return {"status": "ok"}
@@ -145,27 +147,38 @@ async def scan_ports():
     builtin = settings.get("builtin", {})
     custom = settings.get("custom", [])
 
+    def _enabled(key: str) -> bool:
+        v = builtin.get(key, {})
+        if isinstance(v, dict):
+            return v.get("enabled", True)
+        return bool(v)  # 레거시 호환 (단순 bool)
+
     tasks: dict[str, asyncio.Task] = {}
 
-    if builtin.get("adb", True):
+    if _enabled("adb"):
         tasks["adb_devices"] = asyncio.ensure_future(adb.list_devices())
-    if builtin.get("serial", True):
+    if _enabled("serial"):
         tasks["serial_ports"] = asyncio.ensure_future(dm.scan_serial())
-    if builtin.get("hkmc", True):
+    if _enabled("hkmc"):
         tasks["hkmc_devices"] = asyncio.ensure_future(dm.scan_hkmc())
-    if builtin.get("bench", True):
+    if _enabled("bench"):
         tasks["bench_devices"] = asyncio.ensure_future(dm.scan_bench())
-    if builtin.get("vision_camera", True):
+    if _enabled("vision_camera"):
         tasks["vision_cameras"] = asyncio.ensure_future(dm.scan_vision_cameras())
-    if builtin.get("dlt", True):
+    if _enabled("dlt"):
         tasks["dlt_devices"] = asyncio.ensure_future(dm.scan_dlt())
 
-    # 커스텀 TCP 포트 스캔
+    # 커스텀 TCP/UDP 포트 스캔
     custom_tasks: list[tuple[str, asyncio.Task]] = []
     for entry in custom:
-        if entry.get("enabled") and entry.get("type") == "tcp" and entry.get("port"):
-            label = entry.get("label", f"TCP:{entry['port']}")
-            custom_tasks.append((label, asyncio.ensure_future(scan_tcp_port(int(entry["port"])))))
+        if entry.get("enabled") and entry.get("port"):
+            label = entry.get("label", f"{entry.get('type','tcp').upper()}:{entry['port']}")
+            proto = entry.get("type", "tcp")
+            port = int(entry["port"])
+            if proto == "udp":
+                custom_tasks.append((label, asyncio.ensure_future(dm.scan_udp_port(port))))
+            else:
+                custom_tasks.append((label, asyncio.ensure_future(scan_tcp_port(port))))
 
     # 모든 태스크 병렬 실행
     all_keys = list(tasks.keys())

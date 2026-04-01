@@ -208,12 +208,19 @@ export default function DevicePage() {
 
   // Scan settings modal
   const [scanSettingsOpen, setScanSettingsOpen] = useState(false);
-  const [scanBuiltin, setScanBuiltin] = useState<Record<string, boolean>>({
-    adb: true, serial: true, hkmc: true, dlt: true, bench: true, vision_camera: true,
+  const [scanBuiltin, setScanBuiltin] = useState<Record<string, { enabled: boolean; module: string }>>({
+    adb: { enabled: true, module: '' },
+    serial: { enabled: true, module: 'SerialLogging' },
+    hkmc: { enabled: true, module: '' },
+    dlt: { enabled: true, module: 'DLTLogging' },
+    bench: { enabled: true, module: 'CCIC_BENCH' },
+    vision_camera: { enabled: false, module: 'VisionCamera' },
   });
-  const [scanCustom, setScanCustom] = useState<{ label: string; type: string; port: number; enabled: boolean }[]>([]);
+  const [scanCustom, setScanCustom] = useState<{ label: string; type: string; port: number; module: string; enabled: boolean }[]>([]);
   const [newCustomLabel, setNewCustomLabel] = useState('');
   const [newCustomPort, setNewCustomPort] = useState<number | null>(null);
+  const [newCustomType, setNewCustomType] = useState<string>('tcp');
+  const [newCustomModule, setNewCustomModule] = useState<string>('');
 
   const getModuleInfo = (moduleName?: string): ModuleInfo | undefined => {
     if (!moduleName) return undefined;
@@ -243,9 +250,14 @@ export default function DevicePage() {
   };
 
   const openScanSettings = async () => {
+    // 모듈 목록 로드 (커스텀 스캔에서 모듈 선택용)
+    try {
+      const modRes = await deviceApi.listModules();
+      setModules((modRes.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => a.label.localeCompare(b.label)));
+    } catch { /* ignore */ }
     try {
       const res = await deviceApi.getScanSettings();
-      setScanBuiltin(res.data.builtin || { adb: true, serial: true, hkmc: true, dlt: true, bench: true, vision_camera: true });
+      setScanBuiltin(res.data.builtin || {});
       setScanCustom(res.data.custom || []);
     } catch { /* use defaults */ }
     setScanSettingsOpen(true);
@@ -263,13 +275,15 @@ export default function DevicePage() {
   const addCustomScan = () => {
     if (!newCustomPort) return;
     setScanCustom([...scanCustom, {
-      label: newCustomLabel || `TCP:${newCustomPort}`,
-      type: 'tcp',
+      label: newCustomLabel || `${newCustomType.toUpperCase()}:${newCustomPort}`,
+      type: newCustomType,
       port: newCustomPort,
+      module: newCustomModule,
       enabled: true,
     }]);
     setNewCustomLabel('');
     setNewCustomPort(null);
+    setNewCustomModule('');
   };
 
   const openAddModal = (category: 'primary' | 'auxiliary') => {
@@ -1245,7 +1259,7 @@ export default function DevicePage() {
       >
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>{t('device.builtinScan')}</div>
-          <Row gutter={[8, 8]}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px' }}>
             {[
               { key: 'adb', label: 'ADB (USB/WiFi)' },
               { key: 'serial', label: 'Serial (COM)' },
@@ -1253,23 +1267,35 @@ export default function DevicePage() {
               { key: 'dlt', label: 'DLT (TCP 3490)' },
               { key: 'bench', label: 'Bench (UDP 25000)' },
               { key: 'vision_camera', label: 'Vision Camera (GigE)' },
-            ].map(item => (
-              <Col span={12} key={item.key}>
-                <Checkbox
-                  checked={scanBuiltin[item.key] !== false}
-                  onChange={e => setScanBuiltin({ ...scanBuiltin, [item.key]: e.target.checked })}
-                >
-                  {item.label}
-                </Checkbox>
-              </Col>
-            ))}
-          </Row>
+            ].map(item => {
+              const v = scanBuiltin[item.key] || { enabled: true, module: '' };
+              return (
+                <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Checkbox
+                    checked={v.enabled !== false}
+                    onChange={e => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, enabled: e.target.checked } })}
+                  >
+                    {item.label}
+                  </Checkbox>
+                  <Select
+                    size="small"
+                    allowClear
+                    placeholder="Module"
+                    value={v.module || undefined}
+                    onChange={val => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, module: val || '' } })}
+                    style={{ width: 130, flexShrink: 0 }}
+                    options={modules.map(m => ({ label: m.label, value: m.name }))}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>{t('device.customScan')}</div>
           {scanCustom.map((entry, idx) => (
-            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <Checkbox
                 checked={entry.enabled}
                 onChange={e => {
@@ -1278,29 +1304,43 @@ export default function DevicePage() {
                   setScanCustom(next);
                 }}
               />
-              <Tag>{entry.type.toUpperCase()}</Tag>
-              <span style={{ flex: 1 }}>{entry.label} (:{entry.port})</span>
+              <Tag color={entry.type === 'udp' ? 'orange' : 'blue'}>{entry.type.toUpperCase()}</Tag>
+              <span>{entry.label} (:{entry.port})</span>
+              <Tag style={{ marginLeft: 'auto' }}>{entry.module || '-'}</Tag>
               <Button size="small" danger onClick={() => setScanCustom(scanCustom.filter((_, i) => i !== idx))}>
                 <DeleteOutlined />
               </Button>
             </div>
           ))}
-          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <Input
-              placeholder={t('device.customLabel')}
-              value={newCustomLabel}
-              onChange={e => setNewCustomLabel(e.target.value)}
-              style={{ flex: 1 }}
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+            <Select size="small" value={newCustomType} onChange={setNewCustomType} style={{ width: 80 }}
+              options={[{ label: 'TCP', value: 'tcp' }, { label: 'UDP', value: 'udp' }]}
             />
             <InputNumber
+              size="small"
               placeholder={t('device.customPort')}
               value={newCustomPort}
               onChange={v => setNewCustomPort(v)}
-              min={1}
-              max={65535}
+              min={1} max={65535}
+              style={{ width: 90 }}
+            />
+            <Input
+              size="small"
+              placeholder={t('device.customLabel')}
+              value={newCustomLabel}
+              onChange={e => setNewCustomLabel(e.target.value)}
               style={{ width: 120 }}
             />
-            <Button icon={<PlusOutlined />} onClick={addCustomScan} disabled={!newCustomPort}>
+            <Select
+              size="small"
+              allowClear
+              placeholder="Module"
+              value={newCustomModule || undefined}
+              onChange={v => setNewCustomModule(v || '')}
+              style={{ width: 130 }}
+              options={modules.map(m => ({ label: m.label, value: m.name }))}
+            />
+            <Button size="small" icon={<PlusOutlined />} onClick={addCustomScan} disabled={!newCustomPort}>
               {t('common.add')}
             </Button>
           </div>

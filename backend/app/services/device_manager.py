@@ -7,6 +7,7 @@ import functools
 import json
 import logging
 import re
+import socket
 from pathlib import Path
 from typing import Optional
 
@@ -201,6 +202,81 @@ async def scan_tcp_port(
     results = await asyncio.gather(*tasks)
     found = [r for r in results if r is not None]
     logger.info("TCP port %d scan: found %d hosts", port, len(found))
+    return found
+
+
+# ── 범용 UDP 포트 스캔 ──────────────────────────────────────────────
+
+async def _probe_udp_port(
+    ip: str, port: int, timeout: float, semaphore: asyncio.Semaphore
+) -> dict | None:
+    """단일 IP:Port에 UDP 프로브 전송 후 응답 확인."""
+    async with semaphore:
+        try:
+            loop = asyncio.get_event_loop()
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(timeout)
+            sock.setblocking(False)
+            # 빈 패킷 전송 후 응답 대기
+            await loop.sock_sendto(sock, b"\x00", (ip, port))
+            try:
+                data = await asyncio.wait_for(
+                    loop.sock_recv(sock, 1024), timeout=timeout
+                )
+                sock.close()
+                if data:
+                    return {"ip": ip, "port": port}
+            except (asyncio.TimeoutError, Exception):
+                sock.close()
+        except Exception:
+            pass
+    return None
+
+
+async def _scan_udp_port(
+    port: int,
+    connect_timeout: float = 0.5,
+    max_concurrent: int = 100,
+) -> list[dict]:
+    """LAN 서브넷에서 특정 UDP 포트에 응답하는 호스트를 탐지."""
+    import ipaddress
+    import ifaddr
+
+    local_ips: set[str] = {"127.0.0.1"}
+    subnets: list[ipaddress.IPv4Network] = []
+
+    for adapter in ifaddr.get_adapters():
+        for ip_info in adapter.ips:
+            if not isinstance(ip_info.ip, str):
+                continue
+            ip_str = ip_info.ip
+            prefix = ip_info.network_prefix
+            if ip_str.startswith("127.") or ip_str.startswith("169.254."):
+                continue
+            local_ips.add(ip_str)
+            try:
+                net = ipaddress.IPv4Network(f"{ip_str}/{prefix}", strict=False)
+                if net.prefixlen >= 20:
+                    subnets.append(net)
+            except ValueError:
+                pass
+
+    unique = list({str(s): s for s in subnets}.values())
+    candidate_ips: set[str] = set()
+    for subnet in unique:
+        for host in subnet.hosts():
+            ip_str = str(host)
+            if ip_str not in local_ips:
+                candidate_ips.add(ip_str)
+
+    if not candidate_ips:
+        return []
+
+    semaphore = asyncio.Semaphore(max_concurrent)
+    tasks = [_probe_udp_port(ip, port, connect_timeout, semaphore) for ip in candidate_ips]
+    results = await asyncio.gather(*tasks)
+    found = [r for r in results if r is not None]
+    logger.info("UDP port %d scan: found %d hosts", port, len(found))
     return found
 
 
@@ -894,6 +970,10 @@ class DeviceManager:
     async def scan_dlt(self) -> list[dict]:
         """TCP 포트 스캔으로 LAN 상의 DLT 데몬 탐지."""
         return await _scan_dlt_tcp()
+
+    async def scan_udp_port(self, port: int) -> list[dict]:
+        """LAN에서 특정 UDP 포트 응답 호스트 탐지."""
+        return await _scan_udp_port(port)
 
     async def scan_vision_cameras(self) -> list[dict]:
         """GigE Vision 카메라 스캔 (Harvester 기반)."""
