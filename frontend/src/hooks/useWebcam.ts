@@ -147,8 +147,14 @@ export function useWebcam() {
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayAnimFrameRef = useRef<number>(0);
   const [timestampPosition, setTimestampPosition] = useState<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'off'>('bottom-right');
+  const [timestampColor, setTimestampColor] = useState('#ffffff');
+  const [timestampFontSize, setTimestampFontSize] = useState(0); // 0 = auto
   const timestampPosRef = useRef(timestampPosition);
+  const timestampColorRef = useRef(timestampColor);
+  const timestampFontSizeRef = useRef(timestampFontSize);
   timestampPosRef.current = timestampPosition;
+  timestampColorRef.current = timestampColor;
+  timestampFontSizeRef.current = timestampFontSize;
 
   /**
    * 웹캠 스트림 위에 타임스탬프를 오버레이하여 새 MediaStream을 반환.
@@ -185,7 +191,8 @@ export function useWebcam() {
         const now = new Date();
         const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 
-        const fontSize = Math.max(14, Math.round(h * 0.03));
+        const fontSize = timestampFontSizeRef.current || Math.max(14, Math.round(h * 0.03));
+        const color = timestampColorRef.current || '#ffffff';
         ctx.font = `${fontSize}px monospace`;
         const metrics = ctx.measureText(ts);
         const pad = 4;
@@ -214,7 +221,7 @@ export function useWebcam() {
 
         ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
         ctx.fillRect(bx, by, boxW, boxH);
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = color;
         ctx.fillText(ts, tx, ty);
       }
 
@@ -409,6 +416,10 @@ export function useWebcam() {
     setUploadFn,
     timestampPosition,
     setTimestampPosition,
+    timestampColor,
+    setTimestampColor,
+    timestampFontSize,
+    setTimestampFontSize,
     startRecordingAuto,
     stopRecordingAuto,
     pauseRecording: useCallback(() => {
