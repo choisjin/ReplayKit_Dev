@@ -388,6 +388,68 @@ async def _scan_dlt_tcp(
     return deduped
 
 
+# ── SmartBench 자동 탐지 ──
+# 조건: 로컬 PC에 SMARTBENCH_LOCAL_IP 가 있으면 → SMARTBENCH_HOST:PORT TCP 연결 시도
+SMARTBENCH_LOCAL_IP = "192.167.0.4"
+SMARTBENCH_HOST = "192.167.0.5"
+SMARTBENCH_PORT = 8000
+
+
+async def _scan_smartbench() -> list[dict]:
+    """SmartBench 장비 탐지: 로컬 인터페이스 확인 → TCP 프로브."""
+    import ifaddr
+
+    # 1) 로컬 PC에 SMARTBENCH_LOCAL_IP 인터페이스가 있는지 확인
+    has_local_ip = False
+    for adapter in ifaddr.get_adapters():
+        for ip_info in adapter.ips:
+            if isinstance(ip_info.ip, str) and ip_info.ip == SMARTBENCH_LOCAL_IP:
+                has_local_ip = True
+                break
+        if has_local_ip:
+            break
+
+    if not has_local_ip:
+        logger.debug("SmartBench scan: local IP %s not found, skipping", SMARTBENCH_LOCAL_IP)
+        return []
+
+    # 2) SmartBench TCP 연결 시도
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, _probe_smartbench_sync, SMARTBENCH_HOST, SMARTBENCH_PORT, 2.0,
+    )
+    if result:
+        logger.info("SmartBench scan: found %s:%d", SMARTBENCH_HOST, SMARTBENCH_PORT)
+        return [result]
+    logger.debug("SmartBench scan: %s:%d not reachable", SMARTBENCH_HOST, SMARTBENCH_PORT)
+    return []
+
+
+def _probe_smartbench_sync(ip: str, port: int, timeout: float) -> dict | None:
+    """SmartBench TCP 연결 프로브."""
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(timeout)
+        sock.connect((ip, port))
+        sock.close()
+        sock = None
+        return {
+            "ip": ip,
+            "port": port,
+            "label": "SmartBench",
+            "module": "SmartBench",
+        }
+    except Exception:
+        return None
+    finally:
+        if sock:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+
 BENCH_UDP_SCAN_PORTS = [25000]
 BENCH_UDP_PROBE = bytes([0x55, 0xAA, 100, 0, 0x20, 0x02, 0x00, 0x00])
 
@@ -981,6 +1043,10 @@ class DeviceManager:
     async def scan_bench(self) -> list[dict]:
         """LAN에서 네트워크 호스트 탐색 (ARP + ping + UDP 프로브)."""
         return await _scan_network_hosts()
+
+    async def scan_smartbench(self) -> list[dict]:
+        """SmartBench 장비 탐지 (192.167.0.x 네트워크)."""
+        return await _scan_smartbench()
 
     async def scan_dlt(self) -> list[dict]:
         """TCP 포트 스캔으로 LAN 상의 DLT 데몬 탐지."""

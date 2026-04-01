@@ -168,6 +168,8 @@ async def scan_ports():
         tasks["vision_cameras"] = asyncio.ensure_future(dm.scan_vision_cameras())
     if _enabled("dlt"):
         tasks["dlt_devices"] = asyncio.ensure_future(dm.scan_dlt())
+    if _enabled("smartbench"):
+        tasks["smartbench_devices"] = asyncio.ensure_future(dm.scan_smartbench())
 
     # 커스텀 TCP/UDP 포트 스캔
     custom_tasks: list[tuple[str, asyncio.Task]] = []
@@ -197,6 +199,7 @@ async def scan_ports():
         "bench_devices": [],
         "vision_cameras": [],
         "dlt_devices": [],
+        "smartbench_devices": [],
         "custom_results": [],
     }
     for key, result in zip(all_keys, results):
