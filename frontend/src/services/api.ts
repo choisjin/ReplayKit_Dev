@@ -10,6 +10,8 @@ export const deviceApi = {
   getInfo: (deviceId: string) => api.get(`/device/info/${deviceId}`),
   screenshot: (deviceId: string, screenType?: string) => api.get(`/device/screenshot/${deviceId}`, { params: { fmt: 'jpeg', screen_type: screenType || 'front_center' } }),
   scan: () => api.get('/device/scan'),
+  getScanSettings: () => api.get('/device/scan-settings'),
+  saveScanSettings: (settings: any) => api.post('/device/scan-settings', settings),
   connect: (type: string, address: string, baudrate?: number, name?: string, category?: string, module?: string, connect_type?: string, extra_fields?: Record<string, any>, device_id?: string, port?: number) =>
     api.post('/device/connect', { type, address, baudrate, name, category, module, connect_type, extra_fields, device_id, port }),
   listHkmcKeys: () => api.get('/device/hkmc-keys'),

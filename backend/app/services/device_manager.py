@@ -135,6 +135,75 @@ async def _scan_hkmc_tcp(
     return deduped
 
 
+# ── 범용 TCP 포트 스캔 ──────────────────────────────────────────────
+
+async def _probe_tcp_port(
+    ip: str, port: int, timeout: float, semaphore: asyncio.Semaphore
+) -> dict | None:
+    """단일 IP:Port에 TCP 연결 시도."""
+    async with semaphore:
+        try:
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(ip, port), timeout=timeout
+            )
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+            return {"ip": ip, "port": port}
+        except Exception:
+            pass
+    return None
+
+
+async def scan_tcp_port(
+    port: int,
+    connect_timeout: float = 0.3,
+    max_concurrent: int = 100,
+) -> list[dict]:
+    """LAN 서브넷에서 특정 TCP 포트가 열린 호스트를 탐지."""
+    import ipaddress
+    import ifaddr
+
+    local_ips: set[str] = {"127.0.0.1"}
+    subnets: list[ipaddress.IPv4Network] = []
+
+    for adapter in ifaddr.get_adapters():
+        for ip_info in adapter.ips:
+            if not isinstance(ip_info.ip, str):
+                continue
+            ip_str = ip_info.ip
+            prefix = ip_info.network_prefix
+            if ip_str.startswith("127.") or ip_str.startswith("169.254."):
+                continue
+            local_ips.add(ip_str)
+            try:
+                net = ipaddress.IPv4Network(f"{ip_str}/{prefix}", strict=False)
+                if net.prefixlen >= 20:
+                    subnets.append(net)
+            except ValueError:
+                pass
+
+    unique = list({str(s): s for s in subnets}.values())
+    candidate_ips: set[str] = set()
+    for subnet in unique:
+        for host in subnet.hosts():
+            ip_str = str(host)
+            if ip_str not in local_ips:
+                candidate_ips.add(ip_str)
+
+    if not candidate_ips:
+        return []
+
+    semaphore = asyncio.Semaphore(max_concurrent)
+    tasks = [_probe_tcp_port(ip, port, connect_timeout, semaphore) for ip in candidate_ips]
+    results = await asyncio.gather(*tasks)
+    found = [r for r in results if r is not None]
+    logger.info("TCP port %d scan: found %d hosts", port, len(found))
+    return found
+
+
 # ── DLT 데몬 TCP 스캔 ──────────────────────────────────────────────
 
 DLT_SCAN_PORTS = [3490]

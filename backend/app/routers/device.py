@@ -1,7 +1,9 @@
 """Device management API routes."""
 
 import base64
+import json as _json
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -12,6 +14,34 @@ logger = logging.getLogger(__name__)
 from ..dependencies import adb_service as adb, device_manager as dm
 from ..services.adb_service import resolve_sf_display_id
 from ..services.module_service import list_available_modules, get_module_functions, execute_module_function
+
+# ── 스캔 설정 ──────────────────────────────────────────────
+_SCAN_SETTINGS_FILE = Path(__file__).resolve().parent.parent.parent / "scan_settings.json"
+
+_DEFAULT_SCAN_SETTINGS = {
+    "builtin": {
+        "adb": True,
+        "serial": True,
+        "hkmc": True,
+        "dlt": True,
+        "bench": True,
+        "vision_camera": True,
+    },
+    "custom": [],  # [{"label": "My TCP", "type": "tcp", "port": 8080, "enabled": True}, ...]
+}
+
+
+def _load_scan_settings() -> dict:
+    if _SCAN_SETTINGS_FILE.exists():
+        try:
+            return _json.loads(_SCAN_SETTINGS_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return dict(_DEFAULT_SCAN_SETTINGS)
+
+
+def _save_scan_settings(settings: dict) -> None:
+    _SCAN_SETTINGS_FILE.write_text(_json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _parse_adb_display_id(screen_type: str | None) -> int | None:
@@ -92,27 +122,82 @@ async def list_devices():
     }
 
 
+@router.get("/scan-settings")
+async def get_scan_settings():
+    """현재 스캔 설정 조회."""
+    return _load_scan_settings()
+
+
+@router.post("/scan-settings")
+async def save_scan_settings(body: dict):
+    """스캔 설정 저장."""
+    _save_scan_settings(body)
+    return {"status": "ok"}
+
+
 @router.get("/scan")
 async def scan_ports():
-    """Scan all available connection targets: ADB + serial + HKMC (TCP) + UDP bench + VisionCamera + DLT."""
+    """Scan available connection targets — 스캔 설정에 따라 활성화된 항목만 실행."""
     import asyncio
-    adb_task = adb.list_devices()
-    serial_task = dm.scan_serial()
-    hkmc_task = dm.scan_hkmc()
-    bench_task = dm.scan_bench()
-    vision_task = dm.scan_vision_cameras()
-    dlt_task = dm.scan_dlt()
-    adb_devices, serial_ports, hkmc_devices, bench_devices, vision_cameras, dlt_devices = await asyncio.gather(
-        adb_task, serial_task, hkmc_task, bench_task, vision_task, dlt_task
-    )
-    return {
-        "adb_devices": [d.to_dict() for d in adb_devices],
-        "serial_ports": serial_ports,
-        "hkmc_devices": hkmc_devices,
-        "bench_devices": bench_devices,
-        "vision_cameras": vision_cameras,
-        "dlt_devices": dlt_devices,
+    from ..services.device_manager import scan_tcp_port
+
+    settings = _load_scan_settings()
+    builtin = settings.get("builtin", {})
+    custom = settings.get("custom", [])
+
+    tasks: dict[str, asyncio.Task] = {}
+
+    if builtin.get("adb", True):
+        tasks["adb_devices"] = asyncio.ensure_future(adb.list_devices())
+    if builtin.get("serial", True):
+        tasks["serial_ports"] = asyncio.ensure_future(dm.scan_serial())
+    if builtin.get("hkmc", True):
+        tasks["hkmc_devices"] = asyncio.ensure_future(dm.scan_hkmc())
+    if builtin.get("bench", True):
+        tasks["bench_devices"] = asyncio.ensure_future(dm.scan_bench())
+    if builtin.get("vision_camera", True):
+        tasks["vision_cameras"] = asyncio.ensure_future(dm.scan_vision_cameras())
+    if builtin.get("dlt", True):
+        tasks["dlt_devices"] = asyncio.ensure_future(dm.scan_dlt())
+
+    # 커스텀 TCP 포트 스캔
+    custom_tasks: list[tuple[str, asyncio.Task]] = []
+    for entry in custom:
+        if entry.get("enabled") and entry.get("type") == "tcp" and entry.get("port"):
+            label = entry.get("label", f"TCP:{entry['port']}")
+            custom_tasks.append((label, asyncio.ensure_future(scan_tcp_port(int(entry["port"])))))
+
+    # 모든 태스크 병렬 실행
+    all_keys = list(tasks.keys())
+    all_futures = list(tasks.values())
+    for label, fut in custom_tasks:
+        all_keys.append(f"custom_{label}")
+        all_futures.append(fut)
+
+    results = await asyncio.gather(*all_futures, return_exceptions=True)
+
+    response: dict = {
+        "adb_devices": [],
+        "serial_ports": [],
+        "hkmc_devices": [],
+        "bench_devices": [],
+        "vision_cameras": [],
+        "dlt_devices": [],
+        "custom_results": [],
     }
+    for key, result in zip(all_keys, results):
+        if isinstance(result, Exception):
+            logger.warning("Scan %s failed: %s", key, result)
+            continue
+        if key == "adb_devices":
+            response["adb_devices"] = [d.to_dict() for d in result]
+        elif key.startswith("custom_"):
+            label = key[len("custom_"):]
+            response["custom_results"].append({"label": label, "hosts": result})
+        else:
+            response[key] = result
+
+    return response
 
 
 @router.get("/local-interfaces")

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Card, Checkbox, Col, Input, InputNumber, List, Modal, Row, Select, Space, Table, Tabs, Tag, message } from 'antd';
-import { ReloadOutlined, MobileOutlined, PlusOutlined, DisconnectOutlined, DeleteOutlined, UsbOutlined, WifiOutlined, SearchOutlined, EditOutlined, SyncOutlined, ApiOutlined, LinkOutlined } from '@ant-design/icons';
+import { ReloadOutlined, MobileOutlined, PlusOutlined, DisconnectOutlined, DeleteOutlined, UsbOutlined, WifiOutlined, SearchOutlined, EditOutlined, SyncOutlined, ApiOutlined, LinkOutlined, SettingOutlined } from '@ant-design/icons';
 import { useDevice, ManagedDevice } from '../context/DeviceContext';
 import { deviceApi } from '../services/api';
 import { useTranslation } from '../i18n';
@@ -206,6 +206,15 @@ export default function DevicePage() {
   const [editExtraFields, setEditExtraFields] = useState<Record<string, any>>({});
   const [editSaving, setEditSaving] = useState(false);
 
+  // Scan settings modal
+  const [scanSettingsOpen, setScanSettingsOpen] = useState(false);
+  const [scanBuiltin, setScanBuiltin] = useState<Record<string, boolean>>({
+    adb: true, serial: true, hkmc: true, dlt: true, bench: true, vision_camera: true,
+  });
+  const [scanCustom, setScanCustom] = useState<{ label: string; type: string; port: number; enabled: boolean }[]>([]);
+  const [newCustomLabel, setNewCustomLabel] = useState('');
+  const [newCustomPort, setNewCustomPort] = useState<number | null>(null);
+
   const getModuleInfo = (moduleName?: string): ModuleInfo | undefined => {
     if (!moduleName) return undefined;
     return modules.find(m => m.name === moduleName);
@@ -231,6 +240,36 @@ export default function DevicePage() {
   const closeAddModal = () => {
     setModalOpen(false);
     resumeDevicePolling();
+  };
+
+  const openScanSettings = async () => {
+    try {
+      const res = await deviceApi.getScanSettings();
+      setScanBuiltin(res.data.builtin || { adb: true, serial: true, hkmc: true, dlt: true, bench: true, vision_camera: true });
+      setScanCustom(res.data.custom || []);
+    } catch { /* use defaults */ }
+    setScanSettingsOpen(true);
+  };
+
+  const saveScanSettings = async () => {
+    const settings = { builtin: scanBuiltin, custom: scanCustom };
+    try {
+      await deviceApi.saveScanSettings(settings);
+      message.success(t('common.saved'));
+    } catch { message.error(t('common.saveFailed')); }
+    setScanSettingsOpen(false);
+  };
+
+  const addCustomScan = () => {
+    if (!newCustomPort) return;
+    setScanCustom([...scanCustom, {
+      label: newCustomLabel || `TCP:${newCustomPort}`,
+      type: 'tcp',
+      port: newCustomPort,
+      enabled: true,
+    }]);
+    setNewCustomLabel('');
+    setNewCustomPort(null);
   };
 
   const openAddModal = (category: 'primary' | 'auxiliary') => {
@@ -644,6 +683,7 @@ export default function DevicePage() {
           <Space>
             <Button icon={<PlusOutlined />} type="primary" size="small" onClick={() => openAddModal('primary')}>{t('device.addPrimary')}</Button>
             <Button icon={<PlusOutlined />} size="small" onClick={() => openAddModal('auxiliary')}>{t('device.addAuxiliary')}</Button>
+            <Button icon={<SettingOutlined />} size="small" onClick={openScanSettings}>{t('device.scanSettings')}</Button>
           </Space>
         }
       >
@@ -1192,6 +1232,79 @@ export default function DevicePage() {
             <Input addonBefore={t('device.visionGateway')} value={forceIpGateway} onChange={e => setForceIpGateway(e.target.value)} />
           </Space>
         )}
+      </Modal>
+      {/* 스캔 설정 모달 */}
+      <Modal
+        title={t('device.scanSettings')}
+        open={scanSettingsOpen}
+        onCancel={() => setScanSettingsOpen(false)}
+        onOk={saveScanSettings}
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
+        width={520}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>{t('device.builtinScan')}</div>
+          <Row gutter={[8, 8]}>
+            {[
+              { key: 'adb', label: 'ADB (USB/WiFi)' },
+              { key: 'serial', label: 'Serial (COM)' },
+              { key: 'hkmc', label: 'HKMC (TCP 6655/5000)' },
+              { key: 'dlt', label: 'DLT (TCP 3490)' },
+              { key: 'bench', label: 'Bench (UDP 25000)' },
+              { key: 'vision_camera', label: 'Vision Camera (GigE)' },
+            ].map(item => (
+              <Col span={12} key={item.key}>
+                <Checkbox
+                  checked={scanBuiltin[item.key] !== false}
+                  onChange={e => setScanBuiltin({ ...scanBuiltin, [item.key]: e.target.checked })}
+                >
+                  {item.label}
+                </Checkbox>
+              </Col>
+            ))}
+          </Row>
+        </div>
+
+        <div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>{t('device.customScan')}</div>
+          {scanCustom.map((entry, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <Checkbox
+                checked={entry.enabled}
+                onChange={e => {
+                  const next = [...scanCustom];
+                  next[idx] = { ...entry, enabled: e.target.checked };
+                  setScanCustom(next);
+                }}
+              />
+              <Tag>{entry.type.toUpperCase()}</Tag>
+              <span style={{ flex: 1 }}>{entry.label} (:{entry.port})</span>
+              <Button size="small" danger onClick={() => setScanCustom(scanCustom.filter((_, i) => i !== idx))}>
+                <DeleteOutlined />
+              </Button>
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <Input
+              placeholder={t('device.customLabel')}
+              value={newCustomLabel}
+              onChange={e => setNewCustomLabel(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <InputNumber
+              placeholder={t('device.customPort')}
+              value={newCustomPort}
+              onChange={v => setNewCustomPort(v)}
+              min={1}
+              max={65535}
+              style={{ width: 120 }}
+            />
+            <Button icon={<PlusOutlined />} onClick={addCustomScan} disabled={!newCustomPort}>
+              {t('common.add')}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
