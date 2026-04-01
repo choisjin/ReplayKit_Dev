@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Card, Collapse, Col, Descriptions, Image, Input, InputNumber, Modal, Row, Select, Space, Spin, Table, Tag, Tooltip, message } from 'antd';
-import { DeleteOutlined, DownloadOutlined, ExpandOutlined, EyeOutlined, PlayCircleOutlined, ReloadOutlined, ScissorOutlined, SearchOutlined, ShrinkOutlined, VideoCameraOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, ExpandOutlined, EyeOutlined, FolderOpenOutlined, PlayCircleOutlined, ReloadOutlined, ScissorOutlined, SearchOutlined, ShrinkOutlined, VideoCameraOutlined } from '@ant-design/icons';
 import { resultsApi, scenarioApi } from '../services/api';
 import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from '../i18n';
@@ -361,11 +361,27 @@ export default function ResultsPage() {
   const exportBundle = async (filename: string) => {
     try {
       const res = await resultsApi.exportBundle(filename);
-      const { path, files } = res.data;
-      message.success(t('results.exportBundleComplete', { path, count: String(files.length) }));
+      // ZIP blob 다운로드
+      const blob = new Blob([res.data], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const baseName = filename.replace('/result.json', '').replace('.json', '');
+      a.href = url;
+      a.download = `${baseName}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      message.success(t('results.exportBundleComplete', { path: `${baseName}.zip`, count: '1' }));
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('results.exportBundleFailed'));
     }
+  };
+
+  const openFolder = async (filename: string) => {
+    try {
+      await resultsApi.openFolder(filename);
+    } catch { /* ignore */ }
   };
 
   useEffect(() => {
@@ -616,6 +632,7 @@ export default function ResultsPage() {
           const r = g.items[0];
           return (
             <Space size={4}>
+              <Button size="small" icon={<FolderOpenOutlined />} onClick={() => openFolder(r.filename)} />
               <Button size="small" icon={<EyeOutlined />} onClick={() => viewDetail(r.filename)}>{t('common.details')}</Button>
               <Button size="small" icon={<DownloadOutlined />} onClick={() => exportBundle(r.filename)} />
               <Button size="small" danger icon={<DeleteOutlined />} onClick={() => deleteResult(r.filename)} />
@@ -807,6 +824,7 @@ export default function ResultsPage() {
                       <Tag color="red">{r.failed_steps}F</Tag>
                       {r.total_repeat > 1 && <Tag color="purple">{r.total_repeat}x</Tag>}
                     </Space>
+                    <Button size="small" icon={<FolderOpenOutlined />} onClick={() => openFolder(r.filename)} />
                     <Button size="small" icon={<EyeOutlined />} onClick={() => viewDetail(r.filename)}>{t('common.details')}</Button>
                     <Button size="small" icon={<DownloadOutlined />} onClick={() => exportBundle(r.filename)} />
                   </div>
@@ -832,6 +850,12 @@ export default function ResultsPage() {
         style={{ top: 20 }}
         footer={
           <Space>
+            <Button
+              icon={<FolderOpenOutlined />}
+              onClick={() => detailFilename && openFolder(detailFilename)}
+            >
+              {t('results.openFolder')}
+            </Button>
             <Button
               icon={<DownloadOutlined />}
               onClick={() => detailFilename && exportBundle(detailFilename)}

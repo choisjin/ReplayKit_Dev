@@ -122,10 +122,14 @@ export const resultsApi = {
     api.delete(`/results/recordings/${filename}`),
   trimRecording: (filename: string, start: number, end: number) =>
     api.post(`/results/recordings/${filename}/trim?start=${start}&end=${end}`),
-  exportBundle: (filename: string) =>
-    api.post(`/results/export-bundle/${filename}`),
+  exportBundle: (filename: string, exportPath?: string) =>
+    exportPath
+      ? api.post(`/results/export-bundle/${filename}`, null, { params: { export_path: exportPath } })
+      : api.post(`/results/export-bundle/${filename}`, null, { responseType: 'blob' }),
   updateStepResult: (filename: string, stepIndex: number, message: string, status?: string) =>
     api.post(`/results/update-step/${filename}`, { step_index: stepIndex, message, ...(status ? { status } : {}) }),
+  openFolder: (filename: string) =>
+    api.post(`/results/open-folder/${filename}`),
 };
 
 // Server management APIs

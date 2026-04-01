@@ -1125,7 +1125,7 @@ class PlaybackService:
         self._result_timestamp = ""
 
     async def _save_result(self, result: ScenarioResult) -> str:
-        """Save execution result to JSON (런 폴더 내 result.json)."""
+        """Save execution result to JSON + Excel (런 폴더 내 result.json + result.xlsx)."""
         timestamp = self._result_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
 
         if self._run_output_dir and self._run_output_dir.exists():
@@ -1136,5 +1136,22 @@ class PlaybackService:
 
         filepath.write_text(result.model_dump_json(indent=2), encoding="utf-8")
         logger.info("Result saved: %s", filepath)
+
+        # Excel 자동 생성
+        self._save_excel(filepath)
+
         self._run_output_dir = None
         return str(filepath)
+
+    def _save_excel(self, json_path: Path) -> None:
+        """result.json 옆에 Excel 파일을 자동 생성."""
+        try:
+            from ..routers.results import _build_excel_workbook
+            import json as _json
+            data = _json.loads(json_path.read_text(encoding="utf-8"))
+            wb = _build_excel_workbook(data, json_path)
+            excel_path = json_path.with_suffix(".xlsx")
+            wb.save(str(excel_path))
+            logger.info("Excel saved: %s", excel_path)
+        except Exception as e:
+            logger.warning("Excel auto-generation failed: %s", e)

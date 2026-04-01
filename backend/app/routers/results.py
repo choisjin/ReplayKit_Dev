@@ -4,6 +4,7 @@ import json
 import io
 import subprocess
 import shutil
+import zipfile
 from pathlib import Path
 from datetime import datetime
 
@@ -261,54 +262,115 @@ async def export_result_excel(filename: str):
 
 
 @router.post("/export-bundle/{filename:path}")
-async def export_result_bundle(filename: str):
-    """결과 내보내기: Excel + 녹화 영상을 Results/{날짜_시간_시나리오}/ 폴더로 복사."""
+async def export_result_bundle(filename: str, export_path: str = ""):
+    """결과 내보내기: 런 폴더를 ZIP으로 압축하여 다운로드 또는 지정 경로에 저장.
+
+    - 런 폴더: 폴더 전체를 ZIP 압축
+    - 레거시 파일: Excel + 녹화를 임시 폴더에 모아 ZIP 압축
+
+    Args:
+        export_path: 저장 경로. 빈 값이면 브라우저 다운로드.
+    """
     filepath = RESULTS_DIR / filename
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="Result not found")
 
-    data = json.loads(filepath.read_text(encoding="utf-8"))
-    scenario_name = data.get("scenario_name", "unknown")
-    started_at = data.get("started_at", "")
+    # 런 폴더인지 레거시인지 판별
+    if filepath.name == "result.json" and filepath.parent != RESULTS_DIR:
+        run_dir = filepath.parent
+        folder_name = run_dir.name
+    else:
+        # 레거시: 임시 폴더에 결과물 수집
+        data = json.loads(filepath.read_text(encoding="utf-8"))
+        scenario_name = data.get("scenario_name", "unknown")
+        started_at = data.get("started_at", "")
+        try:
+            dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            ts = dt.strftime("%Y%m%d_%H%M%S")
+        except Exception:
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = scenario_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
+        folder_name = f"{ts}_{safe_name}"
 
-    # 폴더명: YYYYMMDD_HHMMSS_시나리오이름
-    try:
-        dt = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-        ts = dt.strftime("%Y%m%d_%H%M%S")
-    except Exception:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    safe_name = scenario_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
-    folder_name = f"{ts}_{safe_name}"
-    export_dir = EXPORT_ROOT / folder_name
-    export_dir.mkdir(parents=True, exist_ok=True)
+        import tempfile
+        run_dir = Path(tempfile.mkdtemp()) / folder_name
+        run_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(str(filepath), str(run_dir / filepath.name))
 
-    exported_files = []
+        # Excel 생성
+        try:
+            wb = _build_excel_workbook(data, filepath)
+            wb.save(str(run_dir / filepath.name.replace(".json", ".xlsx")))
+        except Exception:
+            pass
 
-    # 1) Excel 생성
-    try:
-        wb = _build_excel_workbook(data, filepath)
-        excel_name = filename.replace(".json", ".xlsx")
-        excel_path = export_dir / excel_name
-        wb.save(str(excel_path))
-        exported_files.append(excel_name)
-    except Exception as e:
-        exported_files.append(f"Excel 실패: {e}")
+        # 웹캠 녹화 복사
+        base = filename.replace(".json", "")
+        if RECORDINGS_DIR.is_dir():
+            for rec in sorted(RECORDINGS_DIR.glob(f"{base}_webcam_*.webm")):
+                try:
+                    shutil.copy2(str(rec), str(run_dir / rec.name))
+                except Exception:
+                    pass
 
-    # 2) 웹캠 녹화 파일 복사
-    base = filename.replace(".json", "")
-    if RECORDINGS_DIR.is_dir():
-        for rec in sorted(RECORDINGS_DIR.glob(f"{base}_webcam_*.webm")):
-            try:
-                shutil.copy2(str(rec), str(export_dir / rec.name))
-                exported_files.append(rec.name)
-            except Exception:
-                pass
+    # ZIP 압축
+    if export_path:
+        # 지정 경로에 저장
+        zip_path = Path(export_path)
+        if zip_path.is_dir():
+            zip_path = zip_path / f"{folder_name}.zip"
+        zip_path.parent.mkdir(parents=True, exist_ok=True)
+        _zip_directory(run_dir, zip_path)
+        return {"path": str(zip_path), "folder": folder_name, "size": zip_path.stat().st_size}
+    else:
+        # 브라우저 다운로드
+        buf = io.BytesIO()
+        _zip_directory_to_buffer(run_dir, buf)
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{folder_name}.zip"'},
+        )
 
-    return {
-        "path": str(export_dir),
-        "folder": folder_name,
-        "files": exported_files,
-    }
+
+@router.post("/open-folder/{filename:path}")
+async def open_result_folder(filename: str):
+    """결과 폴더를 파일 탐색기로 열기."""
+    import os, sys
+    filepath = RESULTS_DIR / filename
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Result not found")
+
+    # 런 폴더면 그 폴더, 레거시면 RESULTS_DIR
+    if filepath.name == "result.json" and filepath.parent != RESULTS_DIR:
+        target = filepath.parent
+    else:
+        target = RESULTS_DIR
+
+    if sys.platform == "win32":
+        os.startfile(str(target))
+    else:
+        subprocess.Popen(["xdg-open", str(target)])
+    return {"status": "ok", "path": str(target)}
+
+
+def _zip_directory(source_dir: Path, zip_path: Path) -> None:
+    """디렉토리를 ZIP 파일로 압축. junction/symlink는 실제 파일을 따라감."""
+    with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
+        for file in sorted(source_dir.rglob("*")):
+            if file.is_file():
+                arcname = str(file.relative_to(source_dir.parent))
+                zf.write(str(file), arcname)
+
+
+def _zip_directory_to_buffer(source_dir: Path, buf: io.BytesIO) -> None:
+    """디렉토리를 BytesIO 버퍼에 ZIP 압축."""
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for file in sorted(source_dir.rglob("*")):
+            if file.is_file():
+                arcname = str(file.relative_to(source_dir.parent))
+                zf.write(str(file), arcname)
 
 
 @router.delete("/{filename:path}")
