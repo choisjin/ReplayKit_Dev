@@ -708,6 +708,12 @@ def _kill_existing_servers():
 
 
 def main():
+    # pythonw.exe에서 stdout/stderr가 None인 경우 처리 (print 오류 방지)
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, 'w')
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, 'w')
+
     _hide_console()
 
     is_restart = "--restart" in sys.argv

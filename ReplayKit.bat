@@ -21,14 +21,22 @@ set "ENTRY=server.py"
 if exist "_launcher.py" set "ENTRY=_launcher.py"
 
 set "PY="
+set "PYW="
+if exist "python\pythonw.exe" set "PYW=python\pythonw.exe"
 if exist "python\python.exe" set "PY=python\python.exe"
+if not defined PYW if exist "venv\Scripts\pythonw.exe" set "PYW=venv\Scripts\pythonw.exe"
 if not defined PY if exist "venv\Scripts\python.exe" set "PY=venv\Scripts\python.exe"
 
-if not defined PY (
+if not defined PYW if not defined PY (
     echo [ERROR] Python not found. Run setup.bat first.
     pause
     exit /b 1
 )
 
-echo [START] %PY% %ENTRY%
-start "" cmd /c ""%PY%" %ENTRY% || (echo. & echo [ERROR] Server crashed. Press any key to close. & pause >nul)"
+if defined PYW (
+    echo [START] %PYW% %ENTRY%
+    start "" "%PYW%" %ENTRY%
+) else (
+    echo [START] %PY% %ENTRY%
+    start "" cmd /c ""%PY%" %ENTRY% || (echo. & echo [ERROR] Server crashed. Press any key to close. & pause >nul)"
+)
