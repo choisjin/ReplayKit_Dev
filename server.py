@@ -208,11 +208,12 @@ class ServerManagerApp:
         fe_dist = os.path.join(FRONTEND_DIR, "dist", "index.html")
         self._production = os.path.exists(fe_dist)
 
-        reload_flag = [] if self._production else ["--reload"]
+        # --reload 제거: uvicorn reload가 CREATE_NO_WINDOW 없이 자식 프로세스를 생성하여
+        # cmd 창이 나타나는 문제 방지. GUI의 재시작 버튼으로 대체.
         self.backend = ServerProcess(
             "백엔드",
             [VENV_PYTHON, "-m", "uvicorn", "backend.app.main:app",
-             "--host", "0.0.0.0", "--port", "8000"] + reload_flag,
+             "--host", "0.0.0.0", "--port", "8000"],
             PROJECT_ROOT,
             "http://localhost:8000",
         )

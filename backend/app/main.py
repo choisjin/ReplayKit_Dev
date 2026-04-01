@@ -240,6 +240,14 @@ async def _auto_connect_all():
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     # --- Startup ---
+    # ADB 서버를 명시적으로 미리 시작 (CREATE_NO_WINDOW 포함)
+    # adb가 자체적으로 데몬을 spawn하면 별도 콘솔 창이 생길 수 있으므로 선제 실행
+    try:
+        await adb_service._run("start-server")
+        logger.info("ADB server pre-started")
+    except Exception as e:
+        logger.debug("ADB server pre-start: %s", e)
+
     reconnect_task = asyncio.create_task(_reconnect_loop())
 
     # 관제 클라이언트 콜백 항상 등록 (URL은 나중에 Settings에서 설정 가능)
