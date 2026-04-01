@@ -117,7 +117,7 @@ export const resultsApi = {
     return api.post(`/results/webcam-upload?result_filename=${encodeURIComponent(resultFilename)}&repeat_index=${repeatIndex}`, form);
   },
   listRecordings: (resultFilename: string) =>
-    api.get(`/results/recordings-for/${resultFilename}`),
+    api.get(`/results/recordings-for/${encodeURIComponent(resultFilename)}`),
   deleteRecording: (filename: string) =>
     api.delete(`/results/recordings/${filename}`),
   trimRecording: (filename: string, start: number, end: number) =>

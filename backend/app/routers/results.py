@@ -39,13 +39,45 @@ def _find_ffmpeg() -> str | None:
 
 @router.get("/list")
 async def list_results():
-    """List all test result files."""
+    """List all test result files (런 폴더 + 레거시 플랫 파일 모두 탐색)."""
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     results = []
+    seen: set[str] = set()
+
+    # 1) 런 폴더: results/{ts}_{scenario}/result.json
+    for d in sorted(RESULTS_DIR.iterdir(), reverse=True):
+        if not d.is_dir():
+            continue
+        rj = d / "result.json"
+        if not rj.exists():
+            continue
+        try:
+            data = json.loads(rj.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        key = d.name
+        seen.add(key)
+        results.append({
+            "filename": f"{d.name}/result.json",
+            "run_folder": d.name,
+            "scenario_name": data.get("scenario_name", ""),
+            "status": data.get("status", ""),
+            "total_steps": data.get("total_steps", 0),
+            "total_repeat": data.get("total_repeat", 1),
+            "passed_steps": data.get("passed_steps", 0),
+            "failed_steps": data.get("failed_steps", 0),
+            "warning_steps": data.get("warning_steps", 0),
+            "error_steps": data.get("error_steps", 0),
+            "started_at": data.get("started_at", ""),
+            "finished_at": data.get("finished_at", ""),
+        })
+
+    # 2) 레거시 플랫: results/*.json
     for f in sorted(RESULTS_DIR.glob("*.json"), reverse=True):
         data = json.loads(f.read_text(encoding="utf-8"))
         results.append({
             "filename": f.name,
+            "run_folder": "",
             "scenario_name": data.get("scenario_name", ""),
             "status": data.get("status", ""),
             "total_steps": data.get("total_steps", 0),
@@ -202,7 +234,7 @@ def _build_excel_workbook(data: dict, filepath: Path = None):
     return wb
 
 
-@router.get("/export/{filename}")
+@router.get("/export/{filename:path}")
 async def export_result_excel(filename: str):
     """Export a test result as Excel (.xlsx) — download to browser."""
     filepath = RESULTS_DIR / filename
@@ -228,7 +260,7 @@ async def export_result_excel(filename: str):
     )
 
 
-@router.post("/export-bundle/{filename}")
+@router.post("/export-bundle/{filename:path}")
 async def export_result_bundle(filename: str):
     """결과 내보내기: Excel + 녹화 영상을 Results/{날짜_시간_시나리오}/ 폴더로 복사."""
     filepath = RESULTS_DIR / filename
@@ -279,20 +311,36 @@ async def export_result_bundle(filename: str):
     }
 
 
-@router.delete("/{filename}")
+@router.delete("/{filename:path}")
 async def delete_result(filename: str):
-    """Delete a test result and its associated webcam recordings."""
+    """Delete a test result and its associated files.
+
+    런 폴더(folder/result.json) 또는 레거시 플랫 파일(.json) 모두 처리.
+    """
     filepath = RESULTS_DIR / filename
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="Result not found")
-    filepath.unlink()
-    # 연결된 웹캠 녹화 파일도 삭제
-    base = filename.replace(".json", "")
+
     deleted_recordings = []
-    if RECORDINGS_DIR.is_dir():
-        for rec in RECORDINGS_DIR.glob(f"{base}_webcam_*.webm"):
-            rec.unlink()
-            deleted_recordings.append(rec.name)
+
+    # 런 폴더인 경우 폴더 전체 삭제
+    if filepath.name == "result.json" and filepath.parent != RESULTS_DIR:
+        run_dir = filepath.parent
+        folder_name = run_dir.name
+        shutil.rmtree(str(run_dir), ignore_errors=True)
+        # 연결된 웹캠 녹화 파일도 삭제
+        if RECORDINGS_DIR.is_dir():
+            for rec in RECORDINGS_DIR.glob(f"{folder_name}_webcam_*.webm"):
+                rec.unlink()
+                deleted_recordings.append(rec.name)
+    else:
+        filepath.unlink()
+        base = filename.replace(".json", "")
+        if RECORDINGS_DIR.is_dir():
+            for rec in RECORDINGS_DIR.glob(f"{base}_webcam_*.webm"):
+                rec.unlink()
+                deleted_recordings.append(rec.name)
+
     return {"status": "deleted", "deleted_recordings": deleted_recordings}
 
 
@@ -311,20 +359,43 @@ async def upload_webcam_recording(
 ):
     """Upload a webcam recording linked to a test result."""
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
-    base = result_filename.replace(".json", "")
+    base = result_filename.replace(".json", "").replace("/result", "")
     filename = f"{base}_webcam_r{repeat_index}.webm"
-    filepath = RECORDINGS_DIR / filename
     content = await file.read()
+
+    # 기존 위치에 저장 (정적 파일 서빙용)
+    filepath = RECORDINGS_DIR / filename
     filepath.write_bytes(content)
+
+    # 런 폴더가 있으면 recordings/ 하위에도 복사
+    run_dir = RESULTS_DIR / base
+    if run_dir.is_dir():
+        rec_dir = run_dir / "recordings"
+        rec_dir.mkdir(exist_ok=True)
+        (rec_dir / f"webcam_r{repeat_index}.webm").write_bytes(content)
+
     return {"filename": filename, "url": f"/recordings/{filename}"}
 
 
-@router.get("/recordings-for/{result_filename}")
+@router.get("/recordings-for/{result_filename:path}")
 async def list_recordings_for_result(result_filename: str):
     """List webcam recordings linked to a test result."""
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
-    base = result_filename.replace(".json", "")
+    base = result_filename.replace(".json", "").replace("/result", "")
     recordings = []
+
+    # 런 폴더 내 recordings/ 확인
+    run_dir = RESULTS_DIR / base
+    rec_dir = run_dir / "recordings" if run_dir.is_dir() else None
+    if rec_dir and rec_dir.is_dir():
+        for f in sorted(rec_dir.glob("*.webm")):
+            recordings.append({
+                "filename": f.name,
+                "size": f.stat().st_size,
+                "url": f"/results-files/{base}/recordings/{f.name}",
+            })
+
+    # 레거시: Results/Video/ 에서도 탐색
     for f in sorted(RECORDINGS_DIR.glob(f"{base}_webcam_*.webm")):
         recordings.append({
             "filename": f.name,
@@ -377,7 +448,7 @@ async def trim_recording(
     return {"filename": output_name, "url": f"/recordings/{output_name}"}
 
 
-@router.post("/update-step/{filename}")
+@router.post("/update-step/{filename:path}")
 async def update_step_result(filename: str, body: dict):
     """백그라운드 CMD 완료 후 스텝 결과를 영구 업데이트."""
     filepath = RESULTS_DIR / filename
@@ -415,9 +486,9 @@ async def update_step_result(filename: str, body: dict):
     return {"status": "ok", "result_status": data["status"]}
 
 
-@router.get("/{filename}")
+@router.get("/{filename:path}")
 async def get_result(filename: str):
-    """Get a specific test result."""
+    """Get a specific test result (런 폴더 또는 레거시 플랫 파일)."""
     filepath = RESULTS_DIR / filename
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="Result not found")

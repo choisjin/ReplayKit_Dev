@@ -18,6 +18,15 @@ from .dependencies import adb_service, device_manager, playback_service, recordi
 from .services.adb_service import resolve_sf_display_id
 from .services.scrcpy_service import _find_scrcpy_server
 from .models.scenario import ScenarioResult
+from .services.playback_service import RESULTS_DIR as _RESULTS_DIR
+
+
+def _result_filename(result_path: str) -> str:
+    """결과 파일 절대경로 → RESULTS_DIR 기준 상대경로 (예: '20260401_091200_scen/result.json' 또는 'scen_20260401.json')."""
+    try:
+        return str(Path(result_path).relative_to(_RESULTS_DIR)).replace("\\", "/")
+    except ValueError:
+        return Path(result_path).name
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -289,6 +298,11 @@ app.mount("/screenshots", StaticFiles(directory=str(screenshots_dir)), name="scr
 recordings_dir = Path(__file__).resolve().parent.parent.parent / "Results" / "Video"
 recordings_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/recordings", StaticFiles(directory=str(recordings_dir)), name="recordings")
+
+# 런 폴더 내 파일 접근 (logs, recordings 등)
+results_dir = Path(__file__).resolve().parent.parent / "results"
+results_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/results-files", StaticFiles(directory=str(results_dir)), name="results-files")
 
 # Serve docs (user guide)
 _docs_dir = Path(__file__).resolve().parent.parent.parent / "docs"
@@ -700,7 +714,7 @@ async def websocket_playback(websocket: WebSocket):
                             result.finished_at = datetime.now(timezone.utc).isoformat()
                             result.status = "fail" if (result.failed_steps > 0 or result.error_steps > 0) else ("warning" if result.warning_steps > 0 else "pass")
                             result_path = await playback_service._save_result(result)
-                            await websocket.send_json({"type": "playback_stopped", "result_filename": Path(result_path).name})
+                            await websocket.send_json({"type": "playback_stopped", "result_filename": _result_filename(result_path)})
                     else:
                         # 정상 완료
                         result.finished_at = datetime.now(timezone.utc).isoformat()
@@ -711,7 +725,7 @@ async def websocket_playback(websocket: WebSocket):
                         else:
                             result.status = "pass"
                         result_path = await playback_service._save_result(result)
-                        await websocket.send_json({"type": "playback_complete", "result_filename": Path(result_path).name})
+                        await websocket.send_json({"type": "playback_complete", "result_filename": _result_filename(result_path)})
                 except Exception as e:
                     await websocket.send_json({"type": "error", "message": str(e)})
                 finally:
@@ -886,7 +900,7 @@ async def websocket_playback(websocket: WebSocket):
                         else:
                             result.status = "pass"
                         result_path = await playback_service._save_result(result)
-                        saved_result_filenames.append(Path(result_path).name)
+                        saved_result_filenames.append(_result_filename(result_path))
 
                     rf = saved_result_filenames[-1] if saved_result_filenames else ""
                     if playback_service._should_stop:

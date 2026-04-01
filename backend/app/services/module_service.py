@@ -512,8 +512,53 @@ def _execute_sync(module_name: str, function_name: str, args: dict,
         elif p.default is inspect.Parameter.empty:
             raise ValueError(f"Missing required parameter: {pname}")
 
+    # 런 폴더 활성 시 빈 경로 파라미터를 런 폴더 logs/로 리다이렉트
+    _redirect_path_args_to_run_dir(call_args, module_name, function_name)
+
     result = func(**call_args)
     return result
+
+
+# 경로성 파라미터 이름 패턴 (빈 값일 때만 런 폴더로 리다이렉트)
+_PATH_PARAM_NAMES = {
+    "save_path", "path_log", "path_dir_log",
+    "mlp_ivi_file_path", "mlp_safe_file_path",
+    "log_file", "file_path", "logfilepath",
+    "csv_file",
+}
+
+
+def _redirect_path_args_to_run_dir(call_args: dict, module_name: str, function_name: str) -> None:
+    """경로 파라미터가 빈 값이면 현재 런 폴더의 logs/ 하위로 리다이렉트."""
+    from .playback_service import get_run_output_dir
+    run_dir = get_run_output_dir()
+    if not run_dir:
+        return
+
+    log_dir = run_dir / "logs"
+    log_dir.mkdir(exist_ok=True)
+
+    for param_name in _PATH_PARAM_NAMES:
+        if param_name in call_args and not call_args[param_name]:
+            # 빈 값 → 런 폴더 내 자동 경로 생성
+            import time
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            safe_mod = module_name.replace(" ", "_")
+            safe_func = function_name.replace(" ", "_")
+
+            if "dir" in param_name:
+                # 디렉토리 경로
+                target = log_dir / safe_mod
+                target.mkdir(exist_ok=True)
+                call_args[param_name] = str(target)
+            else:
+                # 파일 경로
+                ext = ".log"
+                if "csv" in param_name:
+                    ext = ".csv"
+                elif any(k in param_name for k in ("image", "save_path")):
+                    ext = ".png"
+                call_args[param_name] = str(log_dir / f"{safe_mod}_{safe_func}_{ts}{ext}")
 
 
 async def execute_module_function(

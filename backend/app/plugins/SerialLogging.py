@@ -26,6 +26,15 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 
+def _get_run_output_dir() -> Optional[Path]:
+    """현재 재생 런의 출력 디렉토리. 재생 중이 아니면 None."""
+    try:
+        from backend.app.services.playback_service import get_run_output_dir
+        return get_run_output_dir()
+    except Exception:
+        return None
+
+
 class SerialLogging:
     """시리얼 로그 캡처·저장·키워드 판정 모듈.
 
@@ -115,7 +124,12 @@ class SerialLogging:
             return err
 
         if not save_path:
-            log_dir = Path(__file__).resolve().parent.parent.parent / "logs"
+            # 재생 중이면 런 폴더의 logs/ 하위에 저장
+            run_dir = _get_run_output_dir()
+            if run_dir:
+                log_dir = run_dir / "logs"
+            else:
+                log_dir = Path(__file__).resolve().parent.parent.parent / "logs"
             log_dir.mkdir(exist_ok=True)
             ts = time.strftime("%Y%m%d_%H%M%S")
             save_path = str(log_dir / f"serial_{ts}.log")

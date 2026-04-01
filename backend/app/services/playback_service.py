@@ -100,6 +100,14 @@ def _build_ctor_kwargs(dev) -> dict | None:
     return None
 RESULTS_DIR = Path(__file__).resolve().parent.parent.parent / "results"
 
+# 현재 재생 런의 출력 디렉토리 (모듈에서 참조용)
+_current_run_output_dir: Optional[Path] = None
+
+
+def get_run_output_dir() -> Optional[Path]:
+    """현재 재생 런의 출력 디렉토리 반환. 재생 중이 아니면 None."""
+    return _current_run_output_dir
+
 
 class PlaybackService:
     """Execute scenarios and verify results."""
@@ -114,6 +122,7 @@ class PlaybackService:
         self._pause_event.set()  # 초기: 일시정지 아님
         self._device_map: dict[str, str] = {}  # alias -> real device id for current playback
         self._result_timestamp: str = ""  # 재생 세션별 고유 타임스탬프 (actual 이미지 폴더용)
+        self._run_output_dir: Optional[Path] = None  # 런별 출력 디렉토리
 
     @property
     def is_running(self) -> bool:
@@ -210,6 +219,7 @@ class PlaybackService:
         self._running = True
         self._should_stop = False
         self._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self._setup_run_output_dir(scenario.name)
         started_at = datetime.now(timezone.utc).isoformat()
 
         result = ScenarioResult(
@@ -265,7 +275,7 @@ class PlaybackService:
             result.status = "error"
         finally:
             self._running = False
-            self._result_timestamp = ""
+            self._cleanup_run_output_dir()
             result.finished_at = datetime.now(timezone.utc).isoformat()
 
         # Determine overall status
@@ -299,6 +309,7 @@ class PlaybackService:
         self._current_iteration = repeat_index - 1  # 0-based for cycle wait
         if not self._result_timestamp:
             self._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            self._setup_run_output_dir(scenario.name)
 
         # Build step lookup by ID for conditional jumps
         step_by_id: dict[int, int] = {}  # step.id -> index
@@ -343,7 +354,7 @@ class PlaybackService:
                 idx = next_idx
         finally:
             self._running = False
-            self._result_timestamp = ""
+            self._cleanup_run_output_dir()
 
     async def execute_single_step(self, step: Step, scenario_name: str, device_map: Optional[dict[str, str]] = None) -> StepResult:
         """Execute a single step with verification (for testing individual steps)."""
@@ -1067,11 +1078,63 @@ class PlaybackService:
             elif step.type == StepType.ADB_COMMAND:
                 await self.adb.run_shell_command(params["command"], serial=adb_serial)
 
+    def _setup_run_output_dir(self, scenario_name: str) -> None:
+        """재생 런별 출력 디렉토리 생성: results/{timestamp}_{scenario_name}/
+
+        구조:
+          results/{ts}_{name}/
+          ├── result.json          ← 결과 JSON
+          ├── screenshots/         ← 실제 스크린샷 디렉토리 (심볼릭 링크)
+          ├── logs/                ← DLT/Serial 로그
+          └── recordings/         ← 동영상 파일
+        """
+        global _current_run_output_dir
+        safe_name = scenario_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
+        folder_name = f"{self._result_timestamp}_{safe_name}"
+        run_dir = RESULTS_DIR / folder_name
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "logs").mkdir(exist_ok=True)
+        (run_dir / "recordings").mkdir(exist_ok=True)
+
+        # 스크린샷은 기존 위치에 저장하되 런 폴더에서 링크로 참조
+        actual_subdir = f"actual_{self._result_timestamp}"
+        actual_dir = SCREENSHOTS_DIR / scenario_name / actual_subdir
+        actual_dir.mkdir(parents=True, exist_ok=True)
+        link_path = run_dir / "screenshots"
+        if not link_path.exists():
+            try:
+                # Windows: directory junction (관리자 권한 불필요)
+                import _winapi
+                _winapi.CreateJunction(str(actual_dir), str(link_path))
+            except Exception:
+                try:
+                    link_path.symlink_to(actual_dir, target_is_directory=True)
+                except Exception:
+                    # 심볼릭 링크 실패 시 경로만 텍스트로 기록
+                    (run_dir / "screenshots_path.txt").write_text(str(actual_dir), encoding="utf-8")
+
+        self._run_output_dir = run_dir
+        _current_run_output_dir = run_dir
+        logger.info("Run output dir: %s", run_dir)
+
+    def _cleanup_run_output_dir(self) -> None:
+        """재생 종료 시 글로벌 런 디렉토리 참조 해제.
+        self._run_output_dir은 _save_result에서 사용하므로 여기서는 유지."""
+        global _current_run_output_dir
+        _current_run_output_dir = None
+        self._result_timestamp = ""
+
     async def _save_result(self, result: ScenarioResult) -> str:
-        """Save execution result to JSON."""
-        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        """Save execution result to JSON (런 폴더 내 result.json)."""
         timestamp = self._result_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = RESULTS_DIR / f"{result.scenario_name}_{timestamp}.json"
+
+        if self._run_output_dir and self._run_output_dir.exists():
+            filepath = self._run_output_dir / "result.json"
+        else:
+            RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+            filepath = RESULTS_DIR / f"{result.scenario_name}_{timestamp}.json"
+
         filepath.write_text(result.model_dump_json(indent=2), encoding="utf-8")
         logger.info("Result saved: %s", filepath)
+        self._run_output_dir = None
         return str(filepath)
