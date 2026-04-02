@@ -292,7 +292,7 @@ class HKMC6thService:
         """Build and send a framed packet with CRC16."""
         agent_cmd = [cmd, sub_cmd, resp] + data
         crc = _calc_crc16(agent_cmd)
-        logger.debug("[HKMC SEND] cmd=0x%02X sub=0x%02X resp=0x%02X data_len=%d", cmd, sub_cmd, resp, len(data))
+        logger.info("[HKMC SEND] cmd=0x%02X sub=0x%02X resp=0x%02X data_len=%d", cmd, sub_cmd, resp, len(data))
         packet_len = len(agent_cmd)
 
         packet = [START_BIT, START_BIT]
@@ -306,7 +306,7 @@ class HKMC6thService:
         packet.append(END_BIT)
         packet.append(END_BIT)
 
-        logger.debug("[HKMC PACKET] %s", ' '.join(f'{b:02X}' for b in packet))
+        logger.info("[HKMC PACKET] %s", ' '.join(f'{b:02X}' for b in packet))
         self._send_raw(packet)
 
     # ------------------------------------------------------------------
@@ -577,21 +577,17 @@ class HKMC6thService:
     # ------------------------------------------------------------------
 
     def tap(self, x: int, y: int, screen_type: str = "front_center") -> None:
-        """Tap at (x, y) using lcdTouchExt6th (press + release)."""
+        """Tap at (x, y) using lcdTouch (press) + lcdTouch (release)."""
+        x, y = int(x), int(y)
         st = SCREEN_TOUCH_MAP.get(screen_type, 0)
-        press_event = [x, y, PRESS_KEY, st]
-        release_event = [x, y, RELEASE_KEY, st]
         # _capture_lock: 탭 동안 스크린샷 CMD_GETIMG 차단
         with self._capture_lock:
             # 에이전트가 이전 이미지 응답 전송을 마칠 시간 확보
             time.sleep(0.3)
             with self._send_lock:
-                self._lcd_touch_ext_6th([press_event])
-                logger.info("[TAP] PRESS (%d,%d)", x, y)
-                time.sleep(0.1)
-                self._lcd_touch_ext_6th([release_event])
-                logger.info("[TAP] RELEASE (%d,%d)", x, y)
-            # RELEASE 후 에이전트 처리 시간 확보 (CMD_GETIMG 즉시 진입 방지)
+                self._lcd_touch(x, y, st)
+                logger.info("[TAP] TOUCH (%d,%d) screen_type=%d", x, y, st)
+            # 에이전트 처리 시간 확보 (CMD_GETIMG 즉시 진입 방지)
             time.sleep(0.05)
 
     def long_press(self, x: int, y: int, duration_ms: int = 3000,
