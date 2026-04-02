@@ -1183,7 +1183,7 @@ export default function RecordPage() {
     if (h264Mode) {
       sendControl({ type: 'touch', action: 0, x, y, w: deviceRes.width, h: deviceRes.height });
     }
-  }, [screenshotDeviceId, deviceRes, h264Mode, sendControl, hkmcDisplayMode, isScreenHkmc]);
+  }, [screenshotDeviceId, deviceRes, h264Mode, sendControl, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement | HTMLVideoElement>) => {
     if (!h264Mode || !gestureRef.current.active) return;
@@ -1191,7 +1191,7 @@ export default function RecordPage() {
     if (!el) return;
     const { x, y } = toDeviceCoords(el, e.clientX, e.clientY);
     sendControl({ type: 'touch', action: 2, x, y, w: deviceRes.width, h: deviceRes.height });
-  }, [h264Mode, deviceRes, sendControl, hkmcDisplayMode, isScreenHkmc]);
+  }, [h264Mode, deviceRes, sendControl, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement | HTMLVideoElement>) => {
     if (!screenshotDeviceId || !gestureRef.current.active) return;
@@ -1223,7 +1223,7 @@ export default function RecordPage() {
       executeAction('tap', params, `tap (${startX},${startY})`);
       setLastGesture(`${t('record.gestureTap')} (${startX},${startY})`);
     }
-  }, [screenshotDeviceId, executeAction, deviceRes, h264Mode, sendControl, hkmcDisplayMode, isScreenHkmc]);
+  }, [screenshotDeviceId, executeAction, deviceRes, h264Mode, sendControl, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY]);
 
   const startRecording = async () => {
     if (!scenarioName.trim()) {
