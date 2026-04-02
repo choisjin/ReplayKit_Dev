@@ -14,9 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from .routers import device, results, scenario, settings
-from .dependencies import adb_service, device_manager, playback_service, recording_service, scrcpy_manager, monitor_client
+from .dependencies import adb_service, device_manager, playback_service, recording_service, monitor_client
 from .services.adb_service import resolve_sf_display_id
-from .services.scrcpy_service import _find_scrcpy_server
 from .models.scenario import ScenarioResult
 from .services.playback_service import RESULTS_DIR as _RESULTS_DIR
 
@@ -266,7 +265,6 @@ async def lifespan(app: FastAPI):
     # --- Shutdown ---
     await monitor_client.stop()
     reconnect_task.cancel()
-    scrcpy_manager.stop_all()
     logger.info("Closing all serial connections...")
     device_manager.close_all_serial_connections()
     logger.info("Killing ADB server...")
@@ -351,7 +349,7 @@ async def websocket_screen_mirror(websocket: WebSocket):
     """WebSocket endpoint for real-time screen mirroring.
 
     클라이언트가 첫 메시지로 {"device_id": "...", "screen_type": "front_center"} 전송.
-    H.264 모드: scrcpy → binary H.264 NAL 전송 + 양방향 컨트롤 (터치/키)
+    JPEG screencap 기반 화면 스트리밍.
     JPEG 모드: JPEG 프레임 전송 (HKMC, VisionCamera, screencap 폴백)
     """
     await websocket.accept()
@@ -377,95 +375,12 @@ async def websocket_screen_mirror(websocket: WebSocket):
     dev_type_label = "hkmc" if is_hkmc else ("vision_camera" if is_vision_camera else "adb")
     logger.debug("Screen mirror: device=%s type=%s", target_device_id, dev_type_label)
 
-    # ADB scrcpy 스트림 참조 (정리용)
-    scrcpy_stream = None
-    scrcpy_serial = ""
-    scrcpy_display = 0
+    # scrcpy 제거 — 항상 JPEG screencap 사용
     h264_mode = False
-    recv_task = None  # finally에서 참조하므로 try 밖에서 초기화
+    recv_task = None
 
     try:
-        # ADB 디바이스: scrcpy 스트림 획득 시도
-        if not is_hkmc and not is_vision_camera and dev:
-            adb_display_id = 0
-            try:
-                adb_display_id = int(screen_type)
-            except (ValueError, TypeError):
-                pass
-            scrcpy_serial = dev.address or target_device_id
-            scrcpy_display = adb_display_id
-            # force_h264: scrcpy-server만 있으면 PyAV 없이도 H.264 raw 스트리밍
-            if force_h264 and _find_scrcpy_server() is not None:
-                from .services.scrcpy_service import ScrcpyStream
-                stream = ScrcpyStream(serial=scrcpy_serial, display_id=scrcpy_display)
-                stream.start(asyncio.get_event_loop())
-                # 첫 데이터 대기
-                for _ in range(50):
-                    if stream.is_running and (stream._h264_queue and not stream._h264_queue.empty()):
-                        break
-                    if not stream.is_running:
-                        break
-                    await asyncio.sleep(0.1)
-                if stream.is_running:
-                    scrcpy_stream = stream
-                    logger.info("scrcpy H.264 raw stream forced for %s", scrcpy_serial)
-                else:
-                    logger.warning("scrcpy force_h264 failed for %s", scrcpy_serial)
-            else:
-                scrcpy_stream = await scrcpy_manager.acquire_stream(
-                    serial=scrcpy_serial, display_id=scrcpy_display
-                )
-            if scrcpy_stream:
-                logger.info("scrcpy stream acquired for %s (display=%d)", scrcpy_serial, scrcpy_display)
-            else:
-                logger.debug("scrcpy unavailable for %s, falling back to screencap", scrcpy_serial)
-
-        # 모드 협상: force_h264일 때만 H.264 raw, 기본은 JPEG
-        if force_h264 and scrcpy_stream and scrcpy_stream.is_running:
-            h264_mode = True
-            vid_w = scrcpy_stream._video_width or 1080
-            vid_h = scrcpy_stream._video_height or 1920
-            logger.info("H.264 stream size: %dx%d (display=%d)", vid_w, vid_h, scrcpy_display)
-            await websocket.send_json({
-                "mode": "h264",
-                "width": vid_w,
-                "height": vid_h,
-            })
-        else:
-            await websocket.send_json({"mode": "jpeg"})
-
-        # H.264 모드: 컨트롤 수신 태스크 + 프레임 송신
-        async def _receive_control():
-            """클라이언트로부터 컨트롤 메시지 수신 (터치/키)."""
-            try:
-                while True:
-                    raw = await websocket.receive_text()
-                    try:
-                        import json
-                        msg = json.loads(raw)
-                    except Exception:
-                        continue
-                    msg_type = msg.get("type")
-                    if msg_type == "touch" and scrcpy_stream:
-                        scrcpy_stream.inject_touch(
-                            action=msg.get("action", 0),
-                            x=msg.get("x", 0),
-                            y=msg.get("y", 0),
-                            width=msg.get("w", 1080),
-                            height=msg.get("h", 1920),
-                        )
-                    elif msg_type == "key" and scrcpy_stream:
-                        scrcpy_stream.inject_keycode(
-                            keycode=msg.get("keycode", 0),
-                            action=msg.get("action", 0),
-                        )
-            except WebSocketDisconnect:
-                pass
-            except Exception:
-                pass
-
-        if h264_mode:
-            recv_task = asyncio.create_task(_receive_control())
+        await websocket.send_json({"mode": "jpeg"})
 
         while True:
             try:
@@ -502,18 +417,6 @@ async def websocket_screen_mirror(websocket: WebSocket):
                                        cam is not None, cam.IsConnected() if cam else "no_cam")
                         await asyncio.sleep(0.3)
                         continue
-                elif h264_mode and scrcpy_stream and scrcpy_stream.is_running:
-                    # scrcpy H.264 raw NAL 전송 (브라우저 MSE 디코딩)
-                    h264_data = await scrcpy_stream.async_get_h264_frame(timeout=0.5)
-                    if h264_data:
-                        await websocket.send_bytes(h264_data)
-                    continue  # async_get_h264_frame이 블로킹, sleep 불필요
-                elif scrcpy_stream and scrcpy_stream.is_running:
-                    # scrcpy JPEG 폴백 — async_wait_frame이 새 프레임까지 블로킹
-                    jpeg_bytes = await scrcpy_stream.async_wait_frame(timeout=2.0)
-                    if jpeg_bytes:
-                        await websocket.send_bytes(jpeg_bytes)
-                    continue
                 else:
                     # ADB screencap 폴백 — binary JPEG로 전송
                     adb_display_id = None
@@ -566,12 +469,8 @@ async def websocket_screen_mirror(websocket: WebSocket):
         else:
             logger.warning("Screen mirror WebSocket error: %s", exc)
     finally:
-        # 컨트롤 수신 태스크 정리
         if recv_task and not recv_task.done():
             recv_task.cancel()
-        # scrcpy 스트림 해제
-        if scrcpy_stream:
-            scrcpy_manager.release_stream(scrcpy_serial, scrcpy_display)
 
 
 @app.websocket("/ws/playback")

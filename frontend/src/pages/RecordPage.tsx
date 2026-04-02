@@ -559,8 +559,7 @@ export default function RecordPage() {
     const resolvedAction = resolveAction(action, targetDevice);
     const resolvedParams = resolveParams(resolvedAction, params, targetDevice);
 
-    // H.264 모드에서 화면 제스처는 scrcpy 컨트롤로 이미 실행됨 → ADB 중복 실행 방지
-    const alreadyExecuted = h264Mode && isScreenAction;
+    const alreadyExecuted = false;
 
     if (recording) {
       // Optimistic UI: show step immediately
@@ -613,7 +612,7 @@ export default function RecordPage() {
         setTimeout(() => refreshScreenshot(), 150);
       }
     }
-  }, [recording, stepDeviceId, screenshotDeviceId, delayMs, refreshScreenshot, resolveAction, resolveParams, h264Mode]);
+  }, [recording, stepDeviceId, screenshotDeviceId, delayMs, refreshScreenshot, resolveAction, resolveParams]);
 
   // --- ROI Modal logic ---
   // Draw on the ROI canvas using the captured screenshot (not reactive screenshot)
@@ -1172,42 +1171,28 @@ export default function RecordPage() {
   }, [steps, multiCropModalOpen, drawMultiCropCanvas]);
 
   // Canvas/Video gesture handlers (no ROI logic here)
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement | HTMLVideoElement>) => {
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!screenshotDeviceId) return;
-    const el = h264Mode ? videoRef.current : canvasRef.current;
+    const el = canvasRef.current;
     if (!el) return;
     const { x, y } = toDeviceCoords(el, e.clientX, e.clientY);
     gestureRef.current = { startX: x, startY: y, startTime: Date.now(), active: true };
-    // H.264 모드: scrcpy 터치 즉시 주입 (DOWN)
-    // toDeviceCoords가 deviceRes 기준 좌표를 반환하므로 w/h도 deviceRes 사용
-    if (h264Mode) {
-      sendControl({ type: 'touch', action: 0, x, y, w: deviceRes.width, h: deviceRes.height });
-    }
-  }, [screenshotDeviceId, deviceRes, h264Mode, sendControl, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY]);
+  }, [screenshotDeviceId, deviceRes, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement | HTMLVideoElement>) => {
-    if (!h264Mode || !gestureRef.current.active) return;
-    const el = videoRef.current;
-    if (!el) return;
-    const { x, y } = toDeviceCoords(el, e.clientX, e.clientY);
-    sendControl({ type: 'touch', action: 2, x, y, w: deviceRes.width, h: deviceRes.height });
-  }, [h264Mode, deviceRes, sendControl, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY]);
+  const handleMouseMove = useCallback((_e: React.MouseEvent<HTMLCanvasElement>) => {
+    // 스와이프 시각 피드백용으로 남겨둠 (필요 시 확장)
+  }, []);
 
-  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement | HTMLVideoElement>) => {
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!screenshotDeviceId || !gestureRef.current.active) return;
     gestureRef.current.active = false;
-    const el = h264Mode ? videoRef.current : canvasRef.current;
+    const el = canvasRef.current;
     if (!el) return;
 
     const { startX, startY, startTime } = gestureRef.current;
     const { x: endX, y: endY } = toDeviceCoords(el, e.clientX, e.clientY);
     const dist = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2);
     const elapsed = Date.now() - startTime;
-
-    // H.264 모드: scrcpy 터치 즉시 주입 (UP) — 디바이스에 이미 반영됨
-    if (h264Mode) {
-      sendControl({ type: 'touch', action: 1, x: endX, y: endY, w: deviceRes.width, h: deviceRes.height });
-    }
 
     if (dist > SWIPE_DISTANCE_THRESHOLD) {
       const durationMs = Math.max(200, Math.min(elapsed, 3000));
@@ -1223,7 +1208,7 @@ export default function RecordPage() {
       executeAction('tap', params, `tap (${startX},${startY})`);
       setLastGesture(`${t('record.gestureTap')} (${startX},${startY})`);
     }
-  }, [screenshotDeviceId, executeAction, deviceRes, h264Mode, sendControl, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY]);
+  }, [screenshotDeviceId, executeAction, deviceRes, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY]);
 
   const startRecording = async () => {
     if (!scenarioName.trim()) {
@@ -2176,7 +2161,7 @@ export default function RecordPage() {
                   {screenDevice && (
                     <Tag color={screenAlive ? 'green' : 'red'} style={{ marginLeft: 0 }}>
                       {screenAlive
-                        ? `${h264Mode ? 'H.264' : 'JPEG'} ${streamFps}fps`
+                        ? `JPEG ${streamFps}fps`
                         : t('record.deviceDisconnected')}
                     </Tag>
                   )}
@@ -2250,7 +2235,7 @@ export default function RecordPage() {
               body: { flex: 1, overflow: 'hidden', padding: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' },
             }}
           >
-            {screenshotDeviceId && (h264Mode || screenshot) ? (
+            {screenshotDeviceId && screenshot ? (
               <>
               <div style={{
                 position: 'relative', display: 'inline-block', maxWidth: '100%', maxHeight: '100%',
@@ -2262,9 +2247,6 @@ export default function RecordPage() {
                   const vc = viewCropEnabled;
                   const cx0 = viewCropX[0], cy0 = viewCropY[0];
                   const cx1 = viewCropX[1], cy1 = viewCropY[1];
-                  const videoVcStyle: React.CSSProperties = vc ? {
-                    objectViewBox: `inset(${cy0 * 100}% ${(1 - cx1) * 100}% ${(1 - cy1) * 100}% ${cx0 * 100}%)`,
-                  } : {};
                   const baseStyle: React.CSSProperties = {
                     maxWidth: '100%',
                     maxHeight: '100%',
@@ -2273,21 +2255,11 @@ export default function RecordPage() {
                     cursor: testingStepIndex != null ? 'wait' : 'crosshair',
                     userSelect: 'none' as const,
                   };
-                  return h264Mode ? (
-                    <video
-                      ref={videoRef as React.RefObject<HTMLVideoElement>}
-                      autoPlay
-                      muted
-                      playsInline
-                      onMouseDown={testingStepIndex == null ? handleMouseDown : undefined}
-                      onMouseMove={testingStepIndex == null ? handleMouseMove : undefined}
-                      onMouseUp={testingStepIndex == null ? handleMouseUp : undefined}
-                      style={{ ...baseStyle, ...videoVcStyle }}
-                    />
-                  ) : (
+                  return (
                     <canvas
                       ref={canvasRef}
                       onMouseDown={testingStepIndex == null ? handleMouseDown : undefined}
+                      onMouseMove={testingStepIndex == null ? handleMouseMove : undefined}
                       onMouseUp={testingStepIndex == null ? handleMouseUp : undefined}
                       style={baseStyle}
                     />
