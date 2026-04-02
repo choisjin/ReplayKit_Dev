@@ -277,6 +277,37 @@ class ADBService:
         dflag = self._display_flag(display_id)
         return await self._run_device(s, f"shell input {dflag}swipe {x1} {y1} {x2} {y2} {duration_ms}")
 
+    async def multi_finger_swipe(
+        self, fingers: list[dict], duration_ms: int = 500,
+        serial: Optional[str] = None, display_id: Optional[int] = None,
+    ) -> str:
+        """병렬 input swipe로 멀티핑거 제스처 실행.
+
+        fingers: [{"x1": .., "y1": .., "x2": .., "y2": ..}, ...]
+        """
+        s = serial or self._active_serial
+        if not s:
+            raise ValueError("No device selected")
+        dflag = self._display_flag(display_id)
+        cmds = [f"input {dflag}swipe {f['x1']} {f['y1']} {f['x2']} {f['y2']} {duration_ms}" for f in fingers]
+        parallel = " & ".join(cmds) + " & wait"
+        return await self._run_device(s, f'shell "{parallel}"')
+
+    async def multi_finger_tap(
+        self, points: list[dict], serial: Optional[str] = None, display_id: Optional[int] = None,
+    ) -> str:
+        """병렬 input tap으로 멀티핑거 탭 실행.
+
+        points: [{"x": .., "y": ..}, ...]
+        """
+        s = serial or self._active_serial
+        if not s:
+            raise ValueError("No device selected")
+        dflag = self._display_flag(display_id)
+        cmds = [f"input {dflag}tap {p['x']} {p['y']}" for p in points]
+        parallel = " & ".join(cmds) + " & wait"
+        return await self._run_device(s, f'shell "{parallel}"')
+
     async def long_press(self, x: int, y: int, duration_ms: int = 1000,
                          serial: Optional[str] = None, display_id: Optional[int] = None) -> str:
         s = serial or self._active_serial

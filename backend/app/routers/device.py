@@ -469,6 +469,17 @@ async def device_input(req: InputRequest):
             await adb.key_event(p["keycode"], serial=adb_serial, display_id=display_id)
         elif req.action == "adb_command":
             await adb.run_shell_command(p["command"], serial=adb_serial)
+        elif req.action == "multi_touch":
+            fingers = p.get("fingers", [])
+            if not fingers:
+                raise HTTPException(status_code=400, detail="fingers array required")
+            # 탭 vs 스와이프 판별: 시작점과 끝점이 같으면 탭
+            is_tap = all(f.get("x1") == f.get("x2") and f.get("y1") == f.get("y2") for f in fingers)
+            if is_tap:
+                points = [{"x": f["x1"], "y": f["y1"]} for f in fingers]
+                await adb.multi_finger_tap(points, serial=adb_serial, display_id=display_id)
+            else:
+                await adb.multi_finger_swipe(fingers, p.get("duration_ms", 500), serial=adb_serial, display_id=display_id)
         else:
             raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
 

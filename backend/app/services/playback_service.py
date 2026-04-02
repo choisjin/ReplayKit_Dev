@@ -1082,6 +1082,14 @@ class PlaybackService:
                 await self.adb.key_event(params["keycode"], serial=adb_serial, display_id=adb_display_id)
             elif step.type == StepType.ADB_COMMAND:
                 await self.adb.run_shell_command(params["command"], serial=adb_serial)
+            elif step.type == StepType.MULTI_TOUCH:
+                fingers = params.get("fingers", [])
+                is_tap = all(f.get("x1") == f.get("x2") and f.get("y1") == f.get("y2") for f in fingers)
+                if is_tap:
+                    points = [{"x": f["x1"], "y": f["y1"]} for f in fingers]
+                    await self.adb.multi_finger_tap(points, serial=adb_serial, display_id=adb_display_id)
+                else:
+                    await self.adb.multi_finger_swipe(fingers, params.get("duration_ms", 500), serial=adb_serial, display_id=adb_display_id)
 
     def _setup_run_output_dir(self, scenario_name: str) -> None:
         """재생 런별 출력 디렉토리 생성: results/{timestamp}_{scenario_name}/

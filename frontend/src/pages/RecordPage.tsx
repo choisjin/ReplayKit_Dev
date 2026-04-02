@@ -268,6 +268,11 @@ export default function RecordPage() {
   const [viewCropX, setViewCropX] = useState<[number, number]>([0, 1]);
   const [viewCropY, setViewCropY] = useState<[number, number]>([0, 1]);
 
+  // 멀티터치: 핑거 수 (1=일반, 2=투핑거, 3=쓰리핑거)
+  const [fingerCount, setFingerCount] = useState(1);
+  // 멀티터치 핑거 간격 (디바이스 픽셀)
+  const [fingerSpread, setFingerSpread] = useState(100);
+
   // 뷰포트 크롭 상태 localStorage 로드 (디바이스 변경 시)
   useEffect(() => {
     if (!screenshotDeviceId) return;
@@ -1198,7 +1203,41 @@ export default function RecordPage() {
     const dist = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2);
     const elapsed = Date.now() - startTime;
 
-    if (dist > SWIPE_DISTANCE_THRESHOLD) {
+    // 멀티터치 핑거 좌표 생성 (중심점 기준 대칭 오프셋)
+    const buildFingers = (cx1: number, cy1: number, cx2: number, cy2: number): { x1: number; y1: number; x2: number; y2: number }[] => {
+      const spread = fingerSpread;
+      if (fingerCount === 2) {
+        return [
+          { x1: cx1 - spread, y1: cy1, x2: cx2 - spread, y2: cy2 },
+          { x1: cx1 + spread, y1: cy1, x2: cx2 + spread, y2: cy2 },
+        ];
+      }
+      if (fingerCount === 3) {
+        return [
+          { x1: cx1, y1: cy1 - spread, x2: cx2, y2: cy2 - spread },
+          { x1: cx1 - spread, y1: cy1 + Math.round(spread * 0.5), x2: cx2 - spread, y2: cy2 + Math.round(spread * 0.5) },
+          { x1: cx1 + spread, y1: cy1 + Math.round(spread * 0.5), x2: cx2 + spread, y2: cy2 + Math.round(spread * 0.5) },
+        ];
+      }
+      return [{ x1: cx1, y1: cy1, x2: cx2, y2: cy2 }];
+    };
+
+    if (fingerCount > 1) {
+      // 멀티터치 모드
+      if (dist > SWIPE_DISTANCE_THRESHOLD) {
+        const durationMs = Math.max(200, Math.min(elapsed, 3000));
+        const fingers = buildFingers(startX, startY, endX, endY);
+        const params = { fingers, duration_ms: durationMs };
+        executeAction('multi_touch', params, `${fingerCount}-finger swipe (${startX},${startY})→(${endX},${endY})`);
+        setLastGesture(`${fingerCount}-finger swipe (${startX},${startY})→(${endX},${endY})`);
+      } else {
+        // 멀티터치 탭
+        const fingers = buildFingers(startX, startY, startX, startY);
+        const params = { fingers, duration_ms: 0 };
+        executeAction('multi_touch', params, `${fingerCount}-finger tap (${startX},${startY})`);
+        setLastGesture(`${fingerCount}-finger tap (${startX},${startY})`);
+      }
+    } else if (dist > SWIPE_DISTANCE_THRESHOLD) {
       const durationMs = Math.max(200, Math.min(elapsed, 3000));
       const params = { x1: startX, y1: startY, x2: endX, y2: endY, duration_ms: durationMs };
       executeAction('swipe', params, `swipe (${startX},${startY})→(${endX},${endY}) ${durationMs}ms`);
@@ -1212,7 +1251,7 @@ export default function RecordPage() {
       executeAction('tap', params, `tap (${startX},${startY})`);
       setLastGesture(`${t('record.gestureTap')} (${startX},${startY})`);
     }
-  }, [screenshotDeviceId, executeAction, deviceRes, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY]);
+  }, [screenshotDeviceId, executeAction, deviceRes, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY, fingerCount, fingerSpread]);
 
   const startRecording = async () => {
     if (!scenarioName.trim()) {
@@ -2230,6 +2269,32 @@ export default function RecordPage() {
                       }}
                     />
                   </Tooltip>
+                  <Tooltip title={t('record.multiTouch')}>
+                    <Radio.Group
+                      size="small"
+                      value={fingerCount}
+                      onChange={(e) => setFingerCount(e.target.value)}
+                      optionType="button"
+                      buttonStyle="solid"
+                      options={[
+                        { label: '1', value: 1 },
+                        { label: '2', value: 2 },
+                        { label: '3', value: 3 },
+                      ]}
+                    />
+                  </Tooltip>
+                  {fingerCount > 1 && (
+                    <Tooltip title={t('record.fingerSpread')}>
+                      <InputNumber
+                        size="small"
+                        min={20} max={500} step={10}
+                        value={fingerSpread}
+                        onChange={(v) => setFingerSpread(v ?? 100)}
+                        style={{ width: 70 }}
+                        suffix="px"
+                      />
+                    </Tooltip>
+                  )}
                 </Space>
               )
             }
