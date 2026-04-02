@@ -294,7 +294,6 @@ export default function RecordPage() {
     }));
   }, [screenshotDeviceId, viewCropEnabled, viewCropX, viewCropY]);
 
-  const viewCropContainerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [annotatedPreviewSrc, setAnnotatedPreviewSrc] = useState('');
   const [annotatedPreviewVisible, setAnnotatedPreviewVisible] = useState(false);
@@ -501,17 +500,18 @@ export default function RecordPage() {
   // Helper: convert element coords to device coords (canvas 또는 video)
   // 항상 deviceRes(디바이스 실제 해상도) 기준으로 변환
   const toDeviceCoords = (el: HTMLCanvasElement | HTMLVideoElement, clientX: number, clientY: number) => {
-    if (viewCropEnabled && viewCropContainerRef.current) {
-      // 뷰포트 크롭: 컨테이너(보이는 영역) 기준으로 크롭 범위에 매핑
-      const cRect = viewCropContainerRef.current.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    if (viewCropEnabled) {
+      // 뷰포트 크롭: 보이는 영역은 디바이스의 크롭 범위에 해당
       const cropW = viewCropX[1] - viewCropX[0];
       const cropH = viewCropY[1] - viewCropY[0];
-      let x = Math.round((viewCropX[0] + (clientX - cRect.left) / cRect.width * cropW) * deviceRes.width);
-      const y = Math.round((viewCropY[0] + (clientY - cRect.top) / cRect.height * cropH) * deviceRes.height);
+      const fracX = (clientX - rect.left) / rect.width;
+      const fracY = (clientY - rect.top) / rect.height;
+      let x = Math.round((viewCropX[0] + fracX * cropW) * deviceRes.width);
+      const y = Math.round((viewCropY[0] + fracY * cropH) * deviceRes.height);
       if (isScreenHkmc && hkmcDisplayMode === 'integrated') return { x: x + 1920, y };
       return { x, y };
     }
-    const rect = el.getBoundingClientRect();
     const scaleX = deviceRes.width / rect.width;
     const scaleY = deviceRes.height / rect.height;
     let x = Math.round((clientX - rect.left) * scaleX);
@@ -1886,12 +1886,23 @@ export default function RecordPage() {
     const img = new window.Image();
     img.onload = () => {
       const canvas = canvasRef.current!;
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      canvas.getContext('2d')?.drawImage(img, 0, 0);
+      if (viewCropEnabled) {
+        // 크롭 영역만 캔버스에 그림 (왜곡 없이 원본 비율 유지)
+        const sx = Math.round(viewCropX[0] * img.naturalWidth);
+        const sy = Math.round(viewCropY[0] * img.naturalHeight);
+        const sw = Math.round((viewCropX[1] - viewCropX[0]) * img.naturalWidth);
+        const sh = Math.round((viewCropY[1] - viewCropY[0]) * img.naturalHeight);
+        canvas.width = sw;
+        canvas.height = sh;
+        canvas.getContext('2d')?.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      } else {
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d')?.drawImage(img, 0, 0);
+      }
     };
     img.src = screenshot;
-  }, [screenshot]);
+  }, [screenshot, viewCropEnabled, viewCropX, viewCropY]);
 
   const getStepTypes = () => {
     if (stepDeviceId === '__common__') {
@@ -2241,31 +2252,26 @@ export default function RecordPage() {
           >
             {screenshotDeviceId && (h264Mode || screenshot) ? (
               <>
-              <div ref={viewCropContainerRef} style={{
+              <div style={{
                 position: 'relative', display: 'inline-block', maxWidth: '100%', maxHeight: '100%',
-                overflow: 'hidden',
               }}>
                 {(() => {
-                  // 뷰포트 크롭: 잘린 영역을 컨테이너에 꽉 차게 확대
-                  // 1) clip-path: 보이는 영역 제한 + 포인터 이벤트 차단
-                  // 2) transform: 잘린 영역이 원래 크기만큼 확대
-                  // 좌표 계산: 컨테이너 ref 기준 (overflow:hidden → 보이는 영역 = 컨테이너 크기)
+                  // 뷰포트 크롭
+                  // - 캔버스(JPEG): drawImage에서 크롭 영역만 그림 → CSS 불필요
+                  // - 비디오(H264): object-view-box로 크롭 (브라우저 네이티브, 왜곡 없음)
                   const vc = viewCropEnabled;
                   const cx0 = viewCropX[0], cy0 = viewCropY[0];
                   const cx1 = viewCropX[1], cy1 = viewCropY[1];
-                  const cropW = cx1 - cx0, cropH = cy1 - cy0;
-                  const vcStyle: React.CSSProperties = vc && cropW > 0.01 && cropH > 0.01 ? {
-                    transformOrigin: '0 0',
-                    transform: `scale(${1 / cropW}, ${1 / cropH}) translate(${-cx0 * 100}%, ${-cy0 * 100}%)`,
+                  const videoVcStyle: React.CSSProperties = vc ? {
+                    objectViewBox: `inset(${cy0 * 100}% ${(1 - cx1) * 100}% ${(1 - cy1) * 100}% ${cx0 * 100}%)`,
                   } : {};
-                  const commonStyle: React.CSSProperties = {
+                  const baseStyle: React.CSSProperties = {
                     maxWidth: '100%',
                     maxHeight: '100%',
                     border: isDark ? '1px solid #333' : '1px solid #d9d9d9',
                     borderRadius: 4,
                     cursor: testingStepIndex != null ? 'wait' : 'crosshair',
                     userSelect: 'none' as const,
-                    ...vcStyle,
                   };
                   return h264Mode ? (
                     <video
@@ -2276,14 +2282,14 @@ export default function RecordPage() {
                       onMouseDown={testingStepIndex == null ? handleMouseDown : undefined}
                       onMouseMove={testingStepIndex == null ? handleMouseMove : undefined}
                       onMouseUp={testingStepIndex == null ? handleMouseUp : undefined}
-                      style={commonStyle}
+                      style={{ ...baseStyle, ...videoVcStyle }}
                     />
                   ) : (
                     <canvas
                       ref={canvasRef}
                       onMouseDown={testingStepIndex == null ? handleMouseDown : undefined}
                       onMouseUp={testingStepIndex == null ? handleMouseUp : undefined}
-                      style={commonStyle}
+                      style={baseStyle}
                     />
                   );
                 })()}
