@@ -501,21 +501,25 @@ export default function RecordPage() {
   // 항상 deviceRes(디바이스 실제 해상도) 기준으로 변환
   const toDeviceCoords = (el: HTMLCanvasElement | HTMLVideoElement, clientX: number, clientY: number) => {
     const rect = el.getBoundingClientRect();
+    // border 영역 제외: clientLeft/clientTop = border 두께
+    const bx = el.clientLeft || 0;
+    const by = el.clientTop || 0;
+    const cw = el.clientWidth;
+    const ch = el.clientHeight;
     if (viewCropEnabled) {
-      // 뷰포트 크롭: 보이는 영역은 디바이스의 크롭 범위에 해당
       const cropW = viewCropX[1] - viewCropX[0];
       const cropH = viewCropY[1] - viewCropY[0];
-      const fracX = (clientX - rect.left) / rect.width;
-      const fracY = (clientY - rect.top) / rect.height;
+      const fracX = (clientX - rect.left - bx) / cw;
+      const fracY = (clientY - rect.top - by) / ch;
       let x = Math.round((viewCropX[0] + fracX * cropW) * deviceRes.width);
       const y = Math.round((viewCropY[0] + fracY * cropH) * deviceRes.height);
       if (isScreenHkmc && hkmcDisplayMode === 'integrated') return { x: x + 1920, y };
       return { x, y };
     }
-    const scaleX = deviceRes.width / rect.width;
-    const scaleY = deviceRes.height / rect.height;
-    let x = Math.round((clientX - rect.left) * scaleX);
-    const y = Math.round((clientY - rect.top) * scaleY);
+    const scaleX = deviceRes.width / cw;
+    const scaleY = deviceRes.height / ch;
+    let x = Math.round((clientX - rect.left - bx) * scaleX);
+    const y = Math.round((clientY - rect.top - by) * scaleY);
     if (isScreenHkmc && hkmcDisplayMode === 'integrated') x += 1920;
     return { x, y };
   };
