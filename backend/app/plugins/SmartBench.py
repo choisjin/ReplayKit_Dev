@@ -53,7 +53,7 @@ class SmartBench:
     # ------------------------------------------------------------------
 
     def Connect(self) -> str:
-        """Smart Bench HTTP 연결을 확인합니다.
+        """Smart Bench 연결을 확인합니다 (TCP 포트 도달 가능 여부).
 
         Returns:
             연결 결과 메시지
@@ -63,8 +63,11 @@ class SmartBench:
         if self._connected:
             return f"이미 연결됨: {self._host}:{self._port}"
         try:
-            url = f"http://{self._host}:{self._port}/"
-            urllib.request.urlopen(url, timeout=5)
+            import socket
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            sock.connect((self._host, self._port))
+            sock.close()
             self._connected = True
             logger.info("[SmartBench] Connected to %s:%d", self._host, self._port)
             return f"Connected to {self._host}:{self._port}"
