@@ -1,9 +1,9 @@
-"""SmartBench — Smart Bench TCP 제어 플러그인.
+"""SmartBench — Smart Bench HTTP 제어 플러그인.
 
-TCP 소켓으로 Smart Bench 장비에 텍스트 명령어를 전송하여
+HTTP API로 Smart Bench 장비에 명령어를 전송하여
 전원(Battery/ACC/IGN), 버튼, 전류 측정, LED 검증 등을 수행합니다.
 
-통신 프로토콜: TCP 텍스트 명령 → 세미콜론 구분 응답
+통신 프로토콜: POST /exec-command-multi → 응답
   예: "relay-17-on" → "OK"
       "current-1000" → "OK;1234"
 
@@ -19,9 +19,9 @@ TCP 소켓으로 Smart Bench 장비에 텍스트 명령어를 전송하여
 """
 
 import logging
-import socket
 import time
-from typing import Optional
+import urllib.request
+import urllib.error
 
 logger = logging.getLogger(__name__)
 
@@ -36,42 +36,40 @@ _RELAY = {
 
 
 class SmartBench:
-    """Smart Bench TCP 제어 모듈.
+    """Smart Bench HTTP 제어 모듈.
 
     생성자:
         host: Smart Bench IP 주소 (기본 192.168.0.5)
-        port: TCP 포트 (기본 5000)
+        port: HTTP 포트 (기본 8000)
     """
 
     def __init__(self, host: str = "", port: int = 8000):
         self._host = host
         self._port = int(port)
-        self._sock: Optional[socket.socket] = None
+        self._connected = False
 
     # ------------------------------------------------------------------
     # 연결
     # ------------------------------------------------------------------
 
     def Connect(self) -> str:
-        """Smart Bench에 TCP 지속 연결합니다.
+        """Smart Bench HTTP 연결을 확인합니다.
 
         Returns:
             연결 결과 메시지
         """
         if not self._host:
             return "ERROR: host가 설정되지 않았습니다"
-        if self._sock:
+        if self._connected:
             return f"이미 연결됨: {self._host}:{self._port}"
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5)
-            sock.connect((self._host, self._port))
-            sock.settimeout(10)
-            self._sock = sock
+            url = f"http://{self._host}:{self._port}/"
+            urllib.request.urlopen(url, timeout=5)
+            self._connected = True
             logger.info("[SmartBench] Connected to %s:%d", self._host, self._port)
             return f"Connected to {self._host}:{self._port}"
         except Exception as e:
-            self._sock = None
+            self._connected = False
             logger.error("[SmartBench] Connection failed: %s", e)
             return f"ERROR: {e}"
 
@@ -81,64 +79,41 @@ class SmartBench:
         Returns:
             결과 메시지
         """
-        if self._sock:
-            try:
-                self._sock.close()
-            except Exception:
-                pass
-            self._sock = None
+        self._connected = False
         logger.info("[SmartBench] Disconnected")
         return "Disconnected"
 
     def IsConnected(self) -> bool:
         """연결 상태 확인."""
-        return self._sock is not None
+        return self._connected
 
     # ------------------------------------------------------------------
     # 내부 통신
     # ------------------------------------------------------------------
 
-    def _send(self, command: str, _retry: bool = True) -> str:
-        """TCP 텍스트 명령 전송 후 응답 수신 (지속 연결).
+    def _send(self, command: str) -> str:
+        """HTTP POST로 명령 전송 후 응답 수신.
 
-        lge.auto.BENCH.SendData()와 동일한 방식: 개행 없이 전송, \\n 구분 응답.
+        ATS와 동일한 방식: POST /exec-command-multi
         """
-        if not self._sock:
-            if not self._host:
-                return "ERROR: host가 설정되지 않았습니다"
+        if not self._host:
+            return "ERROR: host가 설정되지 않았습니다"
+        if not self._connected:
             result = self.Connect()
             if result.startswith("ERROR"):
                 return result
 
+        url = f"http://{self._host}:{self._port}/exec-command-multi"
         try:
-            self._sock.sendall(command.encode("utf-8"))
-            self._sock.settimeout(3)
-            # 응답 수신 (\\n 또는 데이터 끝까지)
-            chunks = []
-            while True:
-                try:
-                    data = self._sock.recv(4096)
-                    if not data:
-                        break
-                    chunks.append(data)
-                    # 응답에 \\n이 있으면 완료
-                    if b"\n" in data:
-                        break
-                except socket.timeout:
-                    break
-            resp = b"".join(chunks).decode("utf-8", errors="replace").strip()
-            logger.info("[SmartBench] TX: %s → RX: %s", command, resp)
-            return resp if resp else "OK"
+            data = command.encode("utf-8")
+            req = urllib.request.Request(url, data=data, method="POST")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = resp.read().decode("utf-8", errors="replace").strip()
+            logger.info("[SmartBench] TX: %s → RX: %s", command, result)
+            return result if result else "OK"
         except Exception as e:
             logger.error("[SmartBench] Send failed: %s", e)
-            try:
-                self._sock.close()
-            except Exception:
-                pass
-            self._sock = None
-            if _retry:
-                logger.info("[SmartBench] Reconnecting...")
-                return self._send(command, _retry=False)
+            self._connected = False
             return f"ERROR: {e}"
 
     # ------------------------------------------------------------------
