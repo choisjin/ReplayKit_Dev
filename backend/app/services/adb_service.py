@@ -108,6 +108,7 @@ class ADBService:
     def __init__(self):
         self._active_serial: Optional[str] = None
         self._touch_device_cache: dict[str, tuple[str, int, int]] = {}  # serial → (dev_path, max_x, max_y)
+        self._display_size_cache: dict[str, tuple[int, int]] = {}  # serial → (width, height)
         self._sendevent_mode: dict[str, str] = {}  # serial → "direct" | "su" | "none"
 
     # ------------------------------------------------------------------
@@ -320,13 +321,17 @@ class ADBService:
         return None
 
     async def _get_display_size(self, serial: str) -> tuple[int, int]:
-        """디스플레이 논리 해상도 (wm size 기준)."""
+        """디스플레이 논리 해상도 (wm size 기준). 결과 캐시."""
+        if serial in self._display_size_cache:
+            return self._display_size_cache[serial]
         raw = await self._run_device(serial, "shell wm size")
         override = re.search(r"Override size:\s*(\d+)x(\d+)", raw)
         physical = re.search(r"Physical size:\s*(\d+)x(\d+)", raw)
         m = override or physical
         if m:
-            return int(m.group(1)), int(m.group(2))
+            result = (int(m.group(1)), int(m.group(2)))
+            self._display_size_cache[serial] = result
+            return result
         return 0, 0
 
     async def multi_finger_swipe(
@@ -373,27 +378,26 @@ class ADBService:
         if cached == "none":
             return await self._parallel_input_swipe(fingers, duration_ms, serial)
 
-        # 최초 시도: direct → su 0 → fallback
-        loop = asyncio.get_event_loop()
-
-        # 1) sendevent direct
+        # 최초 시도: direct → su 0 → fallback (권한 테스트 후 캐시)
         touch = await self._find_touch_device(serial)
         if touch:
-            cmd = self._build_sendevent_cmd(fingers, duration_ms, serial, touch)
-            adb_cmd = f'{ADB_PATH} -s {serial} shell "{cmd}"'
-            stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, adb_cmd, 15))
-            if rc == 0 and "Permission denied" not in stderr:
+            loop = asyncio.get_event_loop()
+            dev = touch[0]
+            # 1) direct 권한 테스트
+            test_cmd = f'{ADB_PATH} -s {serial} shell "sendevent {dev} 0 0 0"'
+            _, test_err, test_rc = await loop.run_in_executor(None, functools.partial(_run_sync, test_cmd, 3))
+            if test_rc == 0 and "Permission denied" not in test_err:
                 self._sendevent_mode[serial] = "direct"
                 logger.info("multitouch mode: sendevent direct (device %s)", serial)
-                return stdout
+                return await self._sendevent_raw(fingers, duration_ms, serial, su=False)
 
-            # 2) su 0
-            adb_su = f'''{ADB_PATH} -s {serial} shell "su 0 sh -c '{cmd}'"'''
-            stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, adb_su, 15))
-            if rc == 0 and "not found" not in stderr and "Permission denied" not in stderr:
+            # 2) su 0 권한 테스트
+            test_su = f'{ADB_PATH} -s {serial} shell "su 0 sendevent {dev} 0 0 0"'
+            _, test_err, test_rc = await loop.run_in_executor(None, functools.partial(_run_sync, test_su, 3))
+            if test_rc == 0 and "not found" not in test_err and "Permission denied" not in test_err:
                 self._sendevent_mode[serial] = "su"
                 logger.info("multitouch mode: sendevent su (device %s)", serial)
-                return stdout
+                return await self._sendevent_raw(fingers, duration_ms, serial, su=True)
 
         # 3) Fallback
         logger.warning("multitouch: no method available (device %s), using parallel input", serial)
@@ -405,12 +409,12 @@ class ADBService:
     def _build_sendevent_cmd(
         self, fingers: list[dict], duration_ms: int, serial: str,
         touch: tuple[str, int, int],
+        display_size: tuple[int, int] = (0, 0),
     ) -> str:
         """sendevent 명령 시퀀스 문자열 생성."""
         dev, max_x, max_y = touch
-        # 디스플레이 크기는 동기 호출이 어려우므로 캐시 사용 불가 → max 그대로 사용
-        # (대부분 디바이스에서 touch max == display resolution)
-        dw, dh = max_x + 1, max_y + 1
+        # 디스플레이 좌표(Override 기준) → 터치 디바이스 좌표로 변환
+        dw, dh = display_size if display_size[0] > 0 else (max_x + 1, max_y + 1)
 
         def sx(x: float) -> int:
             return max(0, min(max_x, int(x * max_x / dw)))
@@ -450,7 +454,9 @@ class ADBService:
         cmds.append(f"{SE} 1 330 0")
         cmds.append(f"{SE} 0 0 0")
 
-        return ";".join(cmds)
+        return "\n".join(cmds)
+
+    _MT_SCRIPT_REMOTE = "/data/local/tmp/_mt.sh"
 
     async def _sendevent_raw(
         self, fingers: list[dict], duration_ms: int, serial: str, su: bool = False,
@@ -458,17 +464,30 @@ class ADBService:
         touch = await self._find_touch_device(serial)
         if not touch:
             return ""
-        cmd = self._build_sendevent_cmd(fingers, duration_ms, serial, touch)
+        display_size = await self._get_display_size(serial)
+        script = self._build_sendevent_cmd(fingers, duration_ms, serial, touch, display_size)
         loop = asyncio.get_event_loop()
         timeout = max(15, duration_ms // 1000 + 10)
-        if su:
-            adb_cmd = f'''{ADB_PATH} -s {serial} shell "su 0 sh -c '{cmd}'"'''
-        else:
-            adb_cmd = f'{ADB_PATH} -s {serial} shell "{cmd}"'
-        stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, adb_cmd, timeout))
-        if rc != 0:
-            logger.error("sendevent failed: %s", stderr.strip())
-        return stdout
+
+        # 스크립트를 디바이스에 push하고 실행 (인라인보다 안정적, 프로세스 오버헤드 없음)
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False, newline="\n") as f:
+            f.write(script)
+            local_path = f.name
+        try:
+            push_cmd = f'{ADB_PATH} -s {serial} push "{local_path}" {self._MT_SCRIPT_REMOTE}'
+            await loop.run_in_executor(None, functools.partial(_run_sync, push_cmd, 5))
+
+            if su:
+                adb_cmd = f'{ADB_PATH} -s {serial} shell "su 0 sh {self._MT_SCRIPT_REMOTE}"'
+            else:
+                adb_cmd = f'{ADB_PATH} -s {serial} shell "sh {self._MT_SCRIPT_REMOTE}"'
+            stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, adb_cmd, timeout))
+            if rc != 0:
+                logger.error("sendevent failed: %s", stderr.strip())
+            return stdout
+        finally:
+            Path(local_path).unlink(missing_ok=True)
 
     async def _parallel_input_swipe(
         self, fingers: list[dict], duration_ms: int, serial: str,
