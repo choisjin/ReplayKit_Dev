@@ -110,6 +110,7 @@ class ADBService:
         self._touch_device_cache: dict[str, tuple[str, int, int]] = {}  # serial → (dev_path, max_x, max_y)
         self._display_size_cache: dict[str, tuple[int, int]] = {}  # serial → (width, height)
         self._sendevent_mode: dict[str, str] = {}  # serial → "direct" | "su" | "none"
+        self._gvm_container: dict[str, str | None] = {}  # serial → container name or None
 
     # ------------------------------------------------------------------
     # Device management
@@ -291,7 +292,10 @@ class ADBService:
         if serial in self._touch_device_cache:
             return self._touch_device_cache[serial]
 
-        output = await self._run_device(serial, "shell getevent -lp")
+        # getevent는 호스트 레벨 /dev/input/ 접근 → GVM 래핑 없이 직접 실행
+        cmd = f"{ADB_PATH} -s {serial} shell getevent -lp"
+        loop = asyncio.get_event_loop()
+        output, _, _ = await loop.run_in_executor(None, functools.partial(_run_sync, cmd, 10))
         current_device: str | None = None
         devices: dict[str, dict[str, int]] = {}
 
@@ -543,6 +547,12 @@ class ADBService:
     # Screenshot
     # ------------------------------------------------------------------
 
+    def _gvm_screencap_cmd(self, container: str | None, screencap_args: str) -> str:
+        """screencap 명령에 GVM lxc-attach 래핑 적용."""
+        if container:
+            return f"lxc-attach -n {container} -- screencap {screencap_args}"
+        return f"screencap {screencap_args}"
+
     async def screencap(self, save_path: str, serial: Optional[str] = None,
                         display_id: Optional[int] = None,
                         sf_display_id: Optional[str] = None) -> str:
@@ -555,9 +565,11 @@ class ADBService:
             raise ValueError("No device selected")
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         dflag = f"-d {sf_display_id} " if sf_display_id else ""
+        container = await self._detect_gvm_container(s)
+        sc = self._gvm_screencap_cmd(container, f"{dflag}-p")
         loop = asyncio.get_event_loop()
         # 먼저 exec-out 시도 (빠름)
-        cmd = f'{ADB_PATH} -s {s} exec-out screencap {dflag}-p > "{save_path}"'
+        cmd = f'{ADB_PATH} -s {s} exec-out {sc} > "{save_path}"'
         stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, cmd))
         # 깨진 PNG 확인 → 파일 경유 폴백
         try:
@@ -568,7 +580,7 @@ class ADBService:
         except Exception:
             logger.debug("exec-out screencap corrupted, falling back to file method")
             remote_path = "/data/local/tmp/_rk_screencap.png"
-            cmd_save = f"{ADB_PATH} -s {s} shell screencap {dflag}-p {remote_path}"
+            cmd_save = f'{ADB_PATH} -s {s} shell "{sc} {remote_path}"'
             await loop.run_in_executor(None, functools.partial(_run_sync, cmd_save))
             cmd_pull = f'{ADB_PATH} -s {s} pull {remote_path} "{save_path}"'
             _, stderr2, rc2 = await loop.run_in_executor(None, functools.partial(_run_sync, cmd_pull))
@@ -587,9 +599,11 @@ class ADBService:
         if not s:
             raise ValueError("No device selected")
         dflag = f"-d {sf_display_id} " if sf_display_id else ""
+        container = await self._detect_gvm_container(s)
+        sc = self._gvm_screencap_cmd(container, f"{dflag}-p")
 
         # 먼저 exec-out (빠름) 시도
-        cmd = f"{ADB_PATH} -s {s} exec-out screencap {dflag}-p"
+        cmd = f"{ADB_PATH} -s {s} exec-out {sc}"
         loop = asyncio.get_event_loop()
         stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync_bytes, cmd))
 
@@ -597,10 +611,11 @@ class ADBService:
         if rc != 0 or (stdout and len(stdout) > 0 and stdout[:4] != b'\x89PNG'):
             logger.debug("exec-out screencap failed or corrupted, falling back to file method")
             remote_path = "/data/local/tmp/_rk_screencap.png"
-            cmd_save = f"{ADB_PATH} -s {s} shell screencap {dflag}-p {remote_path}"
+            cmd_save = f'{ADB_PATH} -s {s} shell "{sc} {remote_path}"'
             _, stderr2, rc2 = await loop.run_in_executor(None, functools.partial(_run_sync, cmd_save))
             if rc2 == 0:
-                cmd_cat = f"{ADB_PATH} -s {s} exec-out cat {remote_path}"
+                cat_cmd = "cat" if not container else f"lxc-attach -n {container} -- cat"
+                cmd_cat = f"{ADB_PATH} -s {s} exec-out {cat_cmd} {remote_path}"
                 stdout, _, _ = await loop.run_in_executor(None, functools.partial(_run_sync_bytes, cmd_cat))
             else:
                 raise RuntimeError(f"screencap failed: {stderr2}")
@@ -628,7 +643,58 @@ class ADBService:
             logger.error("ADB error: %s", stderr)
         return stdout
 
+    async def _detect_gvm_container(self, serial: str) -> str | None:
+        """GVM 디바이스인지 감지. Android LXC 컨테이너 이름 반환, 비GVM이면 None."""
+        if serial in self._gvm_container:
+            return self._gvm_container[serial]
+
+        # 일반 Android인지 확인: getprop 응답이 있으면 비GVM
+        loop = asyncio.get_event_loop()
+        cmd = f'{ADB_PATH} -s {serial} shell getprop ro.build.version.sdk'
+        stdout, _, rc = await loop.run_in_executor(None, functools.partial(_run_sync, cmd, 5))
+        if rc == 0 and stdout.strip():
+            self._gvm_container[serial] = None
+            return None
+
+        # lxc-ls로 컨테이너 목록 조회
+        cmd = f'{ADB_PATH} -s {serial} shell lxc-ls'
+        stdout, _, rc = await loop.run_in_executor(None, functools.partial(_run_sync, cmd, 5))
+        if rc != 0 or not stdout.strip():
+            self._gvm_container[serial] = None
+            return None
+
+        # 각 컨테이너에서 Android 확인
+        for container in stdout.strip().split():
+            cmd = f'{ADB_PATH} -s {serial} shell "lxc-attach -n {container} -- getprop ro.build.version.sdk"'
+            out, _, rc = await loop.run_in_executor(None, functools.partial(_run_sync, cmd, 5))
+            if rc == 0 and out.strip():
+                self._gvm_container[serial] = container
+                logger.info("GVM detected: device %s → container '%s'", serial, container)
+                return container
+
+        self._gvm_container[serial] = None
+        return None
+
+    def _wrap_shell_cmd(self, args: str, container: str | None) -> str:
+        """GVM 컨테이너가 있으면 shell 명령을 lxc-attach로 래핑."""
+        if not container:
+            return args
+        # "shell ..." → "shell lxc-attach -n {container} -- ..."
+        # "exec-out ..." → "exec-out lxc-attach -n {container} -- ..."
+        for prefix in ("shell ", "exec-out "):
+            if args.startswith(prefix):
+                inner = args[len(prefix):]
+                # 따옴표 안의 명령이면 풀어서 래핑
+                if inner.startswith('"') and inner.endswith('"'):
+                    inner = inner[1:-1]
+                return f'{prefix}"lxc-attach -n {container} -- {inner}"'
+        return args
+
     async def _run_device(self, serial: str, args: str) -> str:
+        # GVM 컨테이너 감지 (shell/exec-out 명령만 래핑)
+        if args.startswith("shell ") or args.startswith("exec-out "):
+            container = await self._detect_gvm_container(serial)
+            args = self._wrap_shell_cmd(args, container)
         cmd = f"{ADB_PATH} -s {serial} {args}"
         logger.debug("ADB cmd: %s", cmd)
         loop = asyncio.get_event_loop()
