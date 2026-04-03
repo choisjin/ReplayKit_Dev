@@ -359,16 +359,13 @@ class ADBService:
         self, fingers: list[dict], duration_ms: int, serial: str,
     ) -> str:
         """멀티터치 제스처 실행. 우선순위:
-        1) Java DEX (InputManager.injectInputEvent — root 불필요, 진짜 멀티터치)
-        2) sendevent direct (root 디바이스)
-        3) sendevent + su
-        4) parallel input swipe fallback (진짜 멀티터치 아님)
+        1) sendevent direct (shell이 /dev/input 쓰기 가능한 경우)
+        2) sendevent + su 0 (root 사용)
+        3) parallel input swipe fallback (진짜 멀티터치 아님)
         """
         cached = self._sendevent_mode.get(serial)
 
         # 캐시된 모드 사용
-        if cached == "dex":
-            return await self._dex_multitouch(fingers, duration_ms, serial)
         if cached == "direct":
             return await self._sendevent_raw(fingers, duration_ms, serial, su=False)
         if cached == "su":
@@ -376,19 +373,10 @@ class ADBService:
         if cached == "none":
             return await self._parallel_input_swipe(fingers, duration_ms, serial)
 
-        # 최초 시도: dex → direct → su → fallback
+        # 최초 시도: direct → su 0 → fallback
         loop = asyncio.get_event_loop()
 
-        # 1) DEX 방식 (app_process + InputManager)
-        if await self._ensure_dex_on_device(serial):
-            result = await self._dex_multitouch(fingers, duration_ms, serial)
-            # dex 실행 성공 확인 (에러 없으면 OK)
-            if result is not None:
-                self._sendevent_mode[serial] = "dex"
-                logger.info("multitouch mode: dex (device %s)", serial)
-                return result
-
-        # 2) sendevent direct
+        # 1) sendevent direct
         touch = await self._find_touch_device(serial)
         if touch:
             cmd = self._build_sendevent_cmd(fingers, duration_ms, serial, touch)
@@ -399,77 +387,20 @@ class ADBService:
                 logger.info("multitouch mode: sendevent direct (device %s)", serial)
                 return stdout
 
-            # 3) su
-            adb_su = f"{ADB_PATH} -s {serial} shell su -c '{cmd}'"
+            # 2) su 0
+            adb_su = f'''{ADB_PATH} -s {serial} shell "su 0 sh -c '{cmd}'"'''
             stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, adb_su, 15))
             if rc == 0 and "not found" not in stderr and "Permission denied" not in stderr:
                 self._sendevent_mode[serial] = "su"
                 logger.info("multitouch mode: sendevent su (device %s)", serial)
                 return stdout
 
-        # 4) Fallback
+        # 3) Fallback
         logger.warning("multitouch: no method available (device %s), using parallel input", serial)
         self._sendevent_mode[serial] = "none"
         return await self._parallel_input_swipe(fingers, duration_ms, serial)
 
-    # ---- DEX 기반 멀티터치 (InputManager.injectInputEvent) ----
-
-    _DEX_LOCAL = Path(__file__).resolve().parent / "multitouch" / "multitouch.dex"
-    _DEX_REMOTE = "/data/local/tmp/multitouch.dex"
-    _dex_pushed: set[str] = set()  # 이미 push한 serial 목록
-
-    async def _ensure_dex_on_device(self, serial: str) -> bool:
-        """multitouch.dex가 디바이스에 있는지 확인, 없으면 push."""
-        if serial in self._dex_pushed:
-            return True
-        if not self._DEX_LOCAL.exists():
-            logger.debug("multitouch.dex not built yet (%s)", self._DEX_LOCAL)
-            return False
-        # 디바이스에 이미 있는지 확인
-        check = await self._run_device(serial, f"shell ls {self._DEX_REMOTE}")
-        if self._DEX_REMOTE in check and "No such file" not in check:
-            self._dex_pushed.add(serial)
-            return True
-        # push
-        loop = asyncio.get_event_loop()
-        cmd = f'{ADB_PATH} -s {serial} push "{self._DEX_LOCAL}" {self._DEX_REMOTE}'
-        _, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, cmd, 10))
-        if rc == 0:
-            self._dex_pushed.add(serial)
-            logger.info("multitouch.dex pushed to device %s", serial)
-            return True
-        logger.warning("Failed to push multitouch.dex: %s", stderr)
-        return False
-
-    async def _dex_multitouch(
-        self, fingers: list[dict], duration_ms: int, serial: str,
-    ) -> str | None:
-        """app_process로 Java DEX 실행하여 멀티터치 주입.
-        현재 2-finger만 지원. 3+ finger는 첫 2개만 사용.
-        """
-        if len(fingers) < 2:
-            return None
-        f1, f2 = fingers[0], fingers[1]
-        args = (
-            f"{f1['x1']} {f1['y1']} {f1['x2']} {f1['y2']} "
-            f"{f2['x1']} {f2['y1']} {f2['x2']} {f2['y2']} "
-            f"{duration_ms}"
-        )
-        cmd = (
-            f"shell CLASSPATH={self._DEX_REMOTE} "
-            f"app_process / Multitouch {args}"
-        )
-        loop = asyncio.get_event_loop()
-        adb_cmd = f"{ADB_PATH} -s {serial} {cmd}"
-        stdout, stderr, rc = await loop.run_in_executor(
-            None, functools.partial(_run_sync, adb_cmd, max(15, duration_ms // 1000 + 10))
-        )
-        if rc != 0:
-            logger.warning("dex multitouch failed (rc=%d): %s", rc, stderr.strip())
-            return None
-        return stdout
-
-    # ---- sendevent 기반 (커널 레벨, root 필요) ----
+    # ---- sendevent 기반 (커널 레벨) ----
 
     def _build_sendevent_cmd(
         self, fingers: list[dict], duration_ms: int, serial: str,
@@ -501,10 +432,10 @@ class ADBService:
             ]
         cmds.append(f"{SE} 0 0 0")
 
-        sleep_us = max(1000, (duration_ms * 1000) // steps)
+        sleep_s = max(0.01, duration_ms / 1000 / steps)
         for step in range(1, steps + 1):
             t = step / steps
-            cmds.append(f"usleep {sleep_us}")
+            cmds.append(f"sleep {sleep_s:.3f}")
             for i, f in enumerate(fingers):
                 ix = f["x1"] + (f["x2"] - f["x1"]) * t
                 iy = f["y1"] + (f["y2"] - f["y1"]) * t
@@ -527,11 +458,12 @@ class ADBService:
             return ""
         cmd = self._build_sendevent_cmd(fingers, duration_ms, serial, touch)
         loop = asyncio.get_event_loop()
+        timeout = max(15, duration_ms // 1000 + 10)
         if su:
-            adb_cmd = f"{ADB_PATH} -s {serial} shell su -c '{cmd}'"
+            adb_cmd = f'''{ADB_PATH} -s {serial} shell "su 0 sh -c '{cmd}'"'''
         else:
             adb_cmd = f'{ADB_PATH} -s {serial} shell "{cmd}"'
-        stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, adb_cmd, 15))
+        stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, adb_cmd, timeout))
         if rc != 0:
             logger.error("sendevent failed: %s", stderr.strip())
         return stdout
