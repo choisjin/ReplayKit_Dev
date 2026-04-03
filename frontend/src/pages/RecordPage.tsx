@@ -2308,6 +2308,7 @@ export default function RecordPage() {
                       }}
                     />
                   </Tooltip>
+                  {isScreenAdb && <>
                   <Tooltip title={t('record.multiTouch')}>
                     <Radio.Group
                       size="small"
@@ -2350,6 +2351,7 @@ export default function RecordPage() {
                       />
                     </Tooltip>
                   )}
+                  </>}
                 </Space>
               )
             }
