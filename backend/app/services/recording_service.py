@@ -784,6 +784,14 @@ class RecordingService:
                 await self.adb.key_event(params["keycode"], serial=serial)
             elif step_type == StepType.ADB_COMMAND:
                 await self.adb.run_shell_command(params["command"], serial=serial)
+            elif step_type == StepType.MULTI_TOUCH:
+                fingers = params.get("fingers", [])
+                is_tap = all(f.get("x1") == f.get("x2") and f.get("y1") == f.get("y2") for f in fingers)
+                if is_tap:
+                    points = [{"x": f["x1"], "y": f["y1"]} for f in fingers]
+                    await self.adb.multi_finger_tap(points, serial=serial)
+                else:
+                    await self.adb.multi_finger_swipe(fingers, params.get("duration_ms", 500), serial=serial)
 
             elif step_type in (StepType.CMD_SEND, StepType.CMD_CHECK):
                 cmd = params.get("command", "")

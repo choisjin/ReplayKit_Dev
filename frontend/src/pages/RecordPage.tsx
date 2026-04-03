@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Button, Card, Col, Image, Input, Modal, Radio, Row, Select, Slider, Space, InputNumber, message, List, Tag, Popover, Tooltip, Splitter } from 'antd';
-import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined, CopyOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined, CopyOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons';
 import { deviceApi, scenarioApi, customKeysApi } from '../services/api';
 import { useDevice } from '../context/DeviceContext';
 import { useSettings } from '../context/SettingsContext';
@@ -272,6 +272,8 @@ export default function RecordPage() {
   const [fingerCount, setFingerCount] = useState(1);
   // 멀티터치 핑거 간격 (디바이스 픽셀)
   const [fingerSpread, setFingerSpread] = useState(100);
+  // 줌 제스처 모드: 'normal' | 'zoom_in' | 'zoom_out'
+  const [gestureMode, setGestureMode] = useState<'normal' | 'zoom_in' | 'zoom_out'>('normal');
 
   // 뷰포트 크롭 상태 localStorage 로드 (디바이스 변경 시)
   useEffect(() => {
@@ -558,7 +560,7 @@ export default function RecordPage() {
   // Execute or record an action
   const executeAction = useCallback(async (action: string, params: Record<string, any>, desc: string) => {
     // 화면 제스처/HKMC키는 항상 화면 디바이스로, 나머지는 스텝 디바이스로
-    const isScreenAction = ['tap', 'swipe', 'long_press', 'hkmc_touch', 'hkmc_swipe', 'hkmc_key'].includes(action);
+    const isScreenAction = ['tap', 'swipe', 'long_press', 'multi_touch', 'hkmc_touch', 'hkmc_swipe', 'hkmc_key'].includes(action);
     const effectiveStepDevice = stepDeviceId && stepDeviceId !== '__common__' ? stepDeviceId : '';
     const targetDevice = recording
       ? (isScreenAction ? screenshotDeviceId : (effectiveStepDevice || screenshotDeviceId))
@@ -584,7 +586,8 @@ export default function RecordPage() {
         deviceApi.input(targetDevice, resolvedAction, resolvedParams).then(() => {
           refreshScreenshot();
         }).catch((e: any) => {
-          message.error(e.response?.data?.detail || t('record.inputFailed'));
+          const detail = e.response?.data?.detail;
+          message.error(typeof detail === 'string' ? detail : t('record.inputFailed'));
         });
       }
 
@@ -602,7 +605,8 @@ export default function RecordPage() {
         // Replace optimistic step with real one
         setSteps((prev) => prev.map(s => s === optimisticStep ? res.data.step : s));
       }).catch((e: any) => {
-        message.error(e.response?.data?.detail || t('record.stepRecordFailed'));
+        const detail = e.response?.data?.detail;
+        message.error(typeof detail === 'string' ? detail : t('record.stepRecordFailed'));
         setSteps((prev) => prev.filter(s => s !== optimisticStep));
       }).finally(() => {
         pendingStepsRef.current -= 1;
@@ -615,7 +619,8 @@ export default function RecordPage() {
       if (!alreadyExecuted) {
         // Fire input and refresh in parallel — don't wait for input to complete
         deviceApi.input(targetDevice, resolvedAction, resolvedParams).catch((e: any) => {
-          message.error(e.response?.data?.detail || t('record.inputFailed'));
+          const detail = e.response?.data?.detail;
+          message.error(typeof detail === 'string' ? detail : t('record.inputFailed'));
         });
         // Short delay then refresh (device needs a moment to process input)
         setTimeout(() => refreshScreenshot(), 150);
@@ -1203,6 +1208,31 @@ export default function RecordPage() {
     const dist = Math.sqrt((endX - startX) ** 2 + (endY - startY) ** 2);
     const elapsed = Date.now() - startTime;
 
+    // 줌인/줌아웃 모드: 클릭 지점 기준 핀치 제스처
+    if (gestureMode !== 'normal') {
+      const spread = 50;
+      const gap = 5; // 손가락이 완전히 겹치지 않도록 최소 간격
+      let fingers;
+      if (gestureMode === 'zoom_in') {
+        // 줌인: 중심에서 바깥으로 벌어짐
+        fingers = [
+          { x1: startX - gap, y1: startY, x2: startX - spread, y2: startY },
+          { x1: startX + gap, y1: startY, x2: startX + spread, y2: startY },
+        ];
+      } else {
+        // 줌아웃: 바깥에서 중심으로 오므려짐
+        fingers = [
+          { x1: startX - spread, y1: startY, x2: startX - gap, y2: startY },
+          { x1: startX + spread, y1: startY, x2: startX + gap, y2: startY },
+        ];
+      }
+      const label = gestureMode === 'zoom_in' ? t('record.zoomIn') : t('record.zoomOut');
+      const params = { fingers, duration_ms: 300 };
+      executeAction('multi_touch', params, `${label} (${startX},${startY})`);
+      setLastGesture(`${label} (${startX},${startY})`);
+      return;
+    }
+
     // 멀티터치 핑거 좌표 생성 (중심점 기준 대칭 오프셋)
     const buildFingers = (cx1: number, cy1: number, cx2: number, cy2: number): { x1: number; y1: number; x2: number; y2: number }[] => {
       const spread = fingerSpread;
@@ -1251,7 +1281,7 @@ export default function RecordPage() {
       executeAction('tap', params, `tap (${startX},${startY})`);
       setLastGesture(`${t('record.gestureTap')} (${startX},${startY})`);
     }
-  }, [screenshotDeviceId, executeAction, deviceRes, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY, fingerCount, fingerSpread]);
+  }, [screenshotDeviceId, executeAction, deviceRes, hkmcDisplayMode, isScreenHkmc, viewCropEnabled, viewCropX, viewCropY, fingerCount, fingerSpread, gestureMode]);
 
   const startRecording = async () => {
     if (!scenarioName.trim()) {
@@ -2273,7 +2303,7 @@ export default function RecordPage() {
                     <Radio.Group
                       size="small"
                       value={fingerCount}
-                      onChange={(e) => setFingerCount(e.target.value)}
+                      onChange={(e) => { setFingerCount(e.target.value); setGestureMode('normal'); }}
                       optionType="button"
                       buttonStyle="solid"
                       options={[
@@ -2281,6 +2311,22 @@ export default function RecordPage() {
                         { label: '2', value: 2 },
                         { label: '3', value: 3 },
                       ]}
+                    />
+                  </Tooltip>
+                  <Tooltip title={t('record.zoomIn')}>
+                    <Button
+                      size="small"
+                      type={gestureMode === 'zoom_in' ? 'primary' : 'default'}
+                      icon={<ZoomInOutlined />}
+                      onClick={() => { setGestureMode(g => g === 'zoom_in' ? 'normal' : 'zoom_in'); setFingerCount(1); }}
+                    />
+                  </Tooltip>
+                  <Tooltip title={t('record.zoomOut')}>
+                    <Button
+                      size="small"
+                      type={gestureMode === 'zoom_out' ? 'primary' : 'default'}
+                      icon={<ZoomOutOutlined />}
+                      onClick={() => { setGestureMode(g => g === 'zoom_out' ? 'normal' : 'zoom_out'); setFingerCount(1); }}
                     />
                   </Tooltip>
                   {fingerCount > 1 && (

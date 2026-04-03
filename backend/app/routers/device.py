@@ -484,7 +484,10 @@ async def device_input(req: InputRequest):
             raise HTTPException(status_code=400, detail=f"Unknown action: {req.action}")
 
         return {"result": "ok"}
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error("device_input error: action=%s device=%s error=%s", req.action, req.device_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
