@@ -417,7 +417,7 @@ class ADBService:
         def sy(y: float) -> int:
             return max(0, min(max_y, int(y * max_y / dh)))
 
-        steps = 10
+        steps = 20
         cmds: list[str] = []
         SE = f"sendevent {dev}"
 
@@ -442,6 +442,8 @@ class ADBService:
                 cmds += [f"{SE} 3 47 {i}", f"{SE} 3 53 {sx(ix)}", f"{SE} 3 54 {sy(iy)}"]
             cmds.append(f"{SE} 0 0 0")
 
+        # 릴리즈 전 대기 — 앱이 최종 위치를 인식할 시간 확보
+        cmds.append("sleep 0.05")
         for i in range(len(fingers)):
             cmds += [f"{SE} 3 47 {i}", f"{SE} 3 57 -1"]
         # BTN_TOUCH up
