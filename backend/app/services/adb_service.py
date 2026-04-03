@@ -107,6 +107,7 @@ class ADBService:
 
     def __init__(self):
         self._active_serial: Optional[str] = None
+        self._touch_device_cache: dict[str, tuple[str, int, int]] = {}  # serial → (dev_path, max_x, max_y)
 
     # ------------------------------------------------------------------
     # Device management
@@ -277,36 +278,149 @@ class ADBService:
         dflag = self._display_flag(display_id)
         return await self._run_device(s, f"shell input {dflag}swipe {x1} {y1} {x2} {y2} {duration_ms}")
 
+    # ------------------------------------------------------------------
+    # 멀티터치 (sendevent 기반)
+    # ------------------------------------------------------------------
+
+    async def _find_touch_device(self, serial: str) -> tuple[str, int, int] | None:
+        """터치 입력 디바이스 경로와 좌표 범위 검출. 결과 캐시.
+        Returns (dev_path, max_x, max_y) or None.
+        """
+        if serial in self._touch_device_cache:
+            return self._touch_device_cache[serial]
+
+        output = await self._run_device(serial, "shell getevent -lp")
+        current_device: str | None = None
+        devices: dict[str, dict[str, int]] = {}
+
+        for line in output.splitlines():
+            m = re.match(r"add device \d+:\s+(.+)", line)
+            if m:
+                current_device = m.group(1).strip()
+                continue
+            if not current_device:
+                continue
+            if "ABS_MT_POSITION_X" in line:
+                m2 = re.search(r"max\s+(\d+)", line)
+                if m2:
+                    devices.setdefault(current_device, {})["max_x"] = int(m2.group(1))
+            elif "ABS_MT_POSITION_Y" in line:
+                m2 = re.search(r"max\s+(\d+)", line)
+                if m2:
+                    devices.setdefault(current_device, {})["max_y"] = int(m2.group(1))
+
+        for path, info in devices.items():
+            mx, my = info.get("max_x", 0), info.get("max_y", 0)
+            if mx > 0 and my > 0:
+                result = (path, mx, my)
+                self._touch_device_cache[serial] = result
+                logger.info("Touch device: %s max=(%d,%d)", path, mx, my)
+                return result
+        return None
+
+    async def _get_display_size(self, serial: str) -> tuple[int, int]:
+        """디스플레이 논리 해상도 (wm size 기준)."""
+        raw = await self._run_device(serial, "shell wm size")
+        override = re.search(r"Override size:\s*(\d+)x(\d+)", raw)
+        physical = re.search(r"Physical size:\s*(\d+)x(\d+)", raw)
+        m = override or physical
+        if m:
+            return int(m.group(1)), int(m.group(2))
+        return 0, 0
+
     async def multi_finger_swipe(
         self, fingers: list[dict], duration_ms: int = 500,
         serial: Optional[str] = None, display_id: Optional[int] = None,
     ) -> str:
-        """병렬 input swipe로 멀티핑거 제스처 실행.
+        """sendevent 기반 멀티핑거 스와이프 (진짜 멀티터치).
 
         fingers: [{"x1": .., "y1": .., "x2": .., "y2": ..}, ...]
         """
         s = serial or self._active_serial
         if not s:
             raise ValueError("No device selected")
-        dflag = self._display_flag(display_id)
-        cmds = [f"input {dflag}swipe {f['x1']} {f['y1']} {f['x2']} {f['y2']} {duration_ms}" for f in fingers]
-        parallel = " & ".join(cmds) + " & wait"
-        return await self._run_device(s, f'shell "{parallel}"')
+        return await self._sendevent_multitouch(fingers, duration_ms, s)
 
     async def multi_finger_tap(
         self, points: list[dict], serial: Optional[str] = None, display_id: Optional[int] = None,
     ) -> str:
-        """병렬 input tap으로 멀티핑거 탭 실행.
+        """sendevent 기반 멀티핑거 탭.
 
         points: [{"x": .., "y": ..}, ...]
         """
         s = serial or self._active_serial
         if not s:
             raise ValueError("No device selected")
-        dflag = self._display_flag(display_id)
-        cmds = [f"input {dflag}tap {p['x']} {p['y']}" for p in points]
-        parallel = " & ".join(cmds) + " & wait"
-        return await self._run_device(s, f'shell "{parallel}"')
+        fingers = [{"x1": p["x"], "y1": p["y"], "x2": p["x"], "y2": p["y"]} for p in points]
+        return await self._sendevent_multitouch(fingers, 50, s)
+
+    async def _sendevent_multitouch(
+        self, fingers: list[dict], duration_ms: int, serial: str,
+    ) -> str:
+        """sendevent로 진짜 멀티터치 제스처 실행.
+
+        fingers: [{"x1","y1","x2","y2"}, ...] — 디스플레이 좌표
+        """
+        touch = await self._find_touch_device(serial)
+        if not touch:
+            logger.warning("Touch device not found — sendevent 불가")
+            raise ValueError("Touch device not found for sendevent multitouch")
+
+        dev, max_x, max_y = touch
+        dw, dh = await self._get_display_size(serial)
+        if dw == 0 or dh == 0:
+            dw, dh = max_x + 1, max_y + 1
+
+        def sx(x: float) -> int:
+            return max(0, min(max_x, int(x * max_x / dw)))
+        def sy(y: float) -> int:
+            return max(0, min(max_y, int(y * max_y / dh)))
+
+        steps = 10
+        cmds: list[str] = []
+        SE = f"sendevent {dev}"
+
+        # EV_ABS=3: SLOT=47, TRACKING_ID=57, POS_X=53, POS_Y=54, TOUCH_MAJOR=48
+        # EV_SYN=0: SYN_REPORT=0
+
+        # Frame 0: fingers down
+        for i, f in enumerate(fingers):
+            cmds += [
+                f"{SE} 3 47 {i}",           # ABS_MT_SLOT
+                f"{SE} 3 57 {i}",           # ABS_MT_TRACKING_ID
+                f"{SE} 3 53 {sx(f['x1'])}", # ABS_MT_POSITION_X
+                f"{SE} 3 54 {sy(f['y1'])}", # ABS_MT_POSITION_Y
+                f"{SE} 3 48 5",             # ABS_MT_TOUCH_MAJOR
+            ]
+        cmds.append(f"{SE} 0 0 0")          # SYN_REPORT
+
+        # 중간 이동 프레임
+        sleep_ms = max(1, duration_ms // steps)
+        for step in range(1, steps + 1):
+            t = step / steps
+            # usleep(microseconds)
+            cmds.append(f"usleep {sleep_ms * 1000}")
+            for i, f in enumerate(fingers):
+                ix = f["x1"] + (f["x2"] - f["x1"]) * t
+                iy = f["y1"] + (f["y2"] - f["y1"]) * t
+                cmds += [
+                    f"{SE} 3 47 {i}",
+                    f"{SE} 3 53 {sx(ix)}",
+                    f"{SE} 3 54 {sy(iy)}",
+                ]
+            cmds.append(f"{SE} 0 0 0")
+
+        # Fingers up
+        for i in range(len(fingers)):
+            cmds += [
+                f"{SE} 3 47 {i}",
+                f"{SE} 3 57 -1",            # TRACKING_ID -1 = lift
+            ]
+        cmds.append(f"{SE} 0 0 0")
+
+        shell_cmd = ";".join(cmds)
+        logger.debug("sendevent multitouch: %d fingers, %dms, %d cmds", len(fingers), duration_ms, len(cmds))
+        return await self._run_device(serial, f'shell "{shell_cmd}"')
 
     async def long_press(self, x: int, y: int, duration_ms: int = 1000,
                          serial: Optional[str] = None, display_id: Optional[int] = None) -> str:
