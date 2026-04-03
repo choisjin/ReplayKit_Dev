@@ -421,7 +421,13 @@ class ADBService:
         def sy(y: float) -> int:
             return max(0, min(max_y, int(y * max_y / dh)))
 
-        steps = 20
+        # 스텝 수 = duration 기반 동적 조절 (sendevent 오버헤드 고려)
+        # 각 sendevent 호출 ~5-10ms 오버헤드, 핑거 수에 비례
+        cmds_per_step = len(fingers) * 3 + 1  # slot+x+y per finger + SYN
+        overhead_per_step_ms = cmds_per_step * 8  # ~8ms per sendevent
+        effective_ms = max(50, duration_ms - overhead_per_step_ms * 5)
+        steps = max(3, min(12, effective_ms // 30))  # 목표 ~30ms 간격
+
         cmds: list[str] = []
         SE = f"sendevent {dev}"
 
@@ -436,18 +442,20 @@ class ADBService:
             ]
         cmds.append(f"{SE} 0 0 0")
 
-        sleep_s = max(0.01, duration_ms / 1000 / steps)
+        sleep_s = duration_ms / 1000 / steps
+        use_sleep = sleep_s > 0.02  # sendevent 오버헤드만으로 충분하면 sleep 생략
         for step in range(1, steps + 1):
             t = step / steps
-            cmds.append(f"sleep {sleep_s:.3f}")
+            if use_sleep:
+                cmds.append(f"sleep {sleep_s:.3f}")
             for i, f in enumerate(fingers):
                 ix = f["x1"] + (f["x2"] - f["x1"]) * t
                 iy = f["y1"] + (f["y2"] - f["y1"]) * t
                 cmds += [f"{SE} 3 47 {i}", f"{SE} 3 53 {sx(ix)}", f"{SE} 3 54 {sy(iy)}"]
             cmds.append(f"{SE} 0 0 0")
 
-        # 릴리즈 전 대기 — 앱이 최종 위치를 인식할 시간 확보
-        cmds.append("sleep 0.05")
+        # 릴리즈 전 대기
+        cmds.append("sleep 0.03")
         for i in range(len(fingers)):
             cmds += [f"{SE} 3 47 {i}", f"{SE} 3 57 -1"]
         # BTN_TOUCH up
