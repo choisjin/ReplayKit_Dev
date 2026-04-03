@@ -108,6 +108,7 @@ class ADBService:
     def __init__(self):
         self._active_serial: Optional[str] = None
         self._touch_device_cache: dict[str, tuple[str, int, int]] = {}  # serial → (dev_path, max_x, max_y)
+        self._sendevent_mode: dict[str, str] = {}  # serial → "direct" | "su" | "none"
 
     # ------------------------------------------------------------------
     # Device management
@@ -358,13 +359,20 @@ class ADBService:
         self, fingers: list[dict], duration_ms: int, serial: str,
     ) -> str:
         """sendevent로 진짜 멀티터치 제스처 실행.
+        Permission denied 시 su 시도, 그래도 안 되면 parallel input swipe fallback.
 
         fingers: [{"x1","y1","x2","y2"}, ...] — 디스플레이 좌표
         """
+        # 이전에 sendevent 불가 판정된 디바이스는 바로 fallback
+        cached_mode = self._sendevent_mode.get(serial)
+        if cached_mode == "none":
+            return await self._parallel_input_swipe(fingers, duration_ms, serial)
+
         touch = await self._find_touch_device(serial)
         if not touch:
-            logger.warning("Touch device not found — sendevent 불가")
-            raise ValueError("Touch device not found for sendevent multitouch")
+            logger.warning("Touch device not found — fallback to parallel input")
+            self._sendevent_mode[serial] = "none"
+            return await self._parallel_input_swipe(fingers, duration_ms, serial)
 
         dev, max_x, max_y = touch
         dw, dh = await self._get_display_size(serial)
@@ -380,9 +388,6 @@ class ADBService:
         cmds: list[str] = []
         SE = f"sendevent {dev}"
 
-        # EV_ABS=3: SLOT=47, TRACKING_ID=57, POS_X=53, POS_Y=54, TOUCH_MAJOR=48
-        # EV_SYN=0: SYN_REPORT=0
-
         # Frame 0: fingers down
         for i, f in enumerate(fingers):
             cmds += [
@@ -395,11 +400,10 @@ class ADBService:
         cmds.append(f"{SE} 0 0 0")          # SYN_REPORT
 
         # 중간 이동 프레임
-        sleep_ms = max(1, duration_ms // steps)
+        sleep_us = max(1000, (duration_ms * 1000) // steps)
         for step in range(1, steps + 1):
             t = step / steps
-            # usleep(microseconds)
-            cmds.append(f"usleep {sleep_ms * 1000}")
+            cmds.append(f"usleep {sleep_us}")
             for i, f in enumerate(fingers):
                 ix = f["x1"] + (f["x2"] - f["x1"]) * t
                 iy = f["y1"] + (f["y2"] - f["y1"]) * t
@@ -412,15 +416,61 @@ class ADBService:
 
         # Fingers up
         for i in range(len(fingers)):
-            cmds += [
-                f"{SE} 3 47 {i}",
-                f"{SE} 3 57 -1",            # TRACKING_ID -1 = lift
-            ]
+            cmds += [f"{SE} 3 47 {i}", f"{SE} 3 57 -1"]
         cmds.append(f"{SE} 0 0 0")
 
         shell_cmd = ";".join(cmds)
         logger.debug("sendevent multitouch: %d fingers, %dms, %d cmds", len(fingers), duration_ms, len(cmds))
-        return await self._run_device(serial, f'shell "{shell_cmd}"')
+
+        loop = asyncio.get_event_loop()
+
+        # 1) 캐시된 모드가 있으면 바로 사용
+        if cached_mode == "direct":
+            adb_cmd = f'{ADB_PATH} -s {serial} shell "{shell_cmd}"'
+            stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, adb_cmd, 15))
+            if rc == 0:
+                return stdout
+
+        if cached_mode == "su":
+            adb_cmd = f"{ADB_PATH} -s {serial} shell su -c '{shell_cmd}'"
+            stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, adb_cmd, 15))
+            if rc == 0:
+                return stdout
+
+        # 2) 최초 시도: direct → su → fallback
+        if not cached_mode:
+            # direct 시도
+            adb_cmd = f'{ADB_PATH} -s {serial} shell "{shell_cmd}"'
+            stdout, stderr, rc = await loop.run_in_executor(None, functools.partial(_run_sync, adb_cmd, 15))
+            if rc == 0 and "Permission denied" not in stderr:
+                self._sendevent_mode[serial] = "direct"
+                logger.info("sendevent mode: direct (device %s)", serial)
+                return stdout
+
+            # su 시도
+            adb_cmd_su = f"{ADB_PATH} -s {serial} shell su -c '{shell_cmd}'"
+            stdout, stderr_su, rc_su = await loop.run_in_executor(None, functools.partial(_run_sync, adb_cmd_su, 15))
+            if rc_su == 0 and "not found" not in stderr_su and "Permission denied" not in stderr_su:
+                self._sendevent_mode[serial] = "su"
+                logger.info("sendevent mode: su (device %s)", serial)
+                return stdout
+
+        # 3) 모두 실패 → parallel input swipe fallback
+        logger.warning("sendevent unavailable (device %s), using parallel input swipe", serial)
+        self._sendevent_mode[serial] = "none"
+        return await self._parallel_input_swipe(fingers, duration_ms, serial)
+
+    async def _parallel_input_swipe(
+        self, fingers: list[dict], duration_ms: int, serial: str,
+    ) -> str:
+        """Fallback: parallel input swipe (진짜 멀티터치 아님)."""
+        is_tap = all(f.get("x1") == f.get("x2") and f.get("y1") == f.get("y2") for f in fingers)
+        if is_tap:
+            cmds = [f"input tap {f['x1']} {f['y1']}" for f in fingers]
+        else:
+            cmds = [f"input swipe {f['x1']} {f['y1']} {f['x2']} {f['y2']} {duration_ms}" for f in fingers]
+        parallel = " & ".join(cmds) + " & wait"
+        return await self._run_device(serial, f'shell "{parallel}"')
 
     async def long_press(self, x: int, y: int, duration_ms: int = 1000,
                          serial: Optional[str] = None, display_id: Optional[int] = None) -> str:
