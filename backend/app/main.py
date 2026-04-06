@@ -675,9 +675,31 @@ async def websocket_playback(websocket: WebSocket):
                         })
                         continue
 
-                    saved_result_filenames: list[str] = []
-                    # 시나리오별 결과 누적 (세트 반복 시 합산)
-                    scenario_results: dict[str, ScenarioResult] = {}
+                    # 그룹 전체를 하나의 통합 결과로 관리
+                    group_name = " → ".join(e["name"] for e in entries)
+                    # 전체 스텝 수 계산
+                    total_steps = 0
+                    for entry in entries:
+                        try:
+                            scen = await recording_service.load_scenario(entry["name"])
+                            total_steps += len(scen.steps)
+                        except FileNotFoundError:
+                            pass
+
+                    # 런 출력 디렉토리를 그룹 이름으로 한 번만 설정
+                    playback_service._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    playback_service._setup_run_output_dir(group_name)
+
+                    unified_result = ScenarioResult(
+                        scenario_name=group_name,
+                        device_serial="multi-device",
+                        status="pass",
+                        total_steps=total_steps,
+                        total_repeat=repeat,
+                        started_at=datetime.now(timezone.utc).isoformat(),
+                    )
+                    # 연속 step_id (시나리오 간 중복 방지)
+                    global_step_seq = 0
 
                     for iteration in range(1, repeat + 1):
                         if playback_service._should_stop:
@@ -705,17 +727,6 @@ async def websocket_playback(websocket: WebSocket):
                                 "start_step": start_step,
                             })
 
-                            if sc_name not in scenario_results:
-                                scenario_results[sc_name] = ScenarioResult(
-                                    scenario_name=sc_name,
-                                    device_serial="multi-device",
-                                    status="pass",
-                                    total_steps=len(scen.steps),
-                                    total_repeat=repeat,
-                                    started_at=datetime.now(timezone.utc).isoformat(),
-                                )
-                            result = scenario_results[sc_name]
-
                             step_jumps = entry.get("step_jumps", {})
                             step_jump_target = None
 
@@ -729,13 +740,18 @@ async def websocket_playback(websocket: WebSocket):
                                     })
                                     continue
                                 step_result = item
-                                result.step_results.append(step_result)
+                                # 연번 부여 (시나리오 간 중복 방지)
+                                global_step_seq += 1
+                                step_result.step_id = global_step_seq
+                                step_result.description = f"[{sc_name}] {step_result.description}" if step_result.description else f"[{sc_name}]"
+
+                                unified_result.step_results.append(step_result)
                                 if step_result.status == "pass":
-                                    result.passed_steps += 1
+                                    unified_result.passed_steps += 1
                                 elif step_result.status == "fail":
-                                    result.failed_steps += 1
+                                    unified_result.failed_steps += 1
                                 else:
-                                    result.error_steps += 1
+                                    unified_result.error_steps += 1
                                 await websocket.send_json({
                                     "type": "step_result",
                                     "data": step_result.model_dump(),
@@ -743,7 +759,7 @@ async def websocket_playback(websocket: WebSocket):
                                     "scenario_name": sc_name,
                                 })
 
-                                sj = step_jumps.get(str(step_result.step_id))
+                                sj = step_jumps.get(str(item.step_id))
                                 if sj:
                                     if step_result.status == "pass":
                                         sj_jump = sj.get("on_pass_goto")
@@ -764,7 +780,8 @@ async def websocket_playback(websocket: WebSocket):
                             if step_jump_target is not None:
                                 jump = step_jump_target
                             else:
-                                last_status = result.step_results[-1].status if result.step_results else "pass"
+                                last_sr = unified_result.step_results[-1] if unified_result.step_results else None
+                                last_status = last_sr.status if last_sr else "pass"
                                 if last_status == "pass":
                                     jump = entry.get("on_pass_goto")
                                 else:
@@ -784,17 +801,16 @@ async def websocket_playback(websocket: WebSocket):
 
                             sc_idx = next_idx
 
-                    # 전체 반복 완료 후 시나리오별 결과 저장
-                    for sc_name, result in scenario_results.items():
-                        result.finished_at = datetime.now(timezone.utc).isoformat()
-                        if result.failed_steps > 0 or result.error_steps > 0:
-                            result.status = "fail"
-                        else:
-                            result.status = "pass"
-                        result_path = await playback_service._save_result(result)
-                        saved_result_filenames.append(_result_filename(result_path))
+                    # 통합 결과 저장 (1개 파일)
+                    unified_result.finished_at = datetime.now(timezone.utc).isoformat()
+                    unified_result.total_steps = global_step_seq
+                    if unified_result.failed_steps > 0 or unified_result.error_steps > 0:
+                        unified_result.status = "fail"
+                    else:
+                        unified_result.status = "pass"
+                    result_path = await playback_service._save_result(unified_result)
+                    rf = _result_filename(result_path)
 
-                    rf = saved_result_filenames[-1] if saved_result_filenames else ""
                     if playback_service._should_stop:
                         await websocket.send_json({"type": "playback_stopped", "result_filename": rf})
                     else:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import subprocess
 import sys
 import time
@@ -305,7 +306,9 @@ class PlaybackService:
         """
         self._device_map = self._resolve_device_map(scenario, device_map_override)
         self._running = True
-        self._should_stop = False
+        # 그룹 재생에서 호출 시 _should_stop을 리셋하면 안 됨 (이미 설정된 경우)
+        if not self._result_timestamp:
+            self._should_stop = False
         self._current_iteration = repeat_index - 1  # 0-based for cycle wait
         if not self._result_timestamp:
             self._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1114,7 +1117,7 @@ class PlaybackService:
           └── recordings/         ← 동영상 파일
         """
         global _current_run_output_dir
-        safe_name = scenario_name.replace(" ", "_").replace("/", "_").replace("\\", "_")
+        safe_name = re.sub(r'[\\/:*?"<>|→]', '_', scenario_name).replace(" ", "_")
         folder_name = f"{self._result_timestamp}_{safe_name}"
         run_dir = RESULTS_DIR / folder_name
         run_dir.mkdir(parents=True, exist_ok=True)
