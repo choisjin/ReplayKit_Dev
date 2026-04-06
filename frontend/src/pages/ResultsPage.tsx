@@ -189,7 +189,7 @@ export default function ResultsPage() {
       setRecordings(recs);
       if (recs.length > 0) {
         setActiveRecUrl(recs[0].url);
-        const m = recs[0].filename.match(/_webcam_r(\d+)\.webm$/);
+        const m = recs[0].filename.match(/webcam_r(\d+)\.webm$/);
         setActiveRecRepeat(m ? parseInt(m[1]) : 1);
       } else {
         setActiveRecUrl('');
@@ -218,7 +218,7 @@ export default function ResultsPage() {
     if (!webcamPanelOpen) setWebcamPanelOpen(true);
     // 해당 회차 녹화 선택
     const targetRepeat = step.repeat_index || 1;
-    const rec = recordings.find(r => r.filename.includes(`_webcam_r${targetRepeat}.webm`));
+    const rec = recordings.find(r => r.filename.includes(`webcam_r${targetRepeat}.webm`));
     if (!rec) return;
 
     // 같은 회차의 첫/마지막 스텝 타임스탬프 기준으로 오프셋 계산
@@ -341,7 +341,7 @@ export default function ResultsPage() {
       setRecordings(uniqueRecs);
       if (uniqueRecs.length > 0) {
         setActiveRecUrl(uniqueRecs[0].url);
-        const m = uniqueRecs[0].filename.match(/_webcam_r(\d+)\.webm$/);
+        const m = uniqueRecs[0].filename.match(/webcam_r(\d+)\.webm$/);
         setActiveRecRepeat(m ? parseInt(m[1]) : 1);
       } else {
         setActiveRecUrl('');
@@ -962,7 +962,7 @@ export default function ResultsPage() {
                       <div>
                         <Space style={{ marginBottom: 8 }}>
                           {recordings.map((rec, i) => {
-                            const m = rec.filename.match(/_webcam_r(\d+)\.webm$/);
+                            const m = rec.filename.match(/webcam_r(\d+)\.webm$/);
                             const recCycle = m ? parseInt(m[1]) : i + 1;
                             return (
                               <Button key={rec.filename} size="small"
@@ -1059,12 +1059,12 @@ export default function ResultsPage() {
                           size="small"
                           value={activeRecRepeat}
                           onChange={(v) => {
-                            const rec = recordings.find(r => r.filename.includes(`_webcam_r${v}.webm`));
+                            const rec = recordings.find(r => r.filename.includes(`webcam_r${v}.webm`));
                             if (rec) { setActiveRecUrl(rec.url); setActiveRecRepeat(v); }
                           }}
                           style={{ width: '100%', marginBottom: 6 }}
                           options={recordings.map(r => {
-                            const m = r.filename.match(/_webcam_r(\d+)\.webm$/);
+                            const m = r.filename.match(/webcam_r(\d+)\.webm$/);
                             const ri = m ? parseInt(m[1]) : 1;
                             return { value: ri, label: `${t('webcam.repeat')} ${ri}  (${(r.size / 1024 / 1024).toFixed(1)} MB)` };
                           })}
@@ -1072,7 +1072,7 @@ export default function ResultsPage() {
                       )}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         {recordings.map((rec) => {
-                          const m = rec.filename.match(/_webcam_r(\d+)\.webm$/);
+                          const m = rec.filename.match(/webcam_r(\d+)\.webm$/);
                           const ri = m ? m[1] : '?';
                           return (
                             <div key={rec.filename} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>

@@ -914,6 +914,13 @@ export default function ScenarioPage() {
         setPlayingName(msg.scenario_name);
       } else if (msg.type === 'iteration_start') {
         setCurrentIteration(msg.iteration);
+        // 회차별 웹캠 녹화 분리
+        if (doAutoRecord && webcamRecordingActiveRef.current && msg.iteration > 1) {
+          webcam.stopRecordingAuto().then((blob) => {
+            webcamBlobsRef.current.push({ repeatIndex: msg.iteration - 1, blob });
+            webcam.startRecordingAuto().then((ok) => { webcamRecordingActiveRef.current = ok; });
+          });
+        }
       } else if (msg.type === 'step_start') {
         // 첫 스텝 시작 = 디바이스 검사 통과 → 웹캠 녹화 시작
         if (doAutoRecord && !webcamRecordingActiveRef.current) {
