@@ -262,6 +262,8 @@ if __name__ == '__main__':
 def step_build_frontend():
     """frontend npm build."""
     print("\n=== [2/4] Frontend 빌드 ===")
+    print("  npm install...")
+    _run([NPM_CMD, "install"], cwd=PROJECT_ROOT / "frontend", check=False)
     result = _run([NPM_CMD, "run", "build"], cwd=PROJECT_ROOT / "frontend", check=False)
     if result.returncode != 0:
         print(f"  빌드 에러:\n{result.stderr[:500]}")
