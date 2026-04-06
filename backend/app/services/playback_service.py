@@ -128,6 +128,7 @@ class PlaybackService:
         self._device_map: dict[str, str] = {}  # alias -> real device id for current playback
         self._result_timestamp: str = ""  # 재생 세션별 고유 타임스탬프 (actual 이미지 폴더용)
         self._run_output_dir: Optional[Path] = None  # 런별 출력 디렉토리
+        self._run_output_dir_owned = False  # 이 함수가 직접 output dir을 만들었는지
 
     @property
     def is_running(self) -> bool:
@@ -313,12 +314,18 @@ class PlaybackService:
         if not self._result_timestamp:
             self._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             self._setup_run_output_dir(scenario.name)
+            self._run_output_dir_owned = True
+        else:
+            self._run_output_dir_owned = False
 
         # Build step lookup by ID for conditional jumps
         step_by_id: dict[int, int] = {}  # step.id -> index
         for i, s in enumerate(scenario.steps):
             step_by_id[s.id] = i
 
+        # 그룹 재생 시 호출자(main.py)가 _result_timestamp를 미리 설정하므로
+        # 여기서 cleanup하면 안 됨 — _is_group_member로 판별
+        _is_group_member = self._result_timestamp != "" and not self._run_output_dir_owned
         try:
             idx = max(0, start_step)
             while idx < len(scenario.steps):
@@ -357,7 +364,8 @@ class PlaybackService:
                 idx = next_idx
         finally:
             self._running = False
-            self._cleanup_run_output_dir()
+            if not _is_group_member:
+                self._cleanup_run_output_dir()
 
     async def execute_single_step(self, step: Step, scenario_name: str, device_map: Optional[dict[str, str]] = None) -> StepResult:
         """Execute a single step with verification (for testing individual steps)."""

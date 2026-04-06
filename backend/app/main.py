@@ -740,6 +740,8 @@ async def websocket_playback(websocket: WebSocket):
                                     })
                                     continue
                                 step_result = item
+                                # step_jumps 매칭은 원래 step_id로 해야 함
+                                original_step_id = step_result.step_id
                                 # 연번 부여 (시나리오 간 중복 방지)
                                 global_step_seq += 1
                                 step_result.step_id = global_step_seq
@@ -759,7 +761,7 @@ async def websocket_playback(websocket: WebSocket):
                                     "scenario_name": sc_name,
                                 })
 
-                                sj = step_jumps.get(str(item.step_id))
+                                sj = step_jumps.get(str(original_step_id))
                                 if sj:
                                     if step_result.status == "pass":
                                         sj_jump = sj.get("on_pass_goto")
@@ -818,6 +820,9 @@ async def websocket_playback(websocket: WebSocket):
                 except Exception as e:
                     await websocket.send_json({"type": "error", "message": str(e)})
                 finally:
+                    # 그룹 재생 종료: 통합 런 디렉토리 정리
+                    playback_service._cleanup_run_output_dir()
+                    playback_service._running = False
                     if stop_listener_task and not stop_listener_task.done():
                         stop_listener_task.cancel()
                         try:
