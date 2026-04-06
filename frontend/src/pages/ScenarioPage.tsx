@@ -1271,8 +1271,8 @@ export default function ScenarioPage() {
                 isLeaf: false,
                 children: items.filter(n => filteredScenarios.includes(n)).map(n => ({
                   key: `scenario:${n}`,
-                  title: n,
-                  icon: <FileOutlined />,
+                  title: <span style={playing && (currentGroupScenario === n || playingName === n) ? { color: '#1677ff', fontWeight: 700 } : undefined}>{n}</span>,
+                  icon: <FileOutlined style={playing && (currentGroupScenario === n || playingName === n) ? { color: '#1677ff' } : undefined} />,
                   isLeaf: true,
                 })),
               });
@@ -1280,7 +1280,8 @@ export default function ScenarioPage() {
             // 루트 시나리오 (폴더에 속하지 않은 것)
             for (const name of filteredScenarios) {
               if (!foldered.has(name)) {
-                treeData.push({ key: `scenario:${name}`, title: name, icon: <FileOutlined />, isLeaf: true });
+                const isPlaying = playing && (currentGroupScenario === name || playingName === name);
+                treeData.push({ key: `scenario:${name}`, title: <span style={isPlaying ? { color: '#1677ff', fontWeight: 700 } : undefined}>{name}</span>, icon: <FileOutlined style={isPlaying ? { color: '#1677ff' } : undefined} />, isLeaf: true });
               }
             }
 
