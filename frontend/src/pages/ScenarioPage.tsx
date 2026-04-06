@@ -1108,16 +1108,16 @@ export default function ScenarioPage() {
 
   const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 11, color: '#888' }}>{ko}</span></div>;
   const makeStepResultColumns = (totalRepeat: number) => [
-    { title: _colTitle('Time Stamp', t('scenario.colTimestamp')), dataIndex: 'timestamp', key: 'timestamp', width: 120, resizable: true, align: 'center' as const, render: (v: string | null) => v ? formatTime(v, lang) : '-' },
-    { title: _colTitle('Repeat', t('scenario.colCurrentTotal')), dataIndex: 'repeat_index', key: 'repeat', width: 55, resizable: true, align: 'center' as const, render: (v: number) => `${v}/${totalRepeat}` },
-    { title: _colTitle('Step', t('scenario.colOrder')), dataIndex: 'step_id', key: 'step_id', width: 45, resizable: true, align: 'center' as const },
-    { title: _colTitle('Device', t('scenario.colDevice')), dataIndex: 'device_id', key: 'device_id', width: 85, resizable: true, align: 'center' as const, render: (v: string) => v ? <Tag color={v.startsWith('Android') ? 'green' : v.startsWith('Serial') ? 'purple' : 'geekblue'}>{v}</Tag> : '-' },
-    { title: _colTitle('Command', 'action'), dataIndex: 'command', key: 'command', width: 200, resizable: true, ellipsis: true, align: 'center' as const, render: (v: string, r: StepResultData) => <span style={{ textAlign: 'left', display: 'block' }}>{v || r.message || '-'}</span> },
-    { title: _colTitle('Remark', t('common.description')), dataIndex: 'description', key: 'description', ellipsis: true, resizable: true, align: 'center' as const, render: (v: string) => <span style={{ textAlign: 'left', display: 'block' }}>{v || '-'}</span> },
-    { title: _colTitle('Status', t('common.result')), dataIndex: 'status', key: 'status', width: 75, resizable: true, align: 'center' as const, render: (s: string) => s === 'running' ? <Tag color="processing">RUNNING</Tag> : <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
-    { title: _colTitle('Delay', t('scenario.colSetting')), dataIndex: 'delay_ms', key: 'delay', width: 55, resizable: true, align: 'center' as const, render: (ms: number) => ms ? formatDuration(ms) : '-' },
-    { title: _colTitle('Duration', t('scenario.colActual')), dataIndex: 'execution_time_ms', key: 'duration', width: 70, resizable: true, align: 'center' as const, render: (ms: number, r: StepResultData) => r.status === 'running' ? <span style={{ color: '#1677ff' }}>{formatDuration(liveDuration)}</span> : formatDuration(ms) },
-    { title: _colTitle('', t('scenario.compare')), key: 'compare', width: 50, align: 'center' as const, render: (_: any, r: StepResultData) => {
+    { title: _colTitle('Time Stamp', t('scenario.colTimestamp')), dataIndex: 'timestamp', key: 'timestamp', align: 'center' as const, render: (v: string | null) => <span style={{ whiteSpace: 'nowrap' }}>{v ? formatTime(v, lang) : '-'}</span> },
+    { title: _colTitle('Repeat', t('scenario.colCurrentTotal')), dataIndex: 'repeat_index', key: 'repeat', align: 'center' as const, render: (v: number) => `${v}/${totalRepeat}` },
+    { title: _colTitle('Step', t('scenario.colOrder')), dataIndex: 'step_id', key: 'step_id', align: 'center' as const },
+    { title: _colTitle('Device', t('scenario.colDevice')), dataIndex: 'device_id', key: 'device_id', align: 'center' as const, render: (v: string) => v ? <Tag color={v.startsWith('Android') ? 'green' : v.startsWith('Serial') ? 'purple' : 'geekblue'} style={{ margin: 0 }}>{v}</Tag> : '-' },
+    { title: _colTitle('Command', 'action'), dataIndex: 'command', key: 'command', width: colWidths['command'] || 200, ellipsis: true, align: 'center' as const, onHeaderCell: () => ({ width: colWidths['command'] || 200, onResize: (_e: any, { size }: any) => setColWidths(prev => ({ ...prev, command: size.width })) }), render: (v: string, r: StepResultData) => <span style={{ textAlign: 'left', display: 'block' }}>{v || r.message || '-'}</span> },
+    { title: _colTitle('Remark', t('common.description')), dataIndex: 'description', key: 'description', width: colWidths['description'] || 200, ellipsis: true, align: 'center' as const, onHeaderCell: () => ({ width: colWidths['description'] || 200, onResize: (_e: any, { size }: any) => setColWidths(prev => ({ ...prev, description: size.width })) }), render: (v: string) => <span style={{ textAlign: 'left', display: 'block' }}>{v || '-'}</span> },
+    { title: _colTitle('Status', t('common.result')), dataIndex: 'status', key: 'status', align: 'center' as const, render: (s: string) => s === 'running' ? <Tag color="processing">RUNNING</Tag> : <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
+    { title: _colTitle('Delay', t('scenario.colSetting')), dataIndex: 'delay_ms', key: 'delay', align: 'center' as const, render: (ms: number) => ms ? formatDuration(ms) : '-' },
+    { title: _colTitle('Duration', t('scenario.colActual')), dataIndex: 'execution_time_ms', key: 'duration', align: 'center' as const, render: (ms: number, r: StepResultData) => r.status === 'running' ? <span style={{ color: '#1677ff' }}>{formatDuration(liveDuration)}</span> : formatDuration(ms) },
+    { title: _colTitle('', t('scenario.compare')), key: 'compare', align: 'center' as const, render: (_: any, r: StepResultData) => {
       if (r.status === 'running') return '-';
       const hasCmdMsg = (r.command?.startsWith('cmd_send:') || r.command?.startsWith('cmd_check:')) && r.message;
       if (r.expected_image || r.actual_image || hasCmdMsg) {
@@ -1475,14 +1475,7 @@ export default function ScenarioPage() {
             /* 재생 중 / 완료: 결과 테이블 (스텝만 스크롤, 자동 최하단) */
             <div style={{ flex: 1, overflow: 'auto' }}>
             <Table
-              columns={makeStepResultColumns(totalIterations).map((col: any, idx: number) => ({
-                ...col,
-                width: colWidths[col.key] || col.width,
-                onHeaderCell: col.width ? () => ({
-                  width: colWidths[col.key] || col.width,
-                  onResize: (_e: any, { size }: any) => setColWidths(prev => ({ ...prev, [col.key]: size.width })),
-                }) : undefined,
-              }))}
+              columns={makeStepResultColumns(totalIterations)}
               components={{ header: { cell: ResizableTitle } }}
               dataSource={playing ? [...stepResults].reverse() : stepResults}
               rowKey={(_r, idx) => `${idx}`}
