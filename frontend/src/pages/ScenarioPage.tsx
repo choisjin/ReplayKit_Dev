@@ -161,6 +161,7 @@ export default function ScenarioPage() {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [folders, setFolders] = useState<Record<string, string[]>>({});
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'folder' | 'scenario'; name: string } | null>(null);
+  const [groupAddFolder, setGroupAddFolder] = useState<Record<string, string>>({});
   const getRepeatCount = (name: string) => repeatCounts[name] ?? 1;
   const setRepeatCount = (name: string, val: number) =>
     setRepeatCounts((prev) => ({ ...prev, [name]: val }));
@@ -1712,39 +1713,32 @@ export default function ScenarioPage() {
                     );
                   }}
                 />
-                <Select
-                  placeholder={t('scenario.addScenario')}
-                  size="small"
-                  showSearch
-                  style={{ width: '100%', marginTop: 8 }}
-                  value={undefined}
-                  onChange={(sName: string) => { if (sName) addToGroup(gName, sName); }}
-                >
-                  {(() => {
-                    const available = scenarios.filter((n) => !members.some((m) => m.name === n));
-                    const foldered = new Set<string>();
-                    for (const items of Object.values(folders)) items.forEach(n => foldered.add(n));
-                    const rootItems = available.filter(n => !foldered.has(n));
-                    return (
-                      <>
-                        {Object.entries(folders).map(([fn, items]) => {
-                          const folderAvailable = items.filter(n => available.includes(n));
-                          if (folderAvailable.length === 0) return null;
-                          return (
-                            <Select.OptGroup key={fn} label={fn}>
-                              {folderAvailable.map(n => <Select.Option key={n} value={n}>{n}</Select.Option>)}
-                            </Select.OptGroup>
-                          );
-                        })}
-                        {rootItems.length > 0 && (
-                          <Select.OptGroup label={t('scenario.rootScenarios')}>
-                            {rootItems.map(n => <Select.Option key={n} value={n}>{n}</Select.Option>)}
-                          </Select.OptGroup>
-                        )}
-                      </>
-                    );
-                  })()}
-                </Select>
+                {(() => {
+                  const available = scenarios.filter((n) => !members.some((m) => m.name === n));
+                  const foldered = new Set<string>();
+                  for (const items of Object.values(folders)) items.forEach(n => foldered.add(n));
+                  const folderKeys = Object.keys(folders);
+                  const curFolder = groupAddFolder[gName] || '__all__';
+                  const filtered = curFolder === '__all__' ? available
+                    : available.filter(n => (folders[curFolder] || []).includes(n));
+                  return (
+                    <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                      <Select size="small" value={curFolder} onChange={(v) => setGroupAddFolder(prev => ({ ...prev, [gName]: v }))} style={{ width: 100 }}>
+                        <Select.Option value="__all__">{t('scenario.allScenarios')}</Select.Option>
+                        {folderKeys.map(fn => <Select.Option key={fn} value={fn}>{fn}</Select.Option>)}
+                      </Select>
+                      <Select
+                        placeholder={t('scenario.addScenario')}
+                        size="small"
+                        showSearch
+                        style={{ flex: 1 }}
+                        value={undefined}
+                        onChange={(sName: string) => { if (sName) addToGroup(gName, sName); }}
+                        options={filtered.map(n => ({ label: n, value: n }))}
+                      />
+                    </div>
+                  );
+                })()}
               </>
             ),
           }))}

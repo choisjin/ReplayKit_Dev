@@ -216,7 +216,7 @@ class RecordingService:
     async def list_scenarios(self) -> list[str]:
         """List all saved scenario names."""
         SCENARIOS_DIR.mkdir(parents=True, exist_ok=True)
-        return [p.stem for p in SCENARIOS_DIR.glob("*.json") if p.name != "groups.json"]
+        return [p.stem for p in SCENARIOS_DIR.glob("*.json") if p.name not in ("groups.json", "folders.json")]
 
     async def delete_scenario(self, name: str) -> bool:
         """Delete a scenario file."""
