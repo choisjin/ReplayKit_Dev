@@ -1459,12 +1459,27 @@ export default function RecordPage() {
   };
 
   // Fetch saved scenario list
+  const [recordFolders, setRecordFolders] = useState<Record<string, string[]>>({});
+  const [recordSelectedFolder, setRecordSelectedFolder] = useState<string>('__all__');
+
   const fetchSavedScenarios = async () => {
     try {
-      const res = await scenarioApi.list();
-      setSavedScenarios(res.data.scenarios);
+      const [scRes, fRes] = await Promise.all([scenarioApi.list(), scenarioApi.getFolders()]);
+      setSavedScenarios(scRes.data.scenarios);
+      setRecordFolders(fRes.data.folders || {});
     } catch { /* ignore */ }
   };
+
+  const filteredSavedScenarios = React.useMemo(() => {
+    if (recordSelectedFolder === '__all__') return savedScenarios;
+    if (recordSelectedFolder === '__root__') {
+      const foldered = new Set<string>();
+      for (const items of Object.values(recordFolders)) items.forEach(n => foldered.add(n));
+      return savedScenarios.filter(n => !foldered.has(n));
+    }
+    const items = recordFolders[recordSelectedFolder] || [];
+    return savedScenarios.filter(n => items.includes(n));
+  }, [savedScenarios, recordFolders, recordSelectedFolder]);
 
   useEffect(() => {
     fetchSavedScenarios();
@@ -2992,17 +3007,31 @@ export default function RecordPage() {
             {!recording && (
             <Card size="small" title={t('record.control')} style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {/* Row 1: 시나리오 콤보 + 관리 버튼 */}
+                {/* Row 1: 폴더 콤보 + 시나리오 콤보 + 관리 버튼 */}
                 <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <Select
+                    size="small"
+                    value={recordSelectedFolder}
+                    onChange={setRecordSelectedFolder}
+                    style={{ width: 100 }}
+                    onOpenChange={(open) => { if (open) fetchSavedScenarios(); }}
+                  >
+                    <Option value="__all__">{t('scenario.allScenarios')}</Option>
+                    <Option value="__root__">{t('scenario.rootScenarios')}</Option>
+                    {Object.keys(recordFolders).map(fn => (
+                      <Option key={fn} value={fn}>{fn}</Option>
+                    ))}
+                  </Select>
                   <Select
                     size="small"
                     placeholder={t('record.loadScenario')}
                     style={{ flex: 1, minWidth: 140 }}
                     onChange={loadScenario}
                     value={scenarioName || undefined}
+                    showSearch
                     onOpenChange={(open) => { if (open) fetchSavedScenarios(); }}
                   >
-                    {savedScenarios.map(n => (
+                    {filteredSavedScenarios.map(n => (
                       <Option key={n} value={n}>{n}</Option>
                     ))}
                   </Select>

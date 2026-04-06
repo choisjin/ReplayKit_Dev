@@ -38,6 +38,7 @@ def _build_ctor_kwargs(dev) -> dict | None:
         return {k: v for k, v in dev.info.items() if k not in ("module", "connect_type")}
     return None
 GROUPS_FILE = SCENARIOS_DIR / "groups.json"
+FOLDERS_FILE = SCENARIOS_DIR / "folders.json"
 
 
 class RecordingService:
@@ -296,6 +297,58 @@ class RecordingService:
         new_path = ss_dir / new_filename
         old_path.rename(new_path)
         return new_filename
+
+    # ------------------------------------------------------------------
+    # Folders (가상 폴더 — 시나리오 파일은 flat, 메타데이터로 관리)
+    # ------------------------------------------------------------------
+
+    def _load_folders(self) -> dict[str, list[str]]:
+        """Load folder assignments. {folder_name: [scenario_name, ...]}"""
+        SCENARIOS_DIR.mkdir(parents=True, exist_ok=True)
+        if FOLDERS_FILE.exists():
+            return json.loads(FOLDERS_FILE.read_text(encoding="utf-8"))
+        return {}
+
+    def _save_folders(self, folders: dict[str, list[str]]) -> None:
+        SCENARIOS_DIR.mkdir(parents=True, exist_ok=True)
+        FOLDERS_FILE.write_text(json.dumps(folders, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def get_folders(self) -> dict[str, list[str]]:
+        return self._load_folders()
+
+    def create_folder(self, name: str) -> dict[str, list[str]]:
+        folders = self._load_folders()
+        if name not in folders:
+            folders[name] = []
+        self._save_folders(folders)
+        return folders
+
+    def rename_folder(self, old_name: str, new_name: str) -> dict[str, list[str]]:
+        folders = self._load_folders()
+        if old_name in folders:
+            folders[new_name] = folders.pop(old_name)
+        self._save_folders(folders)
+        return folders
+
+    def delete_folder(self, name: str) -> dict[str, list[str]]:
+        folders = self._load_folders()
+        folders.pop(name, None)
+        self._save_folders(folders)
+        return folders
+
+    def move_to_folder(self, scenario_name: str, folder_name: str | None) -> dict[str, list[str]]:
+        """시나리오를 폴더로 이동. folder_name=None이면 루트로."""
+        folders = self._load_folders()
+        # 기존 위치에서 제거
+        for items in folders.values():
+            if scenario_name in items:
+                items.remove(scenario_name)
+        # 새 위치에 추가
+        if folder_name and folder_name in folders:
+            if scenario_name not in folders[folder_name]:
+                folders[folder_name].append(scenario_name)
+        self._save_folders(folders)
+        return folders
 
     # ------------------------------------------------------------------
     # Groups

@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Button, Card, Checkbox, Col, Collapse, Descriptions, Divider, Image, Input, InputNumber, List, Modal, Radio, Row, Select, Space, Splitter, Table, Tabs, Tag, Tooltip, Upload, message } from 'antd';
+import { Button, Card, Checkbox, Col, Collapse, Descriptions, Divider, Dropdown, Image, Input, InputNumber, List, Modal, Radio, Row, Select, Space, Splitter, Table, Tabs, Tag, Tooltip, Tree, Upload, message } from 'antd';
+import type { TreeProps } from 'antd';
 import {
   PlayCircleOutlined, PauseOutlined, DeleteOutlined, EyeOutlined,
   StopOutlined, CopyOutlined, MergeCellsOutlined,
-  FolderOutlined, FolderAddOutlined, MinusOutlined,
+  FolderOutlined, FolderAddOutlined, FileOutlined, MinusOutlined,
   ArrowUpOutlined, ArrowDownOutlined, EditOutlined, BranchesOutlined,
   DownOutlined, RightOutlined, ClearOutlined, UploadOutlined,
   ExportOutlined, ImportOutlined, CheckCircleOutlined, WarningOutlined,
@@ -158,6 +159,8 @@ export default function ScenarioPage() {
   const [currentIteration, setCurrentIteration] = useState(1);
   const [totalIterations, setTotalIterations] = useState(1);
   const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [folders, setFolders] = useState<Record<string, string[]>>({});
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'folder' | 'scenario'; name: string } | null>(null);
   const getRepeatCount = (name: string) => repeatCounts[name] ?? 1;
   const setRepeatCount = (name: string, val: number) =>
     setRepeatCounts((prev) => ({ ...prev, [name]: val }));
@@ -307,6 +310,13 @@ export default function ScenarioPage() {
     } catch { message.error(t('scenario.listFailed')); }
   };
 
+  const fetchFolders = async () => {
+    try {
+      const res = await scenarioApi.getFolders();
+      setFolders(res.data.folders || {});
+    } catch { /* ignore */ }
+  };
+
   const fetchGroups = async () => {
     try {
       const res = await scenarioApi.getGroups();
@@ -345,10 +355,12 @@ export default function ScenarioPage() {
 
   useEffect(() => {
     fetchScenarios();
+    fetchFolders();
     fetchGroups();
     const onTabChange = (e: Event) => {
       if ((e as CustomEvent).detail === '/scenarios') {
         fetchScenarios();
+        fetchFolders();
         fetchGroups();
         // 스텝 미리보기 새로고침
         if (selectedNameRef.current) {
@@ -1242,31 +1254,146 @@ export default function ScenarioPage() {
             />
           </>
         ) : (
-          /* ===== 전체 시나리오 리스트 ===== */
-          <List
-            size="small"
-            dataSource={filteredScenarios}
-            style={{ overflow: 'auto' }}
-            locale={{ emptyText: t('scenario.noScenarios') }}
-            renderItem={(name) => (
-              <List.Item
-                onClick={() => {
-                  setSelectedName(prev => prev === name ? null : name);
-                  if (!playing) { setStepResults([]); setPlaybackScenario(null); }
-                }}
-                style={{
-                  cursor: 'pointer',
-                  padding: '6px 12px',
-                  background: selectedName === name ? 'rgba(22,119,255,0.12)' : undefined,
-                  borderRadius: 4,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-                  <span style={{ flex: 1, fontWeight: selectedName === name ? 600 : 400 }}>{name}</span>
+          <>
+          {/* ===== 트리 형식 시나리오 리스트 ===== */}
+          {(() => {
+            // 폴더에 속한 시나리오 Set
+            const foldered = new Set<string>();
+            for (const items of Object.values(folders)) items.forEach(n => foldered.add(n));
+            // 트리 데이터 생성
+            const treeData: any[] = [];
+            // 폴더 노드
+            for (const [fname, items] of Object.entries(folders)) {
+              treeData.push({
+                key: `folder:${fname}`,
+                title: fname,
+                icon: <FolderOutlined />,
+                isLeaf: false,
+                children: items.filter(n => filteredScenarios.includes(n)).map(n => ({
+                  key: `scenario:${n}`,
+                  title: n,
+                  icon: <FileOutlined />,
+                  isLeaf: true,
+                })),
+              });
+            }
+            // 루트 시나리오 (폴더에 속하지 않은 것)
+            for (const name of filteredScenarios) {
+              if (!foldered.has(name)) {
+                treeData.push({ key: `scenario:${name}`, title: name, icon: <FileOutlined />, isLeaf: true });
+              }
+            }
+
+            const onSelect: TreeProps['onSelect'] = (keys) => {
+              if (keys.length === 0) { setSelectedName(null); return; }
+              const key = keys[0] as string;
+              if (key.startsWith('scenario:')) {
+                const name = key.replace('scenario:', '');
+                setSelectedName(name);
+                if (!playing) { setStepResults([]); setPlaybackScenario(null); }
+              }
+            };
+
+            const onDrop: TreeProps['onDrop'] = (info) => {
+              const dragKey = info.dragNode.key as string;
+              if (!dragKey.startsWith('scenario:')) return;
+              const scenarioName = dragKey.replace('scenario:', '');
+              const dropKey = (info.node.key as string);
+              const folderName = dropKey.startsWith('folder:') ? dropKey.replace('folder:', '') : null;
+              scenarioApi.moveToFolder(scenarioName, folderName).then(res => setFolders(res.data.folders)).catch(() => {});
+            };
+
+            const onRightClick = ({ event, node }: any) => {
+              event.preventDefault();
+              const key = node.key as string;
+              const type = key.startsWith('folder:') ? 'folder' as const : 'scenario' as const;
+              const name = key.replace(/^(folder|scenario):/, '');
+              setContextMenu({ x: event.clientX, y: event.clientY, type, name });
+            };
+
+            const contextMenuItems = contextMenu ? (
+              contextMenu.type === 'folder' ? [
+                { key: 'rename', label: t('common.rename'), onClick: () => {
+                  const newName = prompt(t('scenario.folderName'), contextMenu.name);
+                  if (newName && newName !== contextMenu.name) {
+                    scenarioApi.renameFolder(contextMenu.name, newName).then(res => setFolders(res.data.folders));
+                  }
+                  setContextMenu(null);
+                }},
+                { key: 'delete', label: t('common.delete'), danger: true, onClick: () => {
+                  scenarioApi.deleteFolder(contextMenu.name).then(res => setFolders(res.data.folders));
+                  setContextMenu(null);
+                }},
+              ] : [
+                { key: 'copy', label: t('common.copy'), onClick: () => {
+                  const newName = prompt(t('common.rename'), `${contextMenu.name}_copy`);
+                  if (newName) {
+                    scenarioApi.copy(contextMenu.name, newName).then(() => { fetchScenarios(); fetchFolders(); });
+                  }
+                  setContextMenu(null);
+                }},
+                { key: 'rename', label: t('common.rename'), onClick: () => {
+                  const newName = prompt(t('common.rename'), contextMenu.name);
+                  if (newName && newName !== contextMenu.name) {
+                    scenarioApi.rename(contextMenu.name, newName).then(() => { fetchScenarios(); fetchFolders(); });
+                    if (selectedName === contextMenu.name) setSelectedName(newName);
+                  }
+                  setContextMenu(null);
+                }},
+                { key: 'moveRoot', label: t('scenario.moveToRoot'), onClick: () => {
+                  scenarioApi.moveToFolder(contextMenu.name, null).then(res => setFolders(res.data.folders));
+                  setContextMenu(null);
+                }},
+                ...Object.keys(folders).map(fn => ({
+                  key: `move:${fn}`, label: `→ ${fn}`, onClick: () => {
+                    scenarioApi.moveToFolder(contextMenu.name, fn).then(res => setFolders(res.data.folders));
+                    setContextMenu(null);
+                  },
+                })),
+                { type: 'divider' as const },
+                { key: 'delete', label: t('common.delete'), danger: true, onClick: () => {
+                  Modal.confirm({
+                    title: t('scenario.deleteTitle'), okText: t('common.delete'), okType: 'danger', cancelText: t('common.cancel'),
+                    onOk: () => { scenarioApi.delete(contextMenu.name).then(() => { fetchScenarios(); fetchFolders(); }); if (selectedName === contextMenu.name) setSelectedName(null); },
+                  });
+                  setContextMenu(null);
+                }},
+              ]
+            ) : [];
+
+            return (
+              <>
+                <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                  <Button size="small" icon={<FolderAddOutlined />} onClick={() => {
+                    const name = prompt(t('scenario.folderName'));
+                    if (name) scenarioApi.createFolder(name).then(res => setFolders(res.data.folders));
+                  }}>{t('scenario.newFolder')}</Button>
                 </div>
-              </List.Item>
-            )}
-          />
+                <Dropdown
+                  menu={{ items: contextMenuItems }}
+                  open={!!contextMenu}
+                  onOpenChange={(v) => { if (!v) setContextMenu(null); }}
+                  trigger={['contextMenu']}
+                >
+                  <div style={{ flex: 1, overflow: 'auto' }} onContextMenu={(e) => { if (!contextMenu) e.preventDefault(); }}>
+                    <Tree
+                      treeData={treeData}
+                      selectedKeys={selectedName ? [`scenario:${selectedName}`] : []}
+                      onSelect={onSelect}
+                      draggable
+                      onDrop={onDrop}
+                      onRightClick={onRightClick}
+                      showIcon
+                      blockNode
+                      defaultExpandAll
+                    />
+                    {treeData.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: '#888' }}>{t('scenario.noScenarios')}</div>}
+                  </div>
+                </Dropdown>
+              </>
+            );
+          })()}
+          </>
         )}
 
       </Card>
@@ -1300,8 +1427,6 @@ export default function ScenarioPage() {
                 <strong>{selectedName}</strong>
                 <span style={{ fontWeight: 400 }}>— {previewSteps.length} {t('scenario.steps')}</span>
                 {skipStepIds.size > 0 && <Tag color="orange">{skipStepIds.size} skip</Tag>}
-                <Button icon={<EditOutlined />} size="small" disabled={playing} onClick={openRenameModal}>{t('scenario.rename')}</Button>
-                <Button icon={<CopyOutlined />} size="small" disabled={playing} onClick={openCopyModal}>{t('common.copy')}</Button>
                 {playing && playingName === selectedName ? (
                   <Button danger size="small" icon={<StopOutlined />} onClick={stopPlayback}>{t('scenario.stop')}</Button>
                 ) : (

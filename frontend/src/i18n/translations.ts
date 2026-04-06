@@ -445,6 +445,12 @@ const translations = {
 
     // === Scenario Page ===
     'scenario.title': '시나리오',
+    'scenario.newFolder': '새 폴더',
+    'scenario.folderName': '폴더 이름',
+    'scenario.moveToFolder': '폴더로 이동',
+    'scenario.moveToRoot': '루트로 이동',
+    'scenario.allScenarios': '전체',
+    'scenario.rootScenarios': '루트',
     'scenario.listFailed': '시나리오 목록 불러오기 실패',
     'scenario.resultsListFailed': '결과 목록 불러오기 실패',
     'scenario.loadFailed': '시나리오 로드 실패',
@@ -1099,6 +1105,12 @@ const translations = {
 
     // === Scenario Page ===
     'scenario.title': 'Scenarios',
+    'scenario.newFolder': 'New Folder',
+    'scenario.folderName': 'Folder Name',
+    'scenario.moveToFolder': 'Move to Folder',
+    'scenario.moveToRoot': 'Move to Root',
+    'scenario.allScenarios': 'All',
+    'scenario.rootScenarios': 'Root',
     'scenario.listFailed': 'Failed to load scenario list',
     'scenario.resultsListFailed': 'Failed to load results list',
     'scenario.loadFailed': 'Failed to load scenario',

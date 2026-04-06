@@ -71,6 +71,12 @@ export const scenarioApi = {
   testStep: (scenarioName: string, stepIndex: number, stepData?: any) =>
     api.post('/scenario/test-step', { scenario_name: scenarioName, step_index: stepIndex, step_data: stepData }),
   getCmdResult: (taskId: string) => api.get(`/scenario/cmd-result/${taskId}`),
+  // Folders
+  getFolders: () => api.get('/scenario/folders'),
+  createFolder: (name: string) => api.post('/scenario/folders/create', { name }),
+  renameFolder: (oldName: string, newName: string) => api.post('/scenario/folders/rename', { old_name: oldName, new_name: newName }),
+  deleteFolder: (name: string) => api.post('/scenario/folders/delete', { name }),
+  moveToFolder: (scenarioName: string, folderName: string | null) => api.post('/scenario/folders/move', { scenario_name: scenarioName, folder_name: folderName }),
   // Groups
   getGroups: () => api.get('/scenario/groups'),
   createGroup: (name: string) => api.post('/scenario/groups', { name }),

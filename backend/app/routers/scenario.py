@@ -528,6 +528,55 @@ async def crop_from_expected(req: CropFromExpectedRequest):
 # ------------------------------------------------------------------
 # Groups
 # ------------------------------------------------------------------
+# Folders
+# ------------------------------------------------------------------
+
+@router.get("/folders")
+async def get_folders():
+    return {"folders": recording_svc.get_folders()}
+
+
+class FolderRequest(BaseModel):
+    name: str
+
+
+class FolderRenameRequest(BaseModel):
+    old_name: str
+    new_name: str
+
+
+class FolderMoveRequest(BaseModel):
+    scenario_name: str
+    folder_name: Optional[str] = None  # None = 루트
+
+
+@router.post("/folders/create")
+async def create_folder(req: FolderRequest):
+    folders = recording_svc.create_folder(req.name)
+    return {"folders": folders}
+
+
+@router.post("/folders/rename")
+async def rename_folder(req: FolderRenameRequest):
+    folders = recording_svc.rename_folder(req.old_name, req.new_name)
+    return {"folders": folders}
+
+
+@router.post("/folders/delete")
+async def delete_folder(req: FolderRequest):
+    folders = recording_svc.delete_folder(req.name)
+    return {"folders": folders}
+
+
+@router.post("/folders/move")
+async def move_to_folder(req: FolderMoveRequest):
+    folders = recording_svc.move_to_folder(req.scenario_name, req.folder_name)
+    return {"folders": folders}
+
+
+# ------------------------------------------------------------------
+# Groups
+# ------------------------------------------------------------------
 
 @router.get("/groups")
 async def get_groups():
