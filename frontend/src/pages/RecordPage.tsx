@@ -2291,9 +2291,9 @@ export default function RecordPage() {
                       placement="bottom"
                       content={
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <InputNumber size="small" min={0} max={100} step={1}
+                          <InputNumber size="small" min={1} max={100} step={1}
                             value={threshPct}
-                            onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, similarity_threshold: (v ?? 95) / 100 } : st))}
+                            onChange={(v) => { if (v != null) setSteps(prev => prev.map((st, i) => i === index ? { ...st, similarity_threshold: v / 100 } : st)); }}
                             suffix="%" style={{ width: 75 }}
                           />
                         </div>

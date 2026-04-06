@@ -730,11 +730,17 @@ async def websocket_playback(websocket: WebSocket):
                             step_jumps = entry.get("step_jumps", {})
                             step_jump_target = None
 
+                            _pending_seq = 0  # step_start에서 할당한 seq를 step_result에도 동일 적용
                             async for item in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, start_step=start_step, device_map_override=device_map_override):
                                 if isinstance(item, dict) and item.get("_type") == "step_start":
+                                    global_step_seq += 1
+                                    _pending_seq = global_step_seq
+                                    start_data = {k: v for k, v in item.items() if k != "_type"}
+                                    start_data["step_id"] = _pending_seq
+                                    start_data["description"] = f"[{sc_name}] {start_data.get('description', '')}" if start_data.get('description') else f"[{sc_name}]"
                                     await websocket.send_json({
                                         "type": "step_start",
-                                        "data": {k: v for k, v in item.items() if k != "_type"},
+                                        "data": start_data,
                                         "iteration": iteration,
                                         "scenario_name": sc_name,
                                     })
@@ -742,9 +748,8 @@ async def websocket_playback(websocket: WebSocket):
                                 step_result = item
                                 # step_jumps 매칭은 원래 step_id로 해야 함
                                 original_step_id = step_result.step_id
-                                # 연번 부여 (시나리오 간 중복 방지)
-                                global_step_seq += 1
-                                step_result.step_id = global_step_seq
+                                # step_start에서 할당한 연번을 동일하게 적용
+                                step_result.step_id = _pending_seq
                                 step_result.description = f"[{sc_name}] {step_result.description}" if step_result.description else f"[{sc_name}]"
 
                                 unified_result.step_results.append(step_result)
