@@ -1711,11 +1711,36 @@ export default function ScenarioPage() {
                 <Select
                   placeholder={t('scenario.addScenario')}
                   size="small"
+                  showSearch
                   style={{ width: '100%', marginTop: 8 }}
                   value={undefined}
                   onChange={(sName: string) => { if (sName) addToGroup(gName, sName); }}
-                  options={scenarios.filter((n) => !members.some((m) => m.name === n)).map((n) => ({ label: n, value: n }))}
-                />
+                >
+                  {(() => {
+                    const available = scenarios.filter((n) => !members.some((m) => m.name === n));
+                    const foldered = new Set<string>();
+                    for (const items of Object.values(folders)) items.forEach(n => foldered.add(n));
+                    const rootItems = available.filter(n => !foldered.has(n));
+                    return (
+                      <>
+                        {Object.entries(folders).map(([fn, items]) => {
+                          const folderAvailable = items.filter(n => available.includes(n));
+                          if (folderAvailable.length === 0) return null;
+                          return (
+                            <Select.OptGroup key={fn} label={fn}>
+                              {folderAvailable.map(n => <Select.Option key={n} value={n}>{n}</Select.Option>)}
+                            </Select.OptGroup>
+                          );
+                        })}
+                        {rootItems.length > 0 && (
+                          <Select.OptGroup label={t('scenario.rootScenarios')}>
+                            {rootItems.map(n => <Select.Option key={n} value={n}>{n}</Select.Option>)}
+                          </Select.OptGroup>
+                        )}
+                      </>
+                    );
+                  })()}
+                </Select>
               </>
             ),
           }))}
