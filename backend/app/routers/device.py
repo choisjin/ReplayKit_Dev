@@ -419,9 +419,7 @@ async def device_input(req: InputRequest):
             )
             return {"result": "ok", "response": response}
 
-        if req.action in ("hkmc_touch", "hkmc_swipe", "hkmc_key"):
-            if not dev or dev.type != "hkmc6th":
-                raise HTTPException(status_code=400, detail=f"HKMC device {req.device_id} not found")
+        if req.action in ("hkmc_touch", "hkmc_swipe", "hkmc_key", "repeat_tap") and dev and dev.type == "hkmc6th":
             hkmc = dm.get_hkmc_service(req.device_id)
             if not hkmc:
                 raise HTTPException(status_code=400, detail=f"HKMC device {req.device_id} not connected")
@@ -429,7 +427,16 @@ async def device_input(req: InputRequest):
                         req.device_id, req.action, req.params, hkmc.is_connected)
             p = req.params
             screen_type = p.get("screen_type", "front_center")
-            if req.action == "hkmc_touch":
+            if req.action == "repeat_tap":
+                import asyncio
+                count = int(p.get("count", 5))
+                interval_ms = int(p.get("interval_ms", 100))
+                for _ in range(count):
+                    await hkmc.async_tap(p["x"], p["y"], screen_type)
+                    if interval_ms > 0:
+                        await asyncio.sleep(interval_ms / 1000.0)
+                logger.info("[HKMC INPUT] repeat_tap: x=%s y=%s ×%d @%dms", p["x"], p["y"], count, interval_ms)
+            elif req.action == "hkmc_touch":
                 await hkmc.async_tap(p["x"], p["y"], screen_type)
                 logger.info("[HKMC INPUT] tap sent: x=%s y=%s screen=%s", p["x"], p["y"], screen_type)
             elif req.action == "hkmc_swipe":

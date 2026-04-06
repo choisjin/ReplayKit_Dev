@@ -558,7 +558,7 @@ export default function RecordPage() {
   // Inject screen_type into params for HKMC / ADB multi-display actions
   const resolveParams = useCallback((action: string, params: Record<string, any>, targetDevice: string): Record<string, any> => {
     const dev = allDevices.find(d => d.id === targetDevice);
-    if (dev?.type === 'hkmc6th' && (action === 'hkmc_touch' || action === 'hkmc_swipe' || action === 'hkmc_key')) {
+    if (dev?.type === 'hkmc6th' && (action === 'hkmc_touch' || action === 'hkmc_swipe' || action === 'hkmc_key' || action === 'repeat_tap')) {
       return { ...params, screen_type: screenType };
     }
     // ADB multi-display: 모든 디스플레이에 screen_type 주입 (display 0 포함 — screencap에 SF display ID 필요)
@@ -2373,6 +2373,16 @@ export default function RecordPage() {
                       }}
                     />
                   </Tooltip>
+                  <Tooltip title={t('record.repeatTap')}>
+                    <Button
+                      size="small"
+                      type={repeatTapMode ? 'primary' : 'default'}
+                      onClick={() => setRepeatTapMode(v => !v)}
+                      style={{ fontWeight: repeatTapMode ? 700 : 400 }}
+                    >
+                      {t('record.repeatTapShort')}
+                    </Button>
+                  </Tooltip>
                   {isScreenAdb && <>
                   <Tooltip title={t('record.multiTouch')}>
                     <Radio.Group
@@ -2387,16 +2397,6 @@ export default function RecordPage() {
                         { label: '3', value: 3 },
                       ]}
                     />
-                  </Tooltip>
-                  <Tooltip title={t('record.repeatTap')}>
-                    <Button
-                      size="small"
-                      type={repeatTapMode ? 'primary' : 'default'}
-                      onClick={() => setRepeatTapMode(v => !v)}
-                      style={{ fontWeight: repeatTapMode ? 700 : 400 }}
-                    >
-                      {t('record.repeatTapShort')}
-                    </Button>
                   </Tooltip>
                   {/* 줌인/아웃 버튼 — 임시 비활성 */}
                   {fingerCount > 1 && (

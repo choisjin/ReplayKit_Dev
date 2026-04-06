@@ -870,6 +870,13 @@ class PlaybackService:
             return None
         return self._resolve_alias(step.device_id, self._device_map)
 
+    def _is_hkmc_device(self, device_id: Optional[str]) -> bool:
+        """디바이스가 HKMC 타입인지 확인."""
+        if not device_id:
+            return False
+        dev = self.dm.get_device(device_id)
+        return dev is not None and dev.type == "hkmc6th"
+
     def _resolve_screenshot_device(self, step: Step) -> Optional[dict]:
         """Resolve which device to take screenshots from.
 
@@ -974,7 +981,7 @@ class PlaybackService:
                 params["data"],
                 params.get("read_timeout", 1.0),
             )
-        elif step.type in (StepType.HKMC_TOUCH, StepType.HKMC_SWIPE, StepType.HKMC_KEY):
+        elif step.type in (StepType.HKMC_TOUCH, StepType.HKMC_SWIPE, StepType.HKMC_KEY) or (step.type == StepType.REPEAT_TAP and self._is_hkmc_device(real_id)):
             if not real_id:
                 raise ValueError("HKMC step requires device_id")
             # 액션 실행 중 연결 끊김 시 재연결 후 재시도 (최대 2회)
@@ -984,7 +991,15 @@ class PlaybackService:
                     raise ValueError(f"HKMC device {real_id} not connected")
                 try:
                     screen_type = step.screen_type or params.get("screen_type", "front_center")
-                    if step.type == StepType.HKMC_TOUCH:
+                    if step.type == StepType.REPEAT_TAP:
+                        import asyncio as _asyncio
+                        count = int(params.get("count", 5))
+                        interval_ms = int(params.get("interval_ms", 100))
+                        for _ in range(count):
+                            await hkmc.async_tap(params["x"], params["y"], screen_type)
+                            if interval_ms > 0:
+                                await _asyncio.sleep(interval_ms / 1000.0)
+                    elif step.type == StepType.HKMC_TOUCH:
                         await hkmc.async_tap(params["x"], params["y"], screen_type)
                     elif step.type == StepType.HKMC_SWIPE:
                         await hkmc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"], screen_type)
