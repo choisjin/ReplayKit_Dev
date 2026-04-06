@@ -15,6 +15,18 @@ import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from '../i18n';
 import { useWebcamContext } from '../context/WebcamContext';
 import { VideoCameraOutlined } from '@ant-design/icons';
+import { Resizable } from 'react-resizable';
+import 'react-resizable/css/styles.css';
+
+const ResizableTitle = (props: any) => {
+  const { onResize, width, ...restProps } = props;
+  if (!width) return <th {...restProps} />;
+  return (
+    <Resizable width={width} height={0} handle={<span className="react-resizable-handle" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', right: -5, bottom: 0, top: 0, width: 10, cursor: 'col-resize', zIndex: 1 }} />} onResize={onResize} draggableOpts={{ enableUserSelectHack: false }}>
+      <th {...restProps} />
+    </Resizable>
+  );
+};
 
 // 기대 이미지 썸네일 (ROI/크롭/영역제외 오버레이)
 const ExpectedThumbnail = React.memo(({ src, regions, color, height = 32 }: {
@@ -162,6 +174,7 @@ export default function ScenarioPage() {
   const [folders, setFolders] = useState<Record<string, string[]>>({});
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; type: 'folder' | 'scenario'; name: string } | null>(null);
   const [groupAddFolder, setGroupAddFolder] = useState<Record<string, string>>({});
+  const [colWidths, setColWidths] = useState<Record<string, number>>({});
   const getRepeatCount = (name: string) => repeatCounts[name] ?? 1;
   const setRepeatCount = (name: string, val: number) =>
     setRepeatCounts((prev) => ({ ...prev, [name]: val }));
@@ -1093,17 +1106,18 @@ export default function ScenarioPage() {
   const failCount = stepResults.filter((r) => r.status === 'fail').length;
   const errorCount = stepResults.filter((r) => r.status === 'error').length;
 
+  const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 11, color: '#888' }}>{ko}</span></div>;
   const makeStepResultColumns = (totalRepeat: number) => [
-    { title: <div>Time Stamp<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colTimestamp')}</span></div>, dataIndex: 'timestamp', key: 'timestamp', width: 150, render: (v: string | null) => v ? formatTime(v, lang) : '-' },
-    { title: <div>Repeat<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colCurrentTotal')}</span></div>, dataIndex: 'repeat_index', key: 'repeat', width: 75, align: 'center' as const, render: (v: number) => `${v}/${totalRepeat}` },
-    { title: <div>Step<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colOrder')}</span></div>, dataIndex: 'step_id', key: 'step_id', width: 55, align: 'center' as const },
-    { title: <div>Device<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colDevice')}</span></div>, dataIndex: 'device_id', key: 'device_id', width: 120, render: (v: string) => v ? <Tag color={v.startsWith('Android') ? 'green' : v.startsWith('Serial') ? 'purple' : 'geekblue'}>{v}</Tag> : '-' },
-    { title: <div>Command<br /><span style={{ fontSize: 11, color: '#888' }}>action</span></div>, dataIndex: 'command', key: 'command', ellipsis: true, render: (v: string, r: StepResultData) => v || r.message || '-' },
-    { title: <div>Remark<br /><span style={{ fontSize: 11, color: '#888' }}>{t('common.description')}</span></div>, dataIndex: 'description', key: 'description', width: 150, ellipsis: true, render: (v: string) => v || '-' },
-    { title: <div>Status<br /><span style={{ fontSize: 11, color: '#888' }}>{t('common.result')}</span></div>, dataIndex: 'status', key: 'status', width: 90, align: 'center' as const, render: (s: string) => s === 'running' ? <Tag color="processing">RUNNING</Tag> : <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
-    { title: <div>Delay<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colSetting')}</span></div>, dataIndex: 'delay_ms', key: 'delay', width: 80, align: 'center' as const, render: (ms: number) => ms ? formatDuration(ms) : '-' },
-    { title: <div>Duration<br /><span style={{ fontSize: 11, color: '#888' }}>{t('scenario.colActual')}</span></div>, dataIndex: 'execution_time_ms', key: 'duration', width: 90, align: 'center' as const, render: (ms: number, r: StepResultData) => r.status === 'running' ? <span style={{ color: '#1677ff' }}>{formatDuration(liveDuration)}</span> : formatDuration(ms) },
-    { title: t('scenario.compare'), key: 'compare', width: 70, align: 'center' as const, render: (_: any, r: StepResultData) => {
+    { title: _colTitle('Time Stamp', t('scenario.colTimestamp')), dataIndex: 'timestamp', key: 'timestamp', width: 120, resizable: true, align: 'center' as const, render: (v: string | null) => v ? formatTime(v, lang) : '-' },
+    { title: _colTitle('Repeat', t('scenario.colCurrentTotal')), dataIndex: 'repeat_index', key: 'repeat', width: 55, resizable: true, align: 'center' as const, render: (v: number) => `${v}/${totalRepeat}` },
+    { title: _colTitle('Step', t('scenario.colOrder')), dataIndex: 'step_id', key: 'step_id', width: 45, resizable: true, align: 'center' as const },
+    { title: _colTitle('Device', t('scenario.colDevice')), dataIndex: 'device_id', key: 'device_id', width: 85, resizable: true, align: 'center' as const, render: (v: string) => v ? <Tag color={v.startsWith('Android') ? 'green' : v.startsWith('Serial') ? 'purple' : 'geekblue'}>{v}</Tag> : '-' },
+    { title: _colTitle('Command', 'action'), dataIndex: 'command', key: 'command', width: 200, resizable: true, ellipsis: true, align: 'center' as const, render: (v: string, r: StepResultData) => <span style={{ textAlign: 'left', display: 'block' }}>{v || r.message || '-'}</span> },
+    { title: _colTitle('Remark', t('common.description')), dataIndex: 'description', key: 'description', ellipsis: true, resizable: true, align: 'center' as const, render: (v: string) => <span style={{ textAlign: 'left', display: 'block' }}>{v || '-'}</span> },
+    { title: _colTitle('Status', t('common.result')), dataIndex: 'status', key: 'status', width: 75, resizable: true, align: 'center' as const, render: (s: string) => s === 'running' ? <Tag color="processing">RUNNING</Tag> : <Tag color={statusColor(s)}>{s.toUpperCase()}</Tag> },
+    { title: _colTitle('Delay', t('scenario.colSetting')), dataIndex: 'delay_ms', key: 'delay', width: 55, resizable: true, align: 'center' as const, render: (ms: number) => ms ? formatDuration(ms) : '-' },
+    { title: _colTitle('Duration', t('scenario.colActual')), dataIndex: 'execution_time_ms', key: 'duration', width: 70, resizable: true, align: 'center' as const, render: (ms: number, r: StepResultData) => r.status === 'running' ? <span style={{ color: '#1677ff' }}>{formatDuration(liveDuration)}</span> : formatDuration(ms) },
+    { title: _colTitle('', t('scenario.compare')), key: 'compare', width: 50, align: 'center' as const, render: (_: any, r: StepResultData) => {
       if (r.status === 'running') return '-';
       const hasCmdMsg = (r.command?.startsWith('cmd_send:') || r.command?.startsWith('cmd_check:')) && r.message;
       if (r.expected_image || r.actual_image || hasCmdMsg) {
@@ -1460,8 +1474,22 @@ export default function ScenarioPage() {
           {(playing || stepResults.length > 0) ? (
             /* 재생 중 / 완료: 결과 테이블 (스텝만 스크롤, 자동 최하단) */
             <div style={{ flex: 1, overflow: 'auto' }}>
-            <Table columns={makeStepResultColumns(totalIterations)} dataSource={playing ? [...stepResults].reverse() : stepResults} rowKey={(_r, idx) => `${idx}`} size="small" pagination={false}
-              rowClassName={(r: StepResultData) => r.status === 'running' ? 'row-running' : r.status === 'fail' ? 'row-fail' : r.status === 'error' ? 'row-error' : r.status === 'pass' ? 'row-pass' : ''} />
+            <Table
+              columns={makeStepResultColumns(totalIterations).map((col: any, idx: number) => ({
+                ...col,
+                width: colWidths[col.key] || col.width,
+                onHeaderCell: col.width ? () => ({
+                  width: colWidths[col.key] || col.width,
+                  onResize: (_e: any, { size }: any) => setColWidths(prev => ({ ...prev, [col.key]: size.width })),
+                }) : undefined,
+              }))}
+              components={{ header: { cell: ResizableTitle } }}
+              dataSource={playing ? [...stepResults].reverse() : stepResults}
+              rowKey={(_r, idx) => `${idx}`}
+              size="small"
+              pagination={false}
+              rowClassName={(r: StepResultData) => r.status === 'running' ? 'row-running' : r.status === 'fail' ? 'row-fail' : r.status === 'error' ? 'row-error' : r.status === 'pass' ? 'row-pass' : ''}
+            />
             </div>
           ) : (
             /* 미리보기: 스텝 편집 테이블 */
