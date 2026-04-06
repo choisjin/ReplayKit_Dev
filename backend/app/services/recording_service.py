@@ -318,13 +318,16 @@ class RecordingService:
 
     def create_folder(self, name: str) -> dict[str, list[str]]:
         folders = self._load_folders()
-        if name not in folders:
-            folders[name] = []
+        if name in folders:
+            raise ValueError(f"폴더 '{name}'이(가) 이미 존재합니다")
+        folders[name] = []
         self._save_folders(folders)
         return folders
 
     def rename_folder(self, old_name: str, new_name: str) -> dict[str, list[str]]:
         folders = self._load_folders()
+        if new_name in folders:
+            raise ValueError(f"폴더 '{new_name}'이(가) 이미 존재합니다")
         if old_name in folders:
             folders[new_name] = folders.pop(old_name)
         self._save_folders(folders)
@@ -398,8 +401,9 @@ class RecordingService:
 
     def create_group(self, group_name: str) -> dict[str, list[dict]]:
         groups = self._load_groups()
-        if group_name not in groups:
-            groups[group_name] = []
+        if group_name in groups:
+            raise ValueError(f"그룹 '{group_name}'이(가) 이미 존재합니다")
+        groups[group_name] = []
         self._save_groups(groups)
         return groups
 
@@ -411,6 +415,8 @@ class RecordingService:
 
     def rename_group(self, old_name: str, new_name: str) -> dict[str, list[dict]]:
         groups = self._load_groups()
+        if new_name in groups:
+            raise ValueError(f"그룹 '{new_name}'이(가) 이미 존재합니다")
         if old_name in groups:
             groups[new_name] = groups.pop(old_name)
             self._save_groups(groups)

@@ -676,7 +676,7 @@ async def websocket_playback(websocket: WebSocket):
                         continue
 
                     # 그룹 전체를 하나의 통합 결과로 관리
-                    group_name = " → ".join(e["name"] for e in entries)
+                    group_name = data.get("group_name", entries[0]["name"])
                     # 전체 스텝 수 계산
                     total_steps = 0
                     for entry in entries:

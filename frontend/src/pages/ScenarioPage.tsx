@@ -915,7 +915,7 @@ export default function ScenarioPage() {
 
     const hasMap = Object.keys(deviceMap).length > 0;
     ws.onopen = () => {
-      ws.send(JSON.stringify({ action: 'play_group', scenarios: members, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}) }));
+      ws.send(JSON.stringify({ action: 'play_group', group_name: gName, scenarios: members, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}) }));
     };
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);

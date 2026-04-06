@@ -552,13 +552,19 @@ class FolderMoveRequest(BaseModel):
 
 @router.post("/folders/create")
 async def create_folder(req: FolderRequest):
-    folders = recording_svc.create_folder(req.name)
+    try:
+        folders = recording_svc.create_folder(req.name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"folders": folders}
 
 
 @router.post("/folders/rename")
 async def rename_folder(req: FolderRenameRequest):
-    folders = recording_svc.rename_folder(req.old_name, req.new_name)
+    try:
+        folders = recording_svc.rename_folder(req.old_name, req.new_name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"folders": folders}
 
 
@@ -590,7 +596,10 @@ class CreateGroupRequest(BaseModel):
 
 @router.post("/groups")
 async def create_group(req: CreateGroupRequest):
-    groups = recording_svc.create_group(req.name)
+    try:
+        groups = recording_svc.create_group(req.name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"groups": groups}
 
 
@@ -601,7 +610,10 @@ class RenameGroupRequest(BaseModel):
 
 @router.put("/groups")
 async def rename_group(req: RenameGroupRequest):
-    groups = recording_svc.rename_group(req.old_name, req.new_name)
+    try:
+        groups = recording_svc.rename_group(req.old_name, req.new_name)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"groups": groups}
 
 
