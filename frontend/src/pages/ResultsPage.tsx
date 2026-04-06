@@ -691,19 +691,22 @@ export default function ResultsPage() {
     },
   ];
 
+  const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 11, color: '#888' }}>{ko}</span></div>;
   const stepColumns = ([
     {
-      title: <div>Time Stamp<br /><span style={{ fontSize: 11, color: '#888' }}>{t('results.timestamp')}</span></div>,
+      title: _colTitle('Time Stamp', t('results.timestamp')),
       dataIndex: 'timestamp',
       key: 'timestamp',
-      width: webcamExpanded ? 130 : 160,
+      width: 120,
+      align: 'center' as const,
       render: (v: string | null) => v ? formatTime(v) : '-',
       _hide: false,
     },
     {
-      title: <div>Repeat<br /><span style={{ fontSize: 11, color: '#888' }}>{t('results.repeat')}</span></div>,
+      title: _colTitle('Repeat', t('results.repeat')),
       key: 'repeat',
-      width: 65,
+      width: 55,
+      align: 'center' as const,
       render: (_: any, r: StepResultDetail) => {
         const total = detail?.total_repeat || (groupDetail ? Math.max(...groupDetail.map(d => d.total_repeat || 1)) : 1);
         return `${r.repeat_index ?? 1}/${total}`;
@@ -711,99 +714,87 @@ export default function ResultsPage() {
       _hide: false,
     },
     {
-      title: <div>Step<br /><span style={{ fontSize: 11, color: '#888' }}>{t('results.step')}</span></div>,
+      title: _colTitle('Step', t('results.step')),
       dataIndex: 'step_id',
       key: 'step_id',
-      width: 50,
+      width: 45,
       align: 'center' as const,
       render: (_: any, r: any) => r._seq || r.step_id,
       _hide: false,
     },
     {
-      title: <div>Device<br /><span style={{ fontSize: 11, color: '#888' }}>{t('results.deviceCol')}</span></div>,
+      title: _colTitle('Device', t('results.deviceCol')),
       dataIndex: 'device_id',
       key: 'device_id',
-      width: webcamExpanded ? 80 : 120,
+      width: 85,
+      align: 'center' as const,
       ellipsis: true,
       render: (v: string) => v || '-',
       _hide: false,
     },
     {
-      title: <div>Command<br /><span style={{ fontSize: 11, color: '#888' }}>action</span></div>,
+      title: _colTitle('Command', 'action'),
       dataIndex: 'command',
       key: 'command',
-      width: webcamExpanded ? 120 : undefined,
+      width: 200,
       ellipsis: true,
+      align: 'center' as const,
       render: (v: string, r: StepResultDetail) => {
         const isCmdStep = v?.startsWith('cmd_send:') || v?.startsWith('cmd_check:');
         if (isCmdStep && r.message) {
-          // BG_TASK 마커가 아직 남아있으면 실행 중 표시
-          if (r.message.match(/\[BG_TASK:/)) {
-            return <span>{v} <Tag color="processing">BG</Tag></span>;
-          }
-          // 실행 중 표시
-          if (r.message.startsWith('⏳')) {
-            return <span>{v} <Tag color="processing">⏳</Tag></span>;
-          }
-          // CMD_CHECK 결과가 있으면 간략 표시
-          if (r.message.startsWith('[CMD_CHECK]')) {
-            return <Tooltip title={<pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>{r.message}</pre>}><span>{v}</span></Tooltip>;
-          }
-          // CMD_SEND 결과
+          if (r.message.match(/\[BG_TASK:/)) return <span>{v} <Tag color="processing">BG</Tag></span>;
+          if (r.message.startsWith('⏳')) return <span>{v} <Tag color="processing">⏳</Tag></span>;
+          if (r.message.startsWith('[CMD_CHECK]')) return <Tooltip title={<pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>{r.message}</pre>}><span>{v}</span></Tooltip>;
           return <Tooltip title={<pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto' }}>{r.message}</pre>}><span>{v}</span></Tooltip>;
         }
-        return v || r.message || '-';
+        return <span style={{ textAlign: 'left', display: 'block' }}>{v || r.message || '-'}</span>;
       },
       _hide: false,
     },
     {
-      title: <div>Remark<br /><span style={{ fontSize: 11, color: '#888' }}>{t('results.remark')}</span></div>,
+      title: _colTitle('Remark', t('results.remark')),
       dataIndex: 'description',
       key: 'description',
-      width: 150,
       ellipsis: true,
-      render: (v: string) => v || '-',
+      align: 'center' as const,
+      render: (v: string) => <span style={{ textAlign: 'left', display: 'block' }}>{v || '-'}</span>,
       _hide: webcamExpanded,
     },
     {
-      title: <div>Status<br /><span style={{ fontSize: 11, color: '#888' }}>{t('results.resultCol')}</span></div>,
+      title: _colTitle('Status', t('results.resultCol')),
       dataIndex: 'status',
       key: 'status',
-      width: webcamExpanded ? 60 : 90,
+      width: 75,
       align: 'center' as const,
       render: (s: string) => <Tag color={statusColor(s)} style={webcamExpanded ? { margin: 0, fontSize: 10 } : undefined}>{s.toUpperCase()}</Tag>,
       _hide: false,
     },
     {
-      title: <div>Delay<br /><span style={{ fontSize: 11, color: '#888' }}>{t('results.delaySet')}</span></div>,
+      title: _colTitle('Delay', t('results.delaySet')),
       dataIndex: 'delay_ms',
       key: 'delay',
-      width: 90,
+      width: 55,
       align: 'center' as const,
       render: (v: number) => v ? formatDuration(v) : '-',
       _hide: webcamExpanded,
     },
     {
-      title: <div>Duration<br /><span style={{ fontSize: 11, color: '#888' }}>{t('results.duration')}</span></div>,
+      title: _colTitle('Duration', t('results.duration')),
       dataIndex: 'execution_time_ms',
       key: 'duration',
-      width: 100,
+      width: 70,
       align: 'center' as const,
       render: (v: number) => formatDuration(v),
       _hide: webcamExpanded,
     },
     {
-      title: t('scenario.compare'),
+      title: _colTitle('', t('scenario.compare')),
       key: 'compare',
-      width: 70,
+      width: 50,
       align: 'center' as const,
       render: (_: any, r: StepResultDetail) => {
         if (r.expected_image || r.actual_image) {
-          return (
-            <Button size="small" onClick={() => setCompareStep(r)}>
-              {t('scenario.compare')}
-            </Button>
-          );
+          return <Button size="small" onClick={() => setCompareStep(r)}>{t('scenario.compare')}</Button>;
         }
         return '-';
       },
