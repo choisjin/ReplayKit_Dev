@@ -125,14 +125,14 @@ export default function ChatWidget({ open, onClose }: ChatWidgetProps) {
     };
   }, [adminUrl]);
 
-  // 저장된 세션이 있으면 자동 재접속
+  // 저장된 세션이 있고 위젯이 열릴 때만 재접속
   useEffect(() => {
-    if (saved.current) {
+    if (open && saved.current && chatState === 'idle') {
       connectWs(saved.current.name, saved.current.department);
       saved.current = null;
     }
-    return () => { wsRef.current?.close(); };
-  }, [connectWs]);
+    return () => { if (!open) { wsRef.current?.close(); wsRef.current = null; } };
+  }, [open, connectWs]);
 
   const handleJoin = async () => {
     const values = await form.validateFields();
