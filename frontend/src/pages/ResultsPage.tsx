@@ -197,8 +197,23 @@ export default function ResultsPage() {
     } catch { setRecordings([]); }
   };
 
+  // 그룹/단일 공통: 현재 사이클의 전체 스텝 목록 반환
+  const getAllStepsForRepeat = useCallback((repeatIdx: number): StepResultDetail[] => {
+    if (groupDetail && groupDetail.length > 0) {
+      const allSteps: StepResultDetail[] = [];
+      for (const d of groupDetail) {
+        allSteps.push(...d.step_results.filter(s => (s.repeat_index || 1) === repeatIdx));
+      }
+      return allSteps;
+    }
+    if (detail) {
+      return detail.step_results.filter(s => (s.repeat_index || 1) === repeatIdx);
+    }
+    return [];
+  }, [detail, groupDetail]);
+
   const seekToStep = (step: StepResultDetail) => {
-    if (!detail || recordings.length === 0) return;
+    if ((!detail && !groupDetail) || recordings.length === 0) return;
     // 패널 열기
     if (!webcamPanelOpen) setWebcamPanelOpen(true);
     // 해당 회차 녹화 선택
@@ -207,7 +222,7 @@ export default function ResultsPage() {
     if (!rec) return;
 
     // 같은 회차의 첫/마지막 스텝 타임스탬프 기준으로 오프셋 계산
-    const sameRepeatSteps = detail.step_results.filter(s => (s.repeat_index || 1) === targetRepeat);
+    const sameRepeatSteps = getAllStepsForRepeat(targetRepeat);
     const firstStep = sameRepeatSteps[0];
     const lastStep = sameRepeatSteps[sameRepeatSteps.length - 1];
     if (!firstStep?.timestamp || !step.timestamp) return;
@@ -251,9 +266,9 @@ export default function ResultsPage() {
   // 비디오 재생 시 현재 스텝 실시간 하이라이트
   const handleVideoTimeUpdate = useCallback(() => {
     const video = detailVideoRef.current;
-    if (!video || !detail) return;
+    if (!video || (!detail && !groupDetail)) return;
     const currentTime = video.currentTime;
-    const sameRepeatSteps = detail.step_results.filter(s => (s.repeat_index || 1) === activeRecRepeat);
+    const sameRepeatSteps = getAllStepsForRepeat(activeRecRepeat);
     if (sameRepeatSteps.length === 0) return;
     const firstStep = sameRepeatSteps[0];
     const lastStep = sameRepeatSteps[sameRepeatSteps.length - 1];
@@ -281,7 +296,7 @@ export default function ResultsPage() {
       }
     }
     setCurrentPlayingStepId(matchedStep?.step_id ?? null);
-  }, [detail, activeRecRepeat]);
+  }, [detail, groupDetail, activeRecRepeat, getAllStepsForRepeat]);
 
   const handleVideoPauseOrEnd = useCallback(() => {
     setCurrentPlayingStepId(null);
@@ -312,8 +327,25 @@ export default function ResultsPage() {
         details.push(res.data);
       }
       setGroupDetail(details);
-      // 첫 번째 시나리오의 녹화 파일 로드 (사이클별 웹캠은 같은 타임스탬프)
-      fetchRecordings(group.items[0].filename);
+      // 모든 시나리오의 녹화 파일을 합쳐서 로드
+      const allRecs: any[] = [];
+      for (const item of group.items) {
+        try {
+          const recRes = await resultsApi.listRecordings(item.filename);
+          allRecs.push(...(recRes.data.recordings || []));
+        } catch { /* ignore */ }
+      }
+      // 중복 제거 (같은 파일명)
+      const seen = new Set<string>();
+      const uniqueRecs = allRecs.filter(r => { if (seen.has(r.filename)) return false; seen.add(r.filename); return true; });
+      setRecordings(uniqueRecs);
+      if (uniqueRecs.length > 0) {
+        setActiveRecUrl(uniqueRecs[0].url);
+        const m = uniqueRecs[0].filename.match(/_webcam_r(\d+)\.webm$/);
+        setActiveRecRepeat(m ? parseInt(m[1]) : 1);
+      } else {
+        setActiveRecUrl('');
+      }
     } catch {
       message.error(t('results.detailFailed'));
     }
@@ -672,7 +704,10 @@ export default function ResultsPage() {
       title: <div>Repeat<br /><span style={{ fontSize: 11, color: '#888' }}>{t('results.repeat')}</span></div>,
       key: 'repeat',
       width: 65,
-      render: (_: any, r: StepResultDetail) => detail ? `${r.repeat_index ?? 1}/${detail.total_repeat}` : '-',
+      render: (_: any, r: StepResultDetail) => {
+        const total = detail?.total_repeat || (groupDetail ? Math.max(...groupDetail.map(d => d.total_repeat || 1)) : 1);
+        return `${r.repeat_index ?? 1}/${total}`;
+      },
       _hide: false,
     },
     {
@@ -681,6 +716,7 @@ export default function ResultsPage() {
       key: 'step_id',
       width: 50,
       align: 'center' as const,
+      render: (_: any, r: any) => r._seq || r.step_id,
       _hide: false,
     },
     {
@@ -879,11 +915,15 @@ export default function ResultsPage() {
         )}
         {groupDetail && groupDetail.length > 0 && (() => {
           const totalRepeat = Math.max(...groupDetail.map(d => d.total_repeat || 1));
-          // 현재 사이클의 스텝들을 시나리오 순서대로 합침
-          const cycleSteps: StepResultDetail[] = [];
+          // 현재 사이클의 스텝들을 시나리오 순서대로 합침 (연번 부여)
+          const cycleSteps: (StepResultDetail & { _seq?: number; _scenarioName?: string })[] = [];
+          let seq = 0;
           for (const d of groupDetail) {
             const stepsForCycle = d.step_results.filter(sr => sr.repeat_index === groupDetailCycle);
-            cycleSteps.push(...stepsForCycle);
+            for (const s of stepsForCycle) {
+              seq++;
+              cycleSteps.push({ ...s, _seq: seq, _scenarioName: d.scenario_name });
+            }
           }
           const cyclePass = cycleSteps.filter(s => s.status === 'pass').length;
           const cycleFail = cycleSteps.filter(s => s.status === 'fail').length;
@@ -943,13 +983,17 @@ export default function ResultsPage() {
               <Table
                 columns={stepColumns as any}
                 dataSource={cycleSteps}
-                rowKey={(r) => `${r.step_id}_${r.repeat_index}_${r.device_id}`}
+                rowKey={(r: any) => `${r._seq || r.step_id}_${r.repeat_index}_${r.device_id}`}
                 size="small"
                 pagination={false}
                 scroll={{ y: 500 }}
-                rowClassName={(r: StepResultDetail) =>
-                  r.status === 'pass' ? 'row-pass' : r.status === 'fail' ? 'row-fail' : r.status === 'error' ? 'row-error' : ''
-                }
+                rowClassName={(r: any, idx: number) => {
+                  const statusCls = r.status === 'pass' ? 'row-pass' : r.status === 'fail' ? 'row-fail' : r.status === 'error' ? 'row-error' : '';
+                  // 시나리오 경계 (이전 스텝과 시나리오명 다르면)
+                  const prevScenario = idx > 0 ? (cycleSteps[idx - 1] as any)?._scenarioName : null;
+                  const boundary = prevScenario && prevScenario !== r._scenarioName ? 'scenario-boundary' : '';
+                  return `${statusCls} ${boundary}`.trim();
+                }}
               />
             </>
           );
@@ -1273,6 +1317,7 @@ export default function ResultsPage() {
         .result-row-playing td { background: rgba(22, 119, 255, 0.18) !important; box-shadow: inset 3px 0 0 #1677ff; }
         @keyframes playingPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
         .result-row-playing td:first-child { animation: playingPulse 1.5s infinite; }
+        .scenario-boundary td { border-top: 2px solid #1677ff !important; }
       `}</style>
     </div>
   );
