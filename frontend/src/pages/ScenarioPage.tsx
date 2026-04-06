@@ -1304,7 +1304,6 @@ export default function ScenarioPage() {
                     <Button type="primary" size="small" icon={<PlayCircleOutlined />} loading={playing && playingName === selectedName} disabled={playing} onClick={() => playScenario(selectedName!)}>{t('scenario.play')}</Button>
                   </>
                 )}
-                <Button danger size="small" icon={<DeleteOutlined />} disabled={playing} onClick={() => deleteScenario(selectedName!)}>{t('common.delete')}</Button>
               </Space>
             )
           }
