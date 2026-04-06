@@ -450,7 +450,7 @@ const translations = {
     'scenario.moveToFolder': '폴더로 이동',
     'scenario.moveToRoot': '루트로 이동',
     'scenario.allScenarios': '전체',
-    'scenario.rootScenarios': '루트',
+    'scenario.rootScenarios': '미분류',
     'scenario.listFailed': '시나리오 목록 불러오기 실패',
     'scenario.resultsListFailed': '결과 목록 불러오기 실패',
     'scenario.loadFailed': '시나리오 로드 실패',

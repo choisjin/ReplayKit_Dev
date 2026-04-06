@@ -1472,11 +1472,6 @@ export default function RecordPage() {
 
   const filteredSavedScenarios = React.useMemo(() => {
     if (recordSelectedFolder === '__all__') return savedScenarios;
-    if (recordSelectedFolder === '__root__') {
-      const foldered = new Set<string>();
-      for (const items of Object.values(recordFolders)) items.forEach(n => foldered.add(n));
-      return savedScenarios.filter(n => !foldered.has(n));
-    }
     const items = recordFolders[recordSelectedFolder] || [];
     return savedScenarios.filter(n => items.includes(n));
   }, [savedScenarios, recordFolders, recordSelectedFolder]);
@@ -3017,7 +3012,6 @@ export default function RecordPage() {
                     onOpenChange={(open) => { if (open) fetchSavedScenarios(); }}
                   >
                     <Option value="__all__">{t('scenario.allScenarios')}</Option>
-                    <Option value="__root__">{t('scenario.rootScenarios')}</Option>
                     {Object.keys(recordFolders).map(fn => (
                       <Option key={fn} value={fn}>{fn}</Option>
                     ))}

@@ -1241,13 +1241,17 @@ export default function ScenarioPage() {
                   style={{
                     cursor: 'pointer',
                     padding: '6px 12px',
-                    background: selectedName === m.name ? 'rgba(22,119,255,0.12)' : undefined,
+                    background: playing && currentGroupScenario === m.name
+                      ? 'rgba(22,119,255,0.25)'
+                      : selectedName === m.name ? 'rgba(22,119,255,0.12)' : undefined,
                     borderRadius: 4,
+                    borderLeft: playing && currentGroupScenario === m.name ? '3px solid #1677ff' : '3px solid transparent',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-                    <Tag style={{ margin: 0 }}>{idx + 1}</Tag>
-                    <span style={{ flex: 1, fontWeight: selectedName === m.name ? 600 : 400 }}>{m.name}</span>
+                    <Tag color={playing && currentGroupScenario === m.name ? 'processing' : undefined} style={{ margin: 0 }}>{idx + 1}</Tag>
+                    <span style={{ flex: 1, fontWeight: (selectedName === m.name || (playing && currentGroupScenario === m.name)) ? 600 : 400, color: playing && currentGroupScenario === m.name ? '#1677ff' : undefined }}>{m.name}</span>
+                    {playing && currentGroupScenario === m.name && <Tag color="blue" style={{ margin: 0, fontSize: 11 }}>▶</Tag>}
                   </div>
                 </List.Item>
               )}
