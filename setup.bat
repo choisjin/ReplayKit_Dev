@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 echo ============================================
 echo   ReplayKit - Setup
 echo ============================================
@@ -233,11 +234,15 @@ if exist "frontend\package.json" (
 :: -------------------------------------------------------
 if exist ".git" goto :git_done
 
-:: Refresh PATH (Git may have been installed by the installer just before this)
+:: Refresh PATH from registry + add common Git paths
 for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%b"
 for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%b"
 if defined SYS_PATH set "PATH=%SYS_PATH%"
 if defined USR_PATH set "PATH=%PATH%;%USR_PATH%"
+:: Git 기본 설치 경로 직접 추가
+if exist "%ProgramFiles%\Git\cmd" set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
+if exist "%ProgramFiles(x86)%\Git\cmd" set "PATH=%ProgramFiles(x86)%\Git\cmd;%PATH%"
+if exist "%LOCALAPPDATA%\Programs\Git\cmd" set "PATH=%LOCALAPPDATA%\Programs\Git\cmd;%PATH%"
 
 where git.exe >nul 2>&1
 if %ERRORLEVEL% equ 0 goto :git_installed
@@ -256,10 +261,14 @@ echo       ------------------------------------------
 echo       Installation complete. Press any key to continue...
 echo       ------------------------------------------
 pause >nul
+:: 설치 후 PATH 재탐색
 for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%b"
 for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%b"
 if defined SYS_PATH set "PATH=%SYS_PATH%"
 if defined USR_PATH set "PATH=%PATH%;%USR_PATH%"
+if exist "%ProgramFiles%\Git\cmd" set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
+if exist "%ProgramFiles(x86)%\Git\cmd" set "PATH=%ProgramFiles(x86)%\Git\cmd;%PATH%"
+if exist "%LOCALAPPDATA%\Programs\Git\cmd" set "PATH=%LOCALAPPDATA%\Programs\Git\cmd;%PATH%"
 where git.exe >nul 2>&1
 if %ERRORLEVEL% equ 0 goto :git_installed
 echo       [Warning] Git not detected - git setup skipped.

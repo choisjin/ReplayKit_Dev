@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 :: sync_and_run.bat — sync + start server
 cd /d "%~dp0"
 
