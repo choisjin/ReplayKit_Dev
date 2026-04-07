@@ -333,47 +333,10 @@ async def server_restart():
 
 @router.post("/update-and-restart")
 async def update_and_restart():
-    """git pull + 의존성 업데이트 + 서버 재시작."""
-    results = {"git": "", "pip": "", "npm": ""}
-    npm_cmd = "npm.cmd" if sys.platform == "win32" else "npm"
-    cwd = str(_PROJECT_ROOT)
-    no_window = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-
-    try:
-        # 1) 로컬 변경 초기화 + untracked 정리 + git pull
-        subprocess.run(["git", "checkout", "--", "."],
-                       cwd=cwd, capture_output=True, text=True, timeout=30, creationflags=no_window)
-        subprocess.run(["git", "clean", "-fd", "--exclude=ReplayKit.exe"],
-                       cwd=cwd, capture_output=True, text=True, timeout=30, creationflags=no_window)
-        r = subprocess.run(["git", "pull", "origin", "main"],
-                           cwd=cwd, capture_output=True, text=True, timeout=60, creationflags=no_window)
-        results["git"] = (r.stdout.strip() + "\n" + r.stderr.strip()).strip()
-        if r.returncode != 0:
-            return {"status": "error", "step": "git pull", "detail": results["git"], "results": results}
-
-        # 2) pip install
-        venv_py = _PROJECT_ROOT / "venv" / "Scripts" / "python.exe"
-        if not venv_py.exists():
-            venv_py = _PROJECT_ROOT / "venv" / "bin" / "python"
-        python = str(venv_py) if venv_py.exists() else sys.executable
-        r = subprocess.run([python, "-m", "pip", "install", "-r", "requirements.txt", "-q"],
-                           cwd=cwd, capture_output=True, text=True, timeout=120, creationflags=no_window)
-        results["pip"] = r.stdout.strip() or "OK"
-
-        # 3) npm install
-        r = subprocess.run([npm_cmd, "install", "--silent"],
-                           cwd=str(_PROJECT_ROOT / "frontend"), capture_output=True, text=True, timeout=120, creationflags=no_window)
-        results["npm"] = r.stdout.strip() or "OK"
-
-    except subprocess.TimeoutExpired as e:
-        return {"status": "error", "step": "timeout", "detail": str(e), "results": results}
-    except Exception as e:
-        return {"status": "error", "step": "exception", "detail": str(e), "results": results}
-
-    # 4) .restart 플래그로 server.py에 재시작 요청
-    logger.info("Update complete — requesting restart via flag")
+    """서버 종료 → ReplayKit.bat이 git pull + 서버 재시작."""
+    logger.info("Update requested — writing .restart flag")
     _RESTART_FLAG.write_text("restart", encoding="utf-8")
-    return {"status": "restarting", "results": results}
+    return {"status": "restarting"}
 
 
 @router.get("/disk-usage")

@@ -400,72 +400,37 @@ class ServerManagerApp:
     def _sync_impl(self, log_callback):
         self._set_status("동기화 중...")
 
-        # 1) Git pull (초기화는 ReplayKit.bat이 담당, 여기서는 업데이트만)
-        git_dir = os.path.join(PROJECT_ROOT, ".git")
-
-        # Git PATH 확보
-        _git_paths = [r"C:\Program Files\Git\cmd", r"C:\Program Files (x86)\Git\cmd"]
-        for _gp in _git_paths:
-            if os.path.isdir(_gp) and _gp not in os.environ.get("PATH", ""):
-                os.environ["PATH"] = _gp + ";" + os.environ.get("PATH", "")
-
-        if os.path.isdir(git_dir):
-            # 관리자 권한 설치 → 일반 사용자 실행 시 dubious ownership 방지
-            safe_dir = PROJECT_ROOT.replace("\\", "/")
-            git = ["git", "-c", f"safe.directory={safe_dir}"]
-
-            # 개발 환경에서만 .pyd 캐시 삭제 (배포 환경에서는 .pyd가 핵심 바이너리)
-            _main_py = os.path.join(PROJECT_ROOT, "backend", "app", "main.py")
-            _is_dev = os.path.exists(_main_py)  # 소스 .py가 있으면 개발 환경
-            if _is_dev:
-                import glob as _glob
-                _backend_dir = os.path.join(PROJECT_ROOT, "backend")
-                for _pyd in _glob.glob(os.path.join(_backend_dir, "**", "*.pyd"), recursive=True):
+        # 1) Git pull은 ReplayKit.bat이 담당 (서버 실행 전에 완료됨)
+        # 개발 환경: .pyd 캐시 삭제 / 배포 환경: .py 소스 삭제 (.pyd 보호)
+        _main_py = os.path.join(PROJECT_ROOT, "backend", "app", "main.py")
+        _is_dev = os.path.exists(_main_py)
+        if _is_dev:
+            import glob as _glob
+            _backend_dir = os.path.join(PROJECT_ROOT, "backend")
+            for _pyd in _glob.glob(os.path.join(_backend_dir, "**", "*.pyd"), recursive=True):
+                try:
+                    os.remove(_pyd)
+                except Exception:
+                    pass
+        else:
+            import glob as _glob
+            _backend_app = os.path.join(PROJECT_ROOT, "backend", "app")
+            _skip_py = {"__init__.py", "dependencies.py"}
+            removed = 0
+            for _py in _glob.glob(os.path.join(_backend_app, "**", "*.py"), recursive=True):
+                fname = os.path.basename(_py)
+                if fname in _skip_py:
+                    continue
+                stem = os.path.splitext(fname)[0]
+                pyd_exists = any(_glob.glob(os.path.join(os.path.dirname(_py), f"{stem}.*.pyd")))
+                if pyd_exists:
                     try:
-                        os.remove(_pyd)
+                        os.remove(_py)
+                        removed += 1
                     except Exception:
                         pass
-
-            # git 명령 사용 가능 여부 확인 (PATH는 상단에서 이미 설정)
-            git_available = _run_cmd(["git", "--version"], timeout=5)[0] == 0
-            if git_available:
-                # 원격 최신 상태로 강제 동기화 (배포 PC는 수신 전용)
-                # deploy remote가 있으면 회사 깃에서, 없으면 origin에서 pull
-                _det_code, _det_out = _run_cmd(git + ["remote", "get-url", "deploy"], timeout=5)
-                _sync_remote = "deploy" if _det_code == 0 and _det_out.strip() else "origin"
-                log_callback(f"[동기화] {_sync_remote} 에서 최신 상태 가져오는 중...")
-                _run_cmd(git + ["fetch", _sync_remote, "main"], timeout=30)
-                code, out = _run_cmd(git + ["reset", "--hard", f"{_sync_remote}/main"], timeout=15)
-                if out:
-                    log_callback(f"[동기화] {out}")
-                if code != 0:
-                    log_callback("[동기화] git pull 실패 — 의존성 설치는 계속합니다")
-
-                # 배포 환경: git pull로 .py 소스가 들어왔으면 삭제 (.pyd 보호)
-                if not _is_dev:
-                    import glob as _glob
-                    _backend_app = os.path.join(PROJECT_ROOT, "backend", "app")
-                    _skip_py = {"__init__.py", "dependencies.py"}
-                    removed = 0
-                    for _py in _glob.glob(os.path.join(_backend_app, "**", "*.py"), recursive=True):
-                        fname = os.path.basename(_py)
-                        if fname in _skip_py:
-                            continue
-                        # .pyd가 존재하면 .py는 불필요 (소스 노출 방지)
-                        stem = os.path.splitext(fname)[0]
-                        pyd_exists = any(_glob.glob(os.path.join(os.path.dirname(_py), f"{stem}.*.pyd")))
-                        if pyd_exists:
-                            try:
-                                os.remove(_py)
-                                removed += 1
-                            except Exception:
-                                pass
-                    if removed:
-                        log_callback(f"[동기화] 배포 보호: .py 소스 {removed}개 삭제 (.pyd 우선)")
-            else:
-                log_callback("[동기화] git 미설치 — git pull 건너뜀")
-        else:
-            log_callback("[동기화] git 저장소 없음 — git pull 건너뜀")
+            if removed:
+                log_callback(f"[동기화] 배포 보호: .py 소스 {removed}개 삭제 (.pyd 우선)")
 
         # 2) pip install (requirements.txt 변경 시에만)
         log_callback("[동기화] Python 의존성 확인 중...")
@@ -531,32 +496,31 @@ class ServerManagerApp:
         self.root.after(2000, self._check_restart_flag)
 
     def _full_restart(self):
-        """server.py 자체를 새 프로세스로 재실행 (코드 업데이트 반영)."""
+        """서버 종료 → ReplayKit.bat 실행 (git pull + 서버 시작)."""
         def _do():
-            self._log("[시스템] 서버 완전 재시작 — 새 프로세스로 전환합니다")
+            self._log("[시스템] 서버 종료 후 재시작합니다")
             self.backend.stop(self._log)
             if not self._production:
                 self.frontend.stop(self._log)
             time.sleep(1)
             _kill_existing_servers()
 
-            # 새 server.py 프로세스 실행 (--restart 플래그로 동기화 건너뛰기)
-            python = sys.executable
-            script = os.path.join(PROJECT_ROOT, "server.py")
-            if sys.platform == "win32":
+            # ReplayKit.bat 실행 (git pull → server.py 시작)
+            bat = os.path.join(PROJECT_ROOT, "ReplayKit.bat")
+            if os.path.isfile(bat) and sys.platform == "win32":
                 subprocess.Popen(
-                    [python, script, "--restart"],
+                    ["cmd", "/c", bat],
                     cwd=PROJECT_ROOT,
                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
                 )
             else:
+                # bat 없으면 직접 server.py 재실행
                 subprocess.Popen(
-                    [python, script, "--restart"],
+                    [sys.executable, os.path.join(PROJECT_ROOT, "server.py"), "--restart"],
                     cwd=PROJECT_ROOT,
                     start_new_session=True,
                 )
 
-            # 현재 프로세스 종료
             time.sleep(0.5)
             self.root.after(0, self.root.destroy)
         threading.Thread(target=_do, daemon=True).start()

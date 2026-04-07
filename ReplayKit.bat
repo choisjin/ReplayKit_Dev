@@ -4,7 +4,7 @@ cd /d "%~dp0"
 :: Git PATH 확보
 set "PATH=C:\Program Files\Git\cmd;C:\Program Files (x86)\Git\cmd;%PATH%"
 
-:: Git 초기화 (최초 실행 시 — 이후 업데이트는 server.py가 담당)
+:: Git 초기화 또는 업데이트
 if not exist ".git" (
     if exist "git_remote.txt" (
         where git.exe >nul 2>nul
@@ -13,6 +13,11 @@ if not exist ".git" (
         ) else (
             echo [GIT] Git not found - skipping.
         )
+    )
+) else (
+    where git.exe >nul 2>nul
+    if not errorlevel 1 (
+        call :git_pull
     )
 )
 goto :after_git
@@ -33,6 +38,13 @@ git branch --set-upstream-to=origin/main main
 git reset origin/main
 git checkout origin/main -- .gitignore
 echo [GIT] Initialized: %GIT_REMOTE%
+goto :eof
+
+:git_pull
+set "SAFE_DIR=%CD:\=/%"
+git -c safe.directory="%SAFE_DIR%" fetch origin main
+git -c safe.directory="%SAFE_DIR%" reset --hard origin/main
+echo [GIT] Updated.
 goto :eof
 
 :after_git
