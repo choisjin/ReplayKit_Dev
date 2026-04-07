@@ -234,15 +234,18 @@ if exist "frontend\package.json" (
 :: -------------------------------------------------------
 if exist ".git" goto :git_done
 
-:: Refresh PATH from registry + add common Git paths
+:: Refresh PATH from registry
 for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%b"
 for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%b"
 if defined SYS_PATH set "PATH=%SYS_PATH%"
 if defined USR_PATH set "PATH=%PATH%;%USR_PATH%"
-:: Git 기본 설치 경로 직접 추가
-if exist "%ProgramFiles%\Git\cmd" set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
-if exist "%ProgramFiles(x86)%\Git\cmd" set "PATH=%ProgramFiles(x86)%\Git\cmd;%PATH%"
-if exist "%LOCALAPPDATA%\Programs\Git\cmd" set "PATH=%LOCALAPPDATA%\Programs\Git\cmd;%PATH%"
+:: Git 설치 경로 탐색 (레지스트리 → 기본 경로 → 하드코딩)
+set "GIT_DIR="
+for /f "tokens=2*" %%a in ('reg query "HKLM\SOFTWARE\GitForWindows" /v InstallPath 2^>nul') do set "GIT_DIR=%%b"
+if not defined GIT_DIR for /f "tokens=2*" %%a in ('reg query "HKCU\SOFTWARE\GitForWindows" /v InstallPath 2^>nul') do set "GIT_DIR=%%b"
+if not defined GIT_DIR if exist "C:\Program Files\Git\cmd\git.exe" set "GIT_DIR=C:\Program Files\Git"
+if not defined GIT_DIR if exist "C:\Program Files (x86)\Git\cmd\git.exe" set "GIT_DIR=C:\Program Files (x86)\Git"
+if defined GIT_DIR set "PATH=%GIT_DIR%\cmd;%PATH%"
 
 where git.exe >nul 2>&1
 if %ERRORLEVEL% equ 0 goto :git_installed
@@ -266,6 +269,10 @@ for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Ses
 for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%b"
 if defined SYS_PATH set "PATH=%SYS_PATH%"
 if defined USR_PATH set "PATH=%PATH%;%USR_PATH%"
+set "GIT_REG_PATH="
+for /f "tokens=2*" %%a in ('reg query "HKLM\SOFTWARE\GitForWindows" /v InstallPath 2^>nul') do set "GIT_REG_PATH=%%b"
+if not defined GIT_REG_PATH for /f "tokens=2*" %%a in ('reg query "HKCU\SOFTWARE\GitForWindows" /v InstallPath 2^>nul') do set "GIT_REG_PATH=%%b"
+if defined GIT_REG_PATH if exist "%GIT_REG_PATH%\cmd\git.exe" set "PATH=%GIT_REG_PATH%\cmd;%PATH%"
 if exist "%ProgramFiles%\Git\cmd" set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
 if exist "%ProgramFiles(x86)%\Git\cmd" set "PATH=%ProgramFiles(x86)%\Git\cmd;%PATH%"
 if exist "%LOCALAPPDATA%\Programs\Git\cmd" set "PATH=%LOCALAPPDATA%\Programs\Git\cmd;%PATH%"
