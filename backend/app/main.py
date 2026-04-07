@@ -474,6 +474,20 @@ async def websocket_playback(websocket: WebSocket):
     await websocket.accept()
     logger.info("Playback WebSocket connected")
 
+    _ws_closed = False
+
+    async def _safe_send(data: dict):
+        """WebSocket이 끊겼으면 재생 중지."""
+        nonlocal _ws_closed
+        if _ws_closed:
+            return
+        try:
+            await websocket.send_json(data)
+        except Exception:
+            _ws_closed = True
+            logger.warning("Playback WebSocket closed — stopping playback")
+            await playback_service.stop()
+
     # 재생 중 stop 메시지를 수신하기 위한 리스너 태스크
     stop_listener_task: asyncio.Task | None = None
 
@@ -489,11 +503,11 @@ async def websocket_playback(websocket: WebSocket):
                     return
                 elif cmd == "pause":
                     await playback_service.pause()
-                    await websocket.send_json({"type": "playback_paused"})
+                    await _safe_send({"type": "playback_paused"})
                     logger.info("Playback paused")
                 elif cmd == "resume":
                     await playback_service.resume()
-                    await websocket.send_json({"type": "playback_resumed"})
+                    await _safe_send({"type": "playback_resumed"})
                     logger.info("Playback resumed")
         except Exception:
             pass
@@ -511,7 +525,7 @@ async def websocket_playback(websocket: WebSocket):
                 skip_steps: set[int] = set(data.get("skip_steps", []))
                 try:
                     if playback_service.is_running:
-                        await websocket.send_json({"type": "error", "message": "이미 재생 중입니다"})
+                        await _safe_send({"type": "error", "message": "이미 재생 중입니다"})
                         continue
                     playback_service._should_stop = False
                     playback_service._pause_event.set()
@@ -526,7 +540,7 @@ async def websocket_playback(websocket: WebSocket):
                     # Preflight device check
                     preflight_errors = await playback_service.preflight_check(scen, device_map_override)
                     if preflight_errors:
-                        await websocket.send_json({
+                        await _safe_send({
                             "type": "preflight_error",
                             "errors": preflight_errors,
                         })
@@ -556,7 +570,7 @@ async def websocket_playback(websocket: WebSocket):
                     for iteration in range(1, repeat + 1):
                         playback_service._monitor_state["current_cycle"] = iteration
                         if repeat > 1:
-                            await websocket.send_json({
+                            await _safe_send({
                                 "type": "iteration_start",
                                 "iteration": iteration,
                                 "total": repeat,
@@ -567,7 +581,7 @@ async def websocket_playback(websocket: WebSocket):
                             if isinstance(item, dict) and item.get("_type") == "step_start":
                                 _step_idx += 1
                                 playback_service._monitor_state["current_step"] = _step_idx
-                                await websocket.send_json({
+                                await _safe_send({
                                     "type": "step_start",
                                     "data": {k: v for k, v in item.items() if k != "_type"},
                                     "iteration": iteration,
@@ -584,7 +598,7 @@ async def websocket_playback(websocket: WebSocket):
                                 else:
                                     result.error_steps += 1
                                     playback_service._monitor_state["error"] += 1
-                                await websocket.send_json({
+                                await _safe_send({
                                     "type": "step_result",
                                     "data": step_result.model_dump(),
                                     "iteration": iteration,
@@ -594,17 +608,32 @@ async def websocket_playback(websocket: WebSocket):
                             break
                         last_completed_iteration = iteration
 
+                        # 매 사이클 완료 시 중간 결과 저장 (비정상 종료 대비)
+                        if repeat > 1:
+                            _interim = ScenarioResult(
+                                scenario_name=scenario_name,
+                                device_serial="multi-device",
+                                status="fail" if result.failed_steps > 0 or result.error_steps > 0 else "pass",
+                                total_steps=len(scen.steps),
+                                total_repeat=last_completed_iteration,
+                                started_at=result.started_at,
+                                finished_at=datetime.now(timezone.utc).isoformat(),
+                                step_results=list(result.step_results),
+                                passed_steps=result.passed_steps,
+                                failed_steps=result.failed_steps,
+                                error_steps=result.error_steps,
+                            )
+                            await playback_service._save_result(_interim)
+
                     # 중단 처리
                     if playback_service._should_stop:
-                        if repeat == 1 or last_completed_iteration == 0:
-                            # 1사이클 또는 첫 회차도 미완료: 결과 삭제
-                            await websocket.send_json({"type": "playback_stopped", "result_filename": ""})
+                        if last_completed_iteration == 0:
+                            await _safe_send({"type": "playback_stopped", "result_filename": ""})
                         else:
-                            # 여러 회 반복: 완료된 회차까지만 결과 보존
+                            # 마지막 저장된 중간 결과 파일명 반환
                             total_steps_per_cycle = len(scen.steps)
                             keep_count = last_completed_iteration * total_steps_per_cycle
                             result.step_results = result.step_results[:keep_count]
-                            # 카운터 재계산
                             result.passed_steps = sum(1 for sr in result.step_results if sr.status == "pass")
                             result.failed_steps = sum(1 for sr in result.step_results if sr.status == "fail")
                             result.error_steps = sum(1 for sr in result.step_results if sr.status not in ("pass", "fail"))
@@ -612,18 +641,15 @@ async def websocket_playback(websocket: WebSocket):
                             result.finished_at = datetime.now(timezone.utc).isoformat()
                             result.status = "fail" if (result.failed_steps > 0 or result.error_steps > 0) else "pass"
                             result_path = await playback_service._save_result(result)
-                            await websocket.send_json({"type": "playback_stopped", "result_filename": _result_filename(result_path)})
+                            await _safe_send({"type": "playback_stopped", "result_filename": _result_filename(result_path)})
                     else:
-                        # 정상 완료
+                        # 정상 완료 — 최종 결과 저장 (중간 결과 덮어쓰기)
                         result.finished_at = datetime.now(timezone.utc).isoformat()
-                        if result.failed_steps > 0 or result.error_steps > 0:
-                            result.status = "fail"
-                        else:
-                            result.status = "pass"
+                        result.status = "fail" if (result.failed_steps > 0 or result.error_steps > 0) else "pass"
                         result_path = await playback_service._save_result(result)
-                        await websocket.send_json({"type": "playback_complete", "result_filename": _result_filename(result_path)})
+                        await _safe_send({"type": "playback_complete", "result_filename": _result_filename(result_path)})
                 except Exception as e:
-                    await websocket.send_json({"type": "error", "message": str(e)})
+                    await _safe_send({"type": "error", "message": str(e)})
                 finally:
                     if stop_listener_task and not stop_listener_task.done():
                         stop_listener_task.cancel()
@@ -650,7 +676,7 @@ async def websocket_playback(websocket: WebSocket):
 
                 try:
                     if playback_service.is_running:
-                        await websocket.send_json({"type": "error", "message": "이미 재생 중입니다"})
+                        await _safe_send({"type": "error", "message": "이미 재생 중입니다"})
                         continue
                     playback_service._should_stop = False
                     playback_service._pause_event.set()
@@ -669,7 +695,7 @@ async def websocket_playback(websocket: WebSocket):
                         except FileNotFoundError:
                             all_preflight_errors.append(f"시나리오 '{entry['name']}'을(를) 찾을 수 없습니다")
                     if all_preflight_errors:
-                        await websocket.send_json({
+                        await _safe_send({
                             "type": "preflight_error",
                             "errors": all_preflight_errors,
                         })
@@ -705,7 +731,7 @@ async def websocket_playback(websocket: WebSocket):
                         if playback_service._should_stop:
                             break
                         if repeat > 1:
-                            await websocket.send_json({
+                            await _safe_send({
                                 "type": "iteration_start",
                                 "iteration": iteration,
                                 "total": repeat,
@@ -719,7 +745,7 @@ async def websocket_playback(websocket: WebSocket):
                             entry = entries[sc_idx]
                             sc_name = entry["name"]
                             scen = await recording_service.load_scenario(sc_name)
-                            await websocket.send_json({
+                            await _safe_send({
                                 "type": "group_scenario_start",
                                 "scenario_name": sc_name,
                                 "scenario_index": sc_idx + 1,
@@ -738,7 +764,7 @@ async def websocket_playback(websocket: WebSocket):
                                     start_data = {k: v for k, v in item.items() if k != "_type"}
                                     start_data["step_id"] = _pending_seq
                                     start_data["description"] = f"[{sc_name}] {start_data.get('description', '')}" if start_data.get('description') else f"[{sc_name}]"
-                                    await websocket.send_json({
+                                    await _safe_send({
                                         "type": "step_start",
                                         "data": start_data,
                                         "iteration": iteration,
@@ -759,7 +785,7 @@ async def websocket_playback(websocket: WebSocket):
                                     unified_result.failed_steps += 1
                                 else:
                                     unified_result.error_steps += 1
-                                await websocket.send_json({
+                                await _safe_send({
                                     "type": "step_result",
                                     "data": step_result.model_dump(),
                                     "iteration": iteration,
@@ -808,6 +834,23 @@ async def websocket_playback(websocket: WebSocket):
 
                             sc_idx = next_idx
 
+                        # 매 사이클 완료 시 중간 결과 저장 (비정상 종료 대비)
+                        if repeat > 1 and not playback_service._should_stop:
+                            _interim = ScenarioResult(
+                                scenario_name=group_name,
+                                device_serial="multi-device",
+                                status="fail" if unified_result.failed_steps > 0 or unified_result.error_steps > 0 else "pass",
+                                total_steps=global_step_seq,
+                                total_repeat=iteration,
+                                started_at=unified_result.started_at,
+                                finished_at=datetime.now(timezone.utc).isoformat(),
+                                step_results=list(unified_result.step_results),
+                                passed_steps=unified_result.passed_steps,
+                                failed_steps=unified_result.failed_steps,
+                                error_steps=unified_result.error_steps,
+                            )
+                            await playback_service._save_result(_interim)
+
                     # 통합 결과 저장 (1개 파일)
                     unified_result.finished_at = datetime.now(timezone.utc).isoformat()
                     unified_result.total_steps = global_step_seq
@@ -819,11 +862,11 @@ async def websocket_playback(websocket: WebSocket):
                     rf = _result_filename(result_path)
 
                     if playback_service._should_stop:
-                        await websocket.send_json({"type": "playback_stopped", "result_filename": rf})
+                        await _safe_send({"type": "playback_stopped", "result_filename": rf})
                     else:
-                        await websocket.send_json({"type": "playback_complete", "result_filename": rf})
+                        await _safe_send({"type": "playback_complete", "result_filename": rf})
                 except Exception as e:
-                    await websocket.send_json({"type": "error", "message": str(e)})
+                    await _safe_send({"type": "error", "message": str(e)})
                 finally:
                     # 그룹 재생 종료: 통합 런 디렉토리 정리
                     playback_service._cleanup_run_output_dir()
@@ -839,7 +882,7 @@ async def websocket_playback(websocket: WebSocket):
             elif action == "stop":
                 # 재생 시작 전 stop이 올 경우 (리스너 태스크 없을 때)
                 await playback_service.stop()
-                await websocket.send_json({"type": "playback_stopped"})
+                await _safe_send({"type": "playback_stopped"})
 
     except WebSocketDisconnect:
         logger.info("Playback WebSocket disconnected")

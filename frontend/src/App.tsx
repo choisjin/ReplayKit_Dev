@@ -84,18 +84,11 @@ function AppContent() {
     const poll = async () => {
       if (!mounted) return;
       try {
-        await axios.get('/api/health', { timeout: 3000 });
+        await axios.get('/api/health', { timeout: 5000 });
         if (!readyRef.current) {
           readyRef.current = true;
-          // 백엔드 연결 시 설정 다시 불러오기 (테마 등)
           await fetchSettings();
           setBackendReady(true);
-          if (everReadyRef.current) {
-            // 재연결 시 현재 탭 데이터 새로고침
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('tab-change', { detail: activeKeyRef.current }));
-            }, 200);
-          }
           everReadyRef.current = true;
           // 디스크 용량 조회
           serverApi.diskUsage().then(res => {

@@ -229,18 +229,37 @@ export default function DevicePage() {
   const [connecting, setConnecting] = useState(false);
   const [hkmcPort, setHkmcPort] = useState(5000);
   const [modalTabKey, setModalTabKey] = useState('scan');
+  const [deviceProject, setDeviceProject] = useState('');
   const [deviceModel, setDeviceModel] = useState('');
 
-  // 주 디바이스 모델 목록 (Device ID prefix가 됨)
-  const DEVICE_MODELS = [
-    { label: 'Android (기본)', value: '' },
-    { label: 'GVM', value: 'GVM' },
-    { label: 'Connected Wide (ccNC)', value: 'Connected_Wide' },
-    { label: 'Connected IC (ccIC)', value: 'Connected_IC' },
-    { label: 'Phone', value: 'Phone' },
-    { label: 'Tablet', value: 'Tablet' },
-    { label: 'HKMC 6th', value: 'HKMC' },
+  // 프로젝트별 디바이스 모델 목록 (value가 Device ID prefix가 됨)
+  const DEVICE_PROJECT_MODELS: Record<string, { label: string; value: string }[]> = {
+    'HKMC': [
+      { label: 'Connected Wide', value: 'Connected_Wide' },
+      { label: 'CCIC', value: 'HKMC' },
+    ],
+    'GM': [
+      { label: 'GVM', value: 'GVM' },
+    ],
+    'General': [
+      { label: 'Android', value: '' },
+      { label: 'Phone', value: 'Phone' },
+    ],
+  };
+
+  const PROJECT_OPTIONS = [
+    { label: '전체', value: '' },
+    ...Object.keys(DEVICE_PROJECT_MODELS)
+      .sort((a, b) => a.localeCompare(b))
+      .map(k => ({ label: k, value: k })),
   ];
+
+  const DEVICE_MODELS = useMemo(() => {
+    const models = deviceProject
+      ? (DEVICE_PROJECT_MODELS[deviceProject] || [])
+      : Object.values(DEVICE_PROJECT_MODELS).flat();
+    return [...models].sort((a, b) => a.label.localeCompare(b.label));
+  }, [deviceProject]);
 
   // VisionCamera
   const [vcMac, setVcMac] = useState('');
@@ -350,6 +369,7 @@ export default function DevicePage() {
     setSelectedModule(undefined);
     setScanSelectedModule(undefined);
     setExtraFieldValues({});
+    setDeviceProject('');
     setDeviceModel('');
     setModalTabKey('scan');
     setModalOpen(true);
@@ -801,13 +821,22 @@ export default function DevicePage() {
                       {t('device.rescan')}
                     </Button>
                     {modalCategory === 'primary' && (
-                      <Select
-                        value={deviceModel}
-                        onChange={setDeviceModel}
-                        style={{ minWidth: 200 }}
-                        placeholder="장비 모델 선택"
-                        options={DEVICE_MODELS}
-                      />
+                      <>
+                        <Select
+                          value={deviceProject}
+                          onChange={(v) => { setDeviceProject(v); setDeviceModel(''); }}
+                          style={{ minWidth: 120 }}
+                          options={PROJECT_OPTIONS}
+                        />
+                        <Select
+                          allowClear
+                          value={deviceModel || undefined}
+                          onChange={(v) => setDeviceModel(v || '')}
+                          style={{ minWidth: 200 }}
+                          placeholder="장비 모델 선택"
+                          options={DEVICE_MODELS}
+                        />
+                      </>
                     )}
                   </Space>
 
@@ -1128,13 +1157,22 @@ export default function DevicePage() {
                 return (
                   <Space direction="vertical" style={{ width: '100%' }}>
                     {modalCategory === 'primary' && (
-                      <Select
-                        value={deviceModel}
-                        onChange={setDeviceModel}
-                        style={{ width: '100%' }}
-                        placeholder="장비 모델 선택"
-                        options={DEVICE_MODELS}
-                      />
+                      <Space style={{ width: '100%' }} wrap>
+                        <Select
+                          value={deviceProject}
+                          onChange={(v) => { setDeviceProject(v); setDeviceModel(''); }}
+                          style={{ minWidth: 120 }}
+                          options={PROJECT_OPTIONS}
+                        />
+                        <Select
+                          allowClear
+                          value={deviceModel || undefined}
+                          onChange={(v) => setDeviceModel(v || '')}
+                          style={{ minWidth: 200, flex: 1 }}
+                          placeholder="장비 모델 선택"
+                          options={DEVICE_MODELS}
+                        />
+                      </Space>
                     )}
                     {modalCategory === 'auxiliary' && modules.length > 0 && (
                       <Select

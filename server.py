@@ -518,9 +518,9 @@ class ServerManagerApp:
                     else:
                         self._log(f"[업데이트] git pull 실패: {out.strip()}")
 
-            # 서버 재시작
+            # 서버 재시작 (웹은 프론트엔드 폴링이 자동 새로고침하므로 열지 않음)
             self._log("[시스템] 서버 재시작 중...")
-            self._start_all_sync(auto_open_web=True)
+            self._start_all_sync(auto_open_web=False)
         threading.Thread(target=_do, daemon=True).start()
 
     # ── 상태 업데이트 (주기적) ──
