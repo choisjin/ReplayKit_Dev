@@ -2400,6 +2400,26 @@ export default function RecordPage() {
     <div className="record-page" style={{ height: 'calc(100vh - 80px)', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       <style>{`
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes hkGauge {
+          0% { background-size: 0% 100%; }
+          100% { background-size: 100% 100%; }
+        }
+        .hk-btn { position: relative; overflow: hidden; transition: color 0.15s, border-color 0.15s; }
+        .hk-btn.pressing {
+          background-image: linear-gradient(to right, #ff7875 0%, #ff4d4f 100%) !important;
+          background-repeat: no-repeat !important;
+          background-position: left center !important;
+          background-size: 0% 100%;
+          animation: hkGauge ${HKMC_LONG_PRESS_MS}ms linear forwards;
+        }
+        .hk-btn.pressing .ant-btn-icon,
+        .hk-btn.pressing > span { position: relative; z-index: 1; }
+        .hk-btn.long-done {
+          background: #ff4d4f !important;
+          border-color: #ff4d4f !important;
+          color: #fff !important;
+          animation: none;
+        }
         .record-page .ant-tag { line-height: 22px; }
         .record-page .ant-input-sm,
         .record-page .ant-select-sm,
@@ -2659,18 +2679,33 @@ export default function RecordPage() {
                             <div style={{ padding: '2px 0 2px 4px' }}>
                               {keys.map(k => {
                                 let downTs = 0;
+                                let longTimer = 0;
                                 return (
                                 <Button key={k.name} size="small"
+                                  className="hk-btn"
                                   style={{ fontSize: 10, padding: '0 6px', height: 22, margin: '0 2px 2px 0' }}
-                                  onMouseDown={() => { downTs = Date.now(); }}
-                                  onMouseUp={() => {
+                                  onMouseDown={(e) => {
+                                    downTs = Date.now();
+                                    const btn = e.currentTarget;
+                                    btn.classList.remove('long-done');
+                                    btn.classList.add('pressing');
+                                    longTimer = window.setTimeout(() => { btn.classList.add('long-done'); }, HKMC_LONG_PRESS_MS);
+                                  }}
+                                  onMouseUp={(e) => {
+                                    clearTimeout(longTimer);
+                                    const btn = e.currentTarget;
                                     const held = Date.now() - downTs;
                                     const isLong = held >= HKMC_LONG_PRESS_MS;
                                     const sub = isLong ? HKMC_LONG_KEY : HKMC_SHORT_KEY;
                                     const label = k.name + (isLong ? ' (Long)' : '');
                                     executeAction('hkmc_key', { key_name: k.name, sub_cmd: sub, screen_type: screenType }, label);
+                                    btn.classList.remove('pressing', 'long-done');
                                   }}
-                                  onMouseLeave={() => { downTs = 0; }}
+                                  onMouseLeave={(e) => {
+                                    clearTimeout(longTimer);
+                                    downTs = 0;
+                                    e.currentTarget.classList.remove('pressing', 'long-done');
+                                  }}
                                 >{k.name.replace(`${group}_`, '')}</Button>
                                 );
                               })}
@@ -2684,19 +2719,34 @@ export default function RecordPage() {
                           <div style={{ padding: '2px 0 2px 4px' }}>
                             {keys.map(k => {
                               let downTs = 0;
+                              let longTimer = 0;
                               return (
                               <Tag key={k.name} closable
+                                className="hk-btn"
                                 onClose={async (e) => { e.preventDefault(); try { await customKeysApi.remove(k.name); const r = await deviceApi.listHkmcKeys(); setHkmcKeys(r.data.keys || []); } catch {} }}
                                 style={{ fontSize: 10, cursor: 'pointer', margin: '0 2px 2px 0' }}
-                                onMouseDown={() => { downTs = Date.now(); }}
-                                onMouseUp={() => {
+                                onMouseDown={(e) => {
+                                  downTs = Date.now();
+                                  const tag = e.currentTarget;
+                                  tag.classList.remove('long-done');
+                                  tag.classList.add('pressing');
+                                  longTimer = window.setTimeout(() => { tag.classList.add('long-done'); }, HKMC_LONG_PRESS_MS);
+                                }}
+                                onMouseUp={(e) => {
+                                  clearTimeout(longTimer);
+                                  const tag = e.currentTarget;
                                   const held = Date.now() - downTs;
                                   const isLong = held >= HKMC_LONG_PRESS_MS;
                                   const sub = isLong ? HKMC_LONG_KEY : HKMC_SHORT_KEY;
                                   const label = k.name + (isLong ? ' (Long)' : '');
                                   executeAction('hkmc_key', { key_name: k.name, sub_cmd: sub, screen_type: screenType }, label);
+                                  tag.classList.remove('pressing', 'long-done');
                                 }}
-                                onMouseLeave={() => { downTs = 0; }}
+                                onMouseLeave={(e) => {
+                                  clearTimeout(longTimer);
+                                  downTs = 0;
+                                  e.currentTarget.classList.remove('pressing', 'long-done');
+                                }}
                               >{k.name.replace(`${group}_`, '')}</Tag>
                               );
                             })}
