@@ -4,43 +4,35 @@ cd /d "%~dp0"
 :: Git PATH 확보
 set "PATH=C:\Program Files\Git\cmd;C:\Program Files (x86)\Git\cmd;%PATH%"
 
-:: Git 초기화 (최초 실행 시)
+:: Git 초기화 (최초 실행 시 — 이후 업데이트는 server.py가 담당)
 if not exist ".git" (
     if exist "git_remote.txt" (
         where git.exe >nul 2>nul
         if not errorlevel 1 (
-            echo [GIT] Initializing repository...
-            set /p GIT_REMOTE=<git_remote.txt
-            git init -b main
-            set "SAFE_DIR=%CD:\=/%"
-            git config --global --add safe.directory "%SAFE_DIR%"
-            call :git_setup_remote
+            call :git_init
         ) else (
-            echo [GIT] Git not found - skipping repository setup.
+            echo [GIT] Git not found - skipping.
         )
-    )
-)
-
-:: Git 업데이트
-if exist ".git" (
-    where git.exe >nul 2>nul
-    if not errorlevel 1 (
-        echo [UPDATE] Fetching latest...
-        git fetch origin main
-        git reset --hard origin/main
-        echo [UPDATE] Done.
     )
 )
 goto :after_git
 
-:git_setup_remote
+:git_init
+echo [GIT] Initializing repository...
 set /p GIT_REMOTE=<git_remote.txt
+set "SAFE_DIR=%CD:\=/%"
+git init -b main
+git config --global --add safe.directory "%SAFE_DIR%"
 git remote add origin "%GIT_REMOTE%"
 git fetch --depth 1 origin main
+if errorlevel 1 (
+    echo [GIT] Fetch failed - check network.
+    goto :eof
+)
 git branch --set-upstream-to=origin/main main
 git reset origin/main
 git checkout origin/main -- .gitignore
-echo [GIT] Repository initialized: %GIT_REMOTE%
+echo [GIT] Initialized: %GIT_REMOTE%
 goto :eof
 
 :after_git

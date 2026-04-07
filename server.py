@@ -400,41 +400,14 @@ class ServerManagerApp:
     def _sync_impl(self, log_callback):
         self._set_status("동기화 중...")
 
-        # 1) Git 저장소 확인 → 없으면 초기화 시도 → pull
+        # 1) Git pull (초기화는 ReplayKit.bat이 담당, 여기서는 업데이트만)
         git_dir = os.path.join(PROJECT_ROOT, ".git")
-        git_remote_file = os.path.join(PROJECT_ROOT, "git_remote.txt")
 
         # Git PATH 확보
         _git_paths = [r"C:\Program Files\Git\cmd", r"C:\Program Files (x86)\Git\cmd"]
         for _gp in _git_paths:
             if os.path.isdir(_gp) and _gp not in os.environ.get("PATH", ""):
                 os.environ["PATH"] = _gp + ";" + os.environ.get("PATH", "")
-
-        # .git 없으면 초기화 시도
-        if not os.path.isdir(git_dir):
-            if _run_cmd(["git", "--version"], timeout=5)[0] != 0:
-                log_callback("[동기화] git 미설치 — git 동기화 불가")
-            elif not os.path.isfile(git_remote_file):
-                log_callback("[동기화] git_remote.txt 없음 — git 저장소 초기화 불가")
-            else:
-                with open(git_remote_file, "r", encoding="utf-8") as f:
-                    remote_url = f.read().strip()
-                if not remote_url:
-                    log_callback("[동기화] git_remote.txt 비어 있음 — git 저장소 초기화 불가")
-                else:
-                    log_callback(f"[동기화] git 저장소 초기화 중... ({remote_url})")
-                    safe_dir = PROJECT_ROOT.replace("\\", "/")
-                    _run_cmd(["git", "init", "-b", "main"], timeout=10)
-                    _run_cmd(["git", "config", "--global", "--add", "safe.directory", safe_dir], timeout=5)
-                    _run_cmd(["git", "remote", "add", "origin", remote_url], timeout=5)
-                    code, _ = _run_cmd(["git", "fetch", "--depth", "1", "origin", "main"], timeout=30)
-                    if code == 0:
-                        _run_cmd(["git", "branch", "--set-upstream-to=origin/main", "main"], timeout=5)
-                        _run_cmd(["git", "reset", "origin/main"], timeout=10)
-                        _run_cmd(["git", "checkout", "origin/main", "--", ".gitignore"], timeout=5)
-                        log_callback("[동기화] git 저장소 초기화 완료")
-                    else:
-                        log_callback("[동기화] git fetch 실패 — 네트워크 연결 또는 저장소 접근 확인 필요")
 
         if os.path.isdir(git_dir):
             # 관리자 권한 설치 → 일반 사용자 실행 시 dubious ownership 방지
@@ -491,6 +464,8 @@ class ServerManagerApp:
                         log_callback(f"[동기화] 배포 보호: .py 소스 {removed}개 삭제 (.pyd 우선)")
             else:
                 log_callback("[동기화] git 미설치 — git pull 건너뜀")
+        else:
+            log_callback("[동기화] git 저장소 없음 — git pull 건너뜀")
 
         # 2) pip install (requirements.txt 변경 시에만)
         log_callback("[동기화] Python 의존성 확인 중...")
