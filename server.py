@@ -244,37 +244,81 @@ class ServerManagerApp:
     # ── UI 구성 ──
 
     def _build_ui(self):
-        self.root.geometry("200x80")
+        self.root.overrideredirect(True)  # 윈도우 타이틀바 제거
+        self.root.geometry("360x70")
         self.root.resizable(False, False)
+        # 화면 우하단 (작업표시줄 위)
+        self.root.update_idletasks()
+        sw, sh = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        self.root.geometry(f"+{sw - 380}+{sh - 120}")
 
-        frame = tk.Frame(self.root, bg=BG, padx=12, pady=10)
-        frame.pack(fill="both", expand=True)
+        # 드래그 이동 지원
+        self._drag_data = {"x": 0, "y": 0}
 
-        # ▶/■ 토글 버튼 (시작/정지)
+        outer = tk.Frame(self.root, bg=FG_DIM, bd=1, relief="solid")
+        outer.pack(fill="both", expand=True)
+
+        main = tk.Frame(outer, bg=BG)
+        main.pack(fill="both", expand=True, padx=1, pady=1)
+
+        # 상단: 타이틀 + 윈도우 컨트롤
+        title_bar = tk.Frame(main, bg=BG)
+        title_bar.pack(fill="x")
+
+        title_lbl = tk.Label(
+            title_bar, text="RePlayKit", bg=BG, fg=ACCENT,
+            font=("Segoe UI", 11, "bold"), cursor="fleur",
+        )
+        title_lbl.pack(side="left", padx=(10, 0), pady=(4, 0))
+        title_lbl.bind("<Button-1>", lambda e: self._drag_data.update(x=e.x, y=e.y))
+        title_lbl.bind("<B1-Motion>", lambda e: self.root.geometry(
+            f"+{self.root.winfo_x() + e.x - self._drag_data['x']}+{self.root.winfo_y() + e.y - self._drag_data['y']}"))
+
+        # 윈도우 컨트롤 버튼 (트레이 / 종료)
+        ctrl = tk.Frame(title_bar, bg=BG)
+        ctrl.pack(side="right", padx=(0, 4), pady=(4, 0))
+
+        for text, color, cmd in [
+            ("━", FG_DIM, self._to_tray),
+            ("✕", RED, self._quit),
+        ]:
+            b = tk.Label(ctrl, text=text, bg=BG, fg=color,
+                         font=("Segoe UI", 10), cursor="hand2", padx=6)
+            b.pack(side="left")
+            b.bind("<Button-1>", lambda e, c=cmd: c())
+            b.bind("<Enter>", lambda e, b=b: b.configure(bg=BG_CARD))
+            b.bind("<Leave>", lambda e, b=b: b.configure(bg=BG))
+
+        # 하단: 서버 컨트롤 + 상태
+        bottom = tk.Frame(main, bg=BG)
+        bottom.pack(fill="x", padx=10, pady=(2, 0))
+
+        # ▶/■ 토글
         self._toggle_btn = tk.Button(
-            frame, text="▶", bg=BG_CARD, fg=GREEN,
+            bottom, text="▶", bg=BG_CARD, fg=GREEN,
             activebackground=BG, activeforeground=GREEN,
-            font=("Segoe UI", 16, "bold"), relief="flat", bd=0,
+            font=("Segoe UI", 14, "bold"), relief="flat", bd=0,
             cursor="hand2", width=2, command=self._toggle_server,
         )
-        self._toggle_btn.pack(side="left", padx=(0, 6))
+        self._toggle_btn.pack(side="left", padx=(0, 4))
 
         # ↻ 재시작
-        self._make_btn(frame, "↻", YELLOW, self._restart_all).pack(side="left", padx=(0, 6))
+        self._make_btn(bottom, "↻", YELLOW, self._restart_all).pack(side="left", padx=(0, 4))
 
-        # 🌐 웹 열기
-        self._make_btn(frame, "🌐", ACCENT, self._open_web).pack(side="left")
+        # 🌐 웹
+        self._make_btn(bottom, "🌐", ACCENT, self._open_web).pack(side="left")
 
-        # 더미 카드 (상태 업데이트 호환용)
+        # 상태 표시줄 (버튼 오른쪽)
+        self.statusbar = tk.Label(
+            bottom, text="준비", bg=BG, fg=FG_DIM,
+            font=("Segoe UI", 8), anchor="e",
+        )
+        self.statusbar.pack(side="right", padx=(0, 4))
+
+        # 더미 (호환용)
         self.be_card = {"indicator": tk.Label(), "status_lbl": tk.Label(), "start_btn": tk.Button(), "stop_btn": tk.Button()}
         self.fe_card = {"indicator": tk.Label(), "status_lbl": tk.Label(), "start_btn": tk.Button(), "stop_btn": tk.Button()}
         self.log_tabs: dict[str, scrolledtext.ScrolledText] = {}
-
-        self.statusbar = tk.Label(
-            self.root, text="준비", bg=BG_CARD, fg=FG_DIM,
-            font=("Segoe UI", 8), anchor="w", padx=8, pady=2,
-        )
-        self.statusbar.pack(fill="x", side="bottom")
 
         # ── 시스템 트레이 ──
         self._tray_icon = None
@@ -283,11 +327,16 @@ class ServerManagerApp:
             threading.Thread(target=self._tray_icon.run, daemon=True).start()
 
     def _toggle_server(self):
-        """서버 시작/정지 토글."""
         if self.backend.running:
             self._stop_all()
         else:
             self._start_all()
+
+    def _to_tray(self):
+        if _HAS_TRAY and self._tray_icon:
+            self.root.withdraw()
+        else:
+            self.root.iconify()
 
     def _make_btn(self, parent, text: str, color: str, command) -> tk.Button:
         btn = tk.Button(
