@@ -289,7 +289,8 @@ class ServerManagerApp:
         # ── 시스템 트레이 ──
         self._tray_icon = None
         if _HAS_TRAY:
-            threading.Thread(target=self._setup_tray, daemon=True).start()
+            self._create_tray()
+            threading.Thread(target=self._tray_icon.run, daemon=True).start()
 
     def _make_btn(self, parent, text: str, color: str, command) -> tk.Button:
         btn = tk.Button(
@@ -604,9 +605,8 @@ class ServerManagerApp:
         self.root.lift()
         self.root.focus_force()
 
-    def _setup_tray(self):
-        """시스템 트레이 아이콘 + 우클릭 메뉴."""
-        # 간단한 아이콘 생성 (16x16 파란 원)
+    def _create_tray(self):
+        """시스템 트레이 아이콘 + 우클릭 메뉴 객체 생성."""
         img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         draw.ellipse([8, 8, 56, 56], fill=(68, 114, 196))
@@ -624,7 +624,6 @@ class ServerManagerApp:
             pystray.MenuItem("종료", lambda: self.root.after(0, self._quit)),
         )
         self._tray_icon = pystray.Icon("ReplayKit", img, "ReplayKit", menu)
-        self._tray_icon.run()
 
     @staticmethod
     def _kill_adb():
