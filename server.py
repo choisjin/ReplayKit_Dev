@@ -244,47 +244,37 @@ class ServerManagerApp:
     # ── UI 구성 ──
 
     def _build_ui(self):
-        self.root.geometry("360x160")
+        self.root.geometry("200x80")
         self.root.resizable(False, False)
 
-        title = tk.Label(
-            self.root, text="ReplayKit — Server",
-            bg=BG, fg=ACCENT, font=("Segoe UI", 14, "bold"),
+        frame = tk.Frame(self.root, bg=BG, padx=12, pady=10)
+        frame.pack(fill="both", expand=True)
+
+        # ▶/■ 토글 버튼 (시작/정지)
+        self._toggle_btn = tk.Button(
+            frame, text="▶", bg=BG_CARD, fg=GREEN,
+            activebackground=BG, activeforeground=GREEN,
+            font=("Segoe UI", 16, "bold"), relief="flat", bd=0,
+            cursor="hand2", width=2, command=self._toggle_server,
         )
-        title.pack(pady=(12, 6))
+        self._toggle_btn.pack(side="left", padx=(0, 6))
 
-        # 백엔드 카드
-        card = tk.Frame(self.root, bg=BG_CARD, relief="flat", bd=0, padx=16, pady=10)
-        card.pack(fill="x", padx=16, pady=(0, 8))
+        # ↻ 재시작
+        self._make_btn(frame, "↻", YELLOW, self._restart_all).pack(side="left", padx=(0, 6))
 
-        top = tk.Frame(card, bg=BG_CARD)
-        top.pack(fill="x")
+        # 🌐 웹 열기
+        self._make_btn(frame, "🌐", ACCENT, self._open_web).pack(side="left")
 
-        indicator = tk.Label(top, text="●", bg=BG_CARD, fg=RED, font=("Segoe UI", 12))
-        indicator.pack(side="left")
-        tk.Label(top, text="백엔드", bg=BG_CARD, fg=FG, font=("Segoe UI", 12, "bold")).pack(side="left", padx=(6, 0))
-        status_lbl = tk.Label(top, text="정지됨", bg=BG_CARD, fg=FG_DIM, font=("Segoe UI", 9))
-        status_lbl.pack(side="right")
-
-        self.be_card = {"indicator": indicator, "status_lbl": status_lbl, "start_btn": tk.Button(), "stop_btn": tk.Button()}
-        # 프론트엔드 카드 (더미 — 상태 업데이트용)
+        # 더미 카드 (상태 업데이트 호환용)
+        self.be_card = {"indicator": tk.Label(), "status_lbl": tk.Label(), "start_btn": tk.Button(), "stop_btn": tk.Button()}
         self.fe_card = {"indicator": tk.Label(), "status_lbl": tk.Label(), "start_btn": tk.Button(), "stop_btn": tk.Button()}
-
-        btn_row = tk.Frame(card, bg=BG_CARD)
-        btn_row.pack(fill="x", pady=(6, 0))
-        self._make_btn(btn_row, "▶ 시작", GREEN, self._start_all).pack(side="left", expand=True, fill="x", padx=(0, 3))
-        self._make_btn(btn_row, "■ 정지", RED, self._stop_all).pack(side="left", expand=True, fill="x", padx=3)
-        self._make_btn(btn_row, "↻ 재시작", YELLOW, self._restart_all).pack(side="left", expand=True, fill="x", padx=3)
-        self._make_btn(btn_row, "🌐 웹", ACCENT, self._open_web).pack(side="left", expand=True, fill="x", padx=(3, 0))
+        self.log_tabs: dict[str, scrolledtext.ScrolledText] = {}
 
         self.statusbar = tk.Label(
             self.root, text="준비", bg=BG_CARD, fg=FG_DIM,
-            font=("Segoe UI", 8), anchor="w", padx=12, pady=3,
+            font=("Segoe UI", 8), anchor="w", padx=8, pady=2,
         )
         self.statusbar.pack(fill="x", side="bottom")
-
-        # 로그 (빈 탭 — _append_log 호환용)
-        self.log_tabs: dict[str, scrolledtext.ScrolledText] = {}
 
         # ── 시스템 트레이 ──
         self._tray_icon = None
@@ -292,12 +282,19 @@ class ServerManagerApp:
             self._create_tray()
             threading.Thread(target=self._tray_icon.run, daemon=True).start()
 
+    def _toggle_server(self):
+        """서버 시작/정지 토글."""
+        if self.backend.running:
+            self._stop_all()
+        else:
+            self._start_all()
+
     def _make_btn(self, parent, text: str, color: str, command) -> tk.Button:
         btn = tk.Button(
             parent, text=text, bg=BG_CARD, fg=color,
             activebackground=BG, activeforeground=color,
-            font=("Segoe UI", 10, "bold"), relief="flat", bd=0,
-            cursor="hand2", command=command, padx=10, pady=6,
+            font=("Segoe UI", 16, "bold"), relief="flat", bd=0,
+            cursor="hand2", command=command, width=2,
         )
         btn.bind("<Enter>", lambda e, b=btn, c=color: b.configure(bg="#e0e0e0" if _THEME == "light" else "#363650"))
         btn.bind("<Leave>", lambda e, b=btn: b.configure(bg=BG_CARD))
@@ -481,17 +478,18 @@ class ServerManagerApp:
 
     def _update_status(self):
         if self.backend.running:
-            self.be_card["indicator"].configure(fg=GREEN)
-            self.be_card["status_lbl"].configure(text="실행 중", fg=GREEN)
-            self.statusbar.configure(text="서버 실행 중")
+            self._toggle_btn.configure(text="■", fg=RED)
+            self.root.title("ReplayKit — 실행 중")
+            status = self.statusbar.cget("text")
+            if "동기화" not in status and "업데이트" not in status:
+                self.statusbar.configure(text="서버 실행 중")
         else:
-            self.be_card["indicator"].configure(fg=RED)
-            self.be_card["status_lbl"].configure(text="정지됨", fg=FG_DIM)
+            self._toggle_btn.configure(text="▶", fg=GREEN)
+            self.root.title("ReplayKit — 정지됨")
             status = self.statusbar.cget("text")
             if "동기화" not in status and "업데이트" not in status and "준비" not in status:
                 self.statusbar.configure(text="서버 정지됨")
 
-        # 트레이 툴팁 업데이트
         if self._tray_icon:
             self._tray_icon.title = "ReplayKit — " + ("실행 중" if self.backend.running else "정지됨")
 
