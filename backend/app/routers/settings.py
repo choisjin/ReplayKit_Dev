@@ -331,6 +331,20 @@ async def server_restart():
     return {"status": "restarting"}
 
 
+@router.get("/launcher-log")
+async def get_launcher_log(lines: int = 200):
+    """런처 로그 읽기 (.launcher.log)."""
+    log_file = _PROJECT_ROOT / ".launcher.log"
+    if not log_file.exists():
+        return {"lines": []}
+    try:
+        content = log_file.read_text(encoding="utf-8", errors="replace")
+        all_lines = content.strip().split("\n") if content.strip() else []
+        return {"lines": all_lines[-lines:]}
+    except Exception:
+        return {"lines": []}
+
+
 @router.post("/update-and-restart")
 async def update_and_restart():
     """서버 종료 → ReplayKit.bat이 git pull + 서버 재시작."""

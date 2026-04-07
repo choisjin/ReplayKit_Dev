@@ -52,6 +52,25 @@ function AppContent() {
   const { settings, uploadWebcamRecording, fetchSettings } = useSettings();
   const { t } = useTranslation();
 
+  // ── 로고 5연타 → 런처 로그 ──
+  const logoClickRef = useRef<number[]>([]);
+  const [logModalOpen, setLogModalOpen] = useState(false);
+  const [launcherLog, setLauncherLog] = useState<string[]>([]);
+  const handleLogoClick = () => {
+    const now = Date.now();
+    const clicks = logoClickRef.current;
+    clicks.push(now);
+    // 최근 2초 이내 클릭만 유지
+    while (clicks.length > 0 && now - clicks[0] > 2000) clicks.shift();
+    if (clicks.length >= 5) {
+      clicks.length = 0;
+      serverApi.launcherLog(500).then(res => {
+        setLauncherLog(res.data.lines || []);
+        setLogModalOpen(true);
+      }).catch(() => {});
+    }
+  };
+
   // --- Backend health polling ---
   const [backendReady, setBackendReady] = useState(false);
   const readyRef = useRef(false);
@@ -163,7 +182,10 @@ function AppContent() {
     }}>
       <Layout style={{ minHeight: '100vh' }}>
         <Sider collapsible collapsed={siderCollapsed} onCollapse={setSiderCollapsed} style={isDark ? undefined : { background: '#f0f0f0' }}>
-          <div style={{ height: 40, margin: siderCollapsed ? '16px 8px' : 16, color: isDark ? '#fff' : '#222', fontSize: siderCollapsed ? 11 : 14, fontWeight: 'bold', textAlign: 'center', lineHeight: '40px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+          <div
+            onClick={handleLogoClick}
+            style={{ height: 40, margin: siderCollapsed ? '16px 8px' : 16, color: isDark ? '#fff' : '#222', fontSize: siderCollapsed ? 11 : 14, fontWeight: 'bold', textAlign: 'center', lineHeight: '40px', overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'default', userSelect: 'none' }}
+          >
             {siderCollapsed ? 'RK' : 'ReplayKit'}
           </div>
           <Menu
@@ -222,14 +244,38 @@ function AppContent() {
                       message.loading({ content: t('server.updating'), key: 'update', duration: 0 });
                       try {
                         await serverApi.updateAndRestart();
-                        message.success({ content: t('server.updateSuccess'), key: 'update', duration: 3 });
-                        setTimeout(() => {
-                          window.close();
-                          // window.close()가 동작하지 않는 경우 (직접 URL 입력으로 연 탭)
-                          setTimeout(() => {
-                            document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#666">서버 재시작 중입니다. 이 탭을 닫아주세요.</div>';
-                          }, 500);
-                        }, 2000);
+                        message.destroy('update');
+                        // 업데이트 대기 화면 표시
+                        const wrap = document.createElement('div');
+                        wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;font-family:sans-serif';
+                        const title = document.createElement('div');
+                        title.style.cssText = 'font-size:20px;font-weight:600';
+                        title.textContent = '서버 업데이트 중...';
+                        const status = document.createElement('div');
+                        status.style.color = '#888';
+                        status.textContent = '서버 종료 대기 중';
+                        wrap.appendChild(title);
+                        wrap.appendChild(status);
+                        document.body.innerHTML = '';
+                        document.body.appendChild(wrap);
+                        // 서버가 다시 응답할 때까지 폴링
+                        const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+                        await delay(3000);
+                        status.textContent = 'git pull + 서버 재시작 대기 중...';
+                        for (let waited = 0; waited < 120; waited += 2) {
+                          try {
+                            const r = await fetch('/api/health', { signal: AbortSignal.timeout(2000) });
+                            if (r.ok) {
+                              status.textContent = '서버 준비 완료! 새로고침 중...';
+                              await delay(1000);
+                              window.location.reload();
+                              return;
+                            }
+                          } catch { /* 서버 아직 안 뜸 */ }
+                          await delay(2000);
+                          status.textContent = '서버 재시작 대기 중... (' + (waited + 2) + 's)';
+                        }
+                        status.textContent = '서버 응답 없음 — 수동으로 새로고침 해주세요.';
                       } catch {
                         message.error({ content: t('server.updateFailed'), key: 'update' });
                       }
@@ -333,6 +379,20 @@ function AppContent() {
       )}
 
       <ChatWidget open={chatOpen} onClose={() => setChatOpen(false)} />
+
+      <Modal
+        title="Launcher Log"
+        open={logModalOpen}
+        onCancel={() => setLogModalOpen(false)}
+        footer={null}
+        width={800}
+      >
+        <div style={{ maxHeight: 500, overflow: 'auto', background: isDark ? '#1e1e2e' : '#f5f5f5', borderRadius: 6, padding: 12 }}>
+          <pre style={{ margin: 0, fontSize: 11, fontFamily: 'Consolas, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: isDark ? '#cdd6f4' : '#333' }}>
+            {launcherLog.length > 0 ? launcherLog.join('\n') : 'No logs'}
+          </pre>
+        </div>
+      </Modal>
 
       <style>{`@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }`}</style>
     </ConfigProvider>

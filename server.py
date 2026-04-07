@@ -17,6 +17,13 @@ from datetime import datetime
 
 import psutil
 
+try:
+    import pystray
+    from PIL import Image, ImageDraw
+    _HAS_TRAY = True
+except ImportError:
+    _HAS_TRAY = False
+
 # PyInstaller exe: use exe's directory; normal script: use __file__'s directory
 if getattr(sys, "frozen", False):
     PROJECT_ROOT = os.path.dirname(sys.executable)
@@ -198,11 +205,16 @@ class ServerProcess:
 
 class ServerManagerApp:
     def __init__(self):
+        self._log_buffer: list[str] = []
+        # 로그 파일 초기화
+        try:
+            open(os.path.join(PROJECT_ROOT, ".launcher.log"), "w").close()
+        except Exception:
+            pass
+
         self.root = tk.Tk()
-        self.root.title("ReplayKit — 서버 관리")
-        self.root.geometry("780x560")
+        self.root.title("ReplayKit")
         self.root.configure(bg=BG)
-        self.root.resizable(True, True)
 
         # 배포 모드: frontend/dist 존재하면 백엔드가 정적 파일 서빙 (프론트엔드 서버 불필요)
         fe_dist = os.path.join(FRONTEND_DIR, "dist", "index.html")
@@ -232,109 +244,52 @@ class ServerManagerApp:
     # ── UI 구성 ──
 
     def _build_ui(self):
+        self.root.geometry("360x160")
+        self.root.resizable(False, False)
+
         title = tk.Label(
             self.root, text="ReplayKit — Server",
-            bg=BG, fg=ACCENT, font=("Segoe UI", 16, "bold"),
+            bg=BG, fg=ACCENT, font=("Segoe UI", 14, "bold"),
         )
-        title.pack(pady=(16, 8))
+        title.pack(pady=(12, 6))
 
-        cards_frame = tk.Frame(self.root, bg=BG)
-        cards_frame.pack(fill="x", padx=20, pady=(0, 8))
-        cards_frame.columnconfigure(0, weight=1)
-        cards_frame.columnconfigure(1, weight=1)
-
-        self.be_card = self._build_server_card(cards_frame, "백엔드", "FastAPI · :8000", 0)
-        if self._production:
-            # 프로덕션 모드: 프론트엔드 카드 대신 안내 표시
-            fe_info = tk.Frame(cards_frame, bg=BG_CARD, relief="flat", bd=0, padx=16, pady=12)
-            fe_info.grid(row=0, column=1, sticky="nsew", padx=(4, 0), pady=4)
-            tk.Label(fe_info, text="프론트엔드", bg=BG_CARD, fg=FG, font=("Segoe UI", 13, "bold")).pack(anchor="w")
-            tk.Label(fe_info, text="빌드 모드 — 백엔드가 정적 파일 서빙", bg=BG_CARD, fg=FG_DIM, font=("Segoe UI", 9)).pack(anchor="w", pady=(2, 0))
-            self.fe_card = {"indicator": tk.Label(), "status_lbl": tk.Label(), "start_btn": tk.Button(), "stop_btn": tk.Button()}
-        else:
-            self.fe_card = self._build_server_card(cards_frame, "프론트엔드", "Vite · :5173", 1)
-
-        btn_frame = tk.Frame(self.root, bg=BG)
-        btn_frame.pack(fill="x", padx=20, pady=(0, 8))
-
-        self._make_btn(btn_frame, "▶  모두 시작", GREEN, self._start_all).pack(side="left", expand=True, fill="x", padx=(0, 4))
-        self._make_btn(btn_frame, "■  모두 정지", RED, self._stop_all).pack(side="left", expand=True, fill="x", padx=4)
-        self._make_btn(btn_frame, "↻  모두 재시작", YELLOW, self._restart_all).pack(side="left", expand=True, fill="x", padx=4)
-        self._make_btn(btn_frame, "⟳  동기화+시작", BLUE, self._sync_and_start).pack(side="left", expand=True, fill="x", padx=4)
-        self._make_btn(btn_frame, "🌐  웹 열기", ACCENT, self._open_web).pack(side="left", expand=True, fill="x", padx=(4, 0))
-
-        # 로그 탭
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure("Dark.TNotebook", background=BG, borderwidth=0)
-        style.configure("Dark.TNotebook.Tab",
-                        background=BG_CARD, foreground=FG_DIM,
-                        font=("Segoe UI", 10, "bold"), padding=(12, 6))
-        style.map("Dark.TNotebook.Tab",
-                  background=[("selected", "#e0e0e0" if _THEME == "light" else "#363650")],
-                  foreground=[("selected", FG)])
-
-        self.log_notebook = ttk.Notebook(self.root, style="Dark.TNotebook")
-        self.log_notebook.pack(fill="both", expand=True, padx=20, pady=(8, 12))
-
-        self.log_tabs: dict[str, scrolledtext.ScrolledText] = {}
-        log_tab_list = [("전체", FG), ("백엔드", BLUE)]
-        if not self._production:
-            log_tab_list.append(("프론트엔드", ACCENT))
-        for tab_name, tab_color in log_tab_list:
-            frame = tk.Frame(self.log_notebook, bg=LOG_BG)
-            log_widget = scrolledtext.ScrolledText(
-                frame,
-                bg=LOG_BG, fg=tab_color, font=("Consolas", 9),
-                insertbackground=FG, relief="flat", bd=0,
-                wrap="word", state="disabled", height=14,
-            )
-            log_widget.pack(fill="both", expand=True)
-            log_widget.tag_config("ts", foreground=FG_DIM)
-            log_widget.tag_config("backend", foreground=BLUE)
-            log_widget.tag_config("frontend", foreground=ACCENT)
-            log_widget.tag_config("error", foreground=RED)
-            log_widget.tag_config("system", foreground=GREEN)
-
-            self.log_notebook.add(frame, text=tab_name)
-            self.log_tabs[tab_name] = log_widget
-
-        self.statusbar = tk.Label(
-            self.root, text="준비", bg=BG_CARD, fg=FG_DIM,
-            font=("Segoe UI", 9), anchor="w", padx=12, pady=4,
-        )
-        self.statusbar.pack(fill="x", side="bottom")
-
-    def _build_server_card(self, parent, name: str, subtitle: str, col: int) -> dict:
-        card = tk.Frame(parent, bg=BG_CARD, relief="flat", bd=0, padx=16, pady=12)
-        card.grid(row=0, column=col, sticky="nsew", padx=(0 if col == 0 else 4, 4 if col == 0 else 0), pady=4)
+        # 백엔드 카드
+        card = tk.Frame(self.root, bg=BG_CARD, relief="flat", bd=0, padx=16, pady=10)
+        card.pack(fill="x", padx=16, pady=(0, 8))
 
         top = tk.Frame(card, bg=BG_CARD)
         top.pack(fill="x")
 
-        indicator = tk.Label(top, text="●", bg=BG_CARD, fg=RED, font=("Segoe UI", 14))
+        indicator = tk.Label(top, text="●", bg=BG_CARD, fg=RED, font=("Segoe UI", 12))
         indicator.pack(side="left")
-
-        lbl = tk.Label(top, text=name, bg=BG_CARD, fg=FG, font=("Segoe UI", 13, "bold"))
-        lbl.pack(side="left", padx=(6, 0))
-
-        status_lbl = tk.Label(top, text="정지됨", bg=BG_CARD, fg=FG_DIM, font=("Segoe UI", 10))
+        tk.Label(top, text="백엔드", bg=BG_CARD, fg=FG, font=("Segoe UI", 12, "bold")).pack(side="left", padx=(6, 0))
+        status_lbl = tk.Label(top, text="정지됨", bg=BG_CARD, fg=FG_DIM, font=("Segoe UI", 9))
         status_lbl.pack(side="right")
 
-        sub = tk.Label(card, text=subtitle, bg=BG_CARD, fg=FG_DIM, font=("Segoe UI", 9))
-        sub.pack(anchor="w", pady=(2, 8))
+        self.be_card = {"indicator": indicator, "status_lbl": status_lbl, "start_btn": tk.Button(), "stop_btn": tk.Button()}
+        # 프론트엔드 카드 (더미 — 상태 업데이트용)
+        self.fe_card = {"indicator": tk.Label(), "status_lbl": tk.Label(), "start_btn": tk.Button(), "stop_btn": tk.Button()}
 
         btn_row = tk.Frame(card, bg=BG_CARD)
-        btn_row.pack(fill="x")
+        btn_row.pack(fill="x", pady=(6, 0))
+        self._make_btn(btn_row, "▶ 시작", GREEN, self._start_all).pack(side="left", expand=True, fill="x", padx=(0, 3))
+        self._make_btn(btn_row, "■ 정지", RED, self._stop_all).pack(side="left", expand=True, fill="x", padx=3)
+        self._make_btn(btn_row, "↻ 재시작", YELLOW, self._restart_all).pack(side="left", expand=True, fill="x", padx=3)
+        self._make_btn(btn_row, "🌐 웹", ACCENT, self._open_web).pack(side="left", expand=True, fill="x", padx=(3, 0))
 
-        start_btn = self._make_btn(btn_row, "시작", GREEN, lambda n=name: self._start_one(n))
-        start_btn.pack(side="left", expand=True, fill="x", padx=(0, 3))
-        stop_btn = self._make_btn(btn_row, "정지", RED, lambda n=name: self._stop_one(n))
-        stop_btn.pack(side="left", expand=True, fill="x", padx=(3, 3))
-        restart_btn = self._make_btn(btn_row, "재시작", YELLOW, lambda n=name: self._restart_one(n))
-        restart_btn.pack(side="left", expand=True, fill="x", padx=(3, 0))
+        self.statusbar = tk.Label(
+            self.root, text="준비", bg=BG_CARD, fg=FG_DIM,
+            font=("Segoe UI", 8), anchor="w", padx=12, pady=3,
+        )
+        self.statusbar.pack(fill="x", side="bottom")
 
-        return {"indicator": indicator, "status_lbl": status_lbl, "start_btn": start_btn, "stop_btn": stop_btn}
+        # 로그 (빈 탭 — _append_log 호환용)
+        self.log_tabs: dict[str, scrolledtext.ScrolledText] = {}
+
+        # ── 시스템 트레이 ──
+        self._tray_icon = None
+        if _HAS_TRAY:
+            threading.Thread(target=self._setup_tray, daemon=True).start()
 
     def _make_btn(self, parent, text: str, color: str, command) -> tk.Button:
         btn = tk.Button(
@@ -357,35 +312,18 @@ class ServerManagerApp:
 
     def _append_log(self, msg: str):
         ts = datetime.now().strftime("%H:%M:%S")
-        is_backend = "[백엔드]" in msg
-        is_frontend = "[프론트엔드]" in msg
-        is_error = "error" in msg.lower() or "실패" in msg
-
-        if is_backend and _LOG_FILTER_RE.search(msg):
+        if "[백엔드]" in msg and _LOG_FILTER_RE.search(msg):
             return
-
-        if is_error:
-            tag = "error"
-        elif is_backend:
-            tag = "backend"
-        elif is_frontend:
-            tag = "frontend"
-        else:
-            tag = "system"
-
-        targets = ["전체"]
-        if is_backend:
-            targets.append("백엔드")
-        elif is_frontend:
-            targets.append("프론트엔드")
-
-        for tab_name in targets:
-            widget = self.log_tabs[tab_name]
-            widget.configure(state="normal")
-            widget.insert("end", f"[{ts}] ", "ts")
-            widget.insert("end", msg + "\n", tag)
-            widget.see("end")
-            widget.configure(state="disabled")
+        entry = f"[{ts}] {msg}"
+        self._log_buffer.append(entry)
+        if len(self._log_buffer) > 2000:
+            self._log_buffer = self._log_buffer[-1500:]
+        # 로그 파일에도 기록 (웹에서 조회용)
+        try:
+            with open(os.path.join(PROJECT_ROOT, ".launcher.log"), "a", encoding="utf-8") as f:
+                f.write(entry + "\n")
+        except Exception:
+            pass
 
     # ── 동기화 (git pull + 의존성) ──
 
@@ -496,64 +434,65 @@ class ServerManagerApp:
         self.root.after(2000, self._check_restart_flag)
 
     def _full_restart(self):
-        """서버 종료 → ReplayKit.bat 실행 (git pull + 서버 시작)."""
+        """서버 종료 → git pull → 서버 재시작 (런처는 유지)."""
         def _do():
-            self._log("[시스템] 서버 종료 후 재시작합니다")
+            self._log("[시스템] 서버 종료 중...")
             self.backend.stop(self._log)
             if not self._production:
                 self.frontend.stop(self._log)
             time.sleep(1)
             _kill_existing_servers()
+            time.sleep(1)
 
-            # ReplayKit.bat 실행 (git pull → server.py 시작)
-            bat = os.path.join(PROJECT_ROOT, "ReplayKit.bat")
-            if os.path.isfile(bat) and sys.platform == "win32":
-                subprocess.Popen(
-                    ["cmd", "/c", bat],
-                    cwd=PROJECT_ROOT,
-                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
-                )
-            else:
-                # bat 없으면 직접 server.py 재실행
-                subprocess.Popen(
-                    [sys.executable, os.path.join(PROJECT_ROOT, "server.py"), "--restart"],
-                    cwd=PROJECT_ROOT,
-                    start_new_session=True,
-                )
+            # git pull (서버 프로세스가 죽은 상태이므로 .pyd 잠금 없음)
+            _git_paths = [r"C:\Program Files\Git\cmd", r"C:\Program Files (x86)\Git\cmd"]
+            for _gp in _git_paths:
+                if os.path.isdir(_gp) and _gp not in os.environ.get("PATH", ""):
+                    os.environ["PATH"] = _gp + ";" + os.environ.get("PATH", "")
+            git_dir = os.path.join(PROJECT_ROOT, ".git")
+            if os.path.isdir(git_dir):
+                safe_dir = PROJECT_ROOT.replace("\\", "/")
+                git = ["git", "-c", f"safe.directory={safe_dir}"]
+                if _run_cmd(["git", "--version"], timeout=5)[0] == 0:
+                    self._log("[업데이트] git pull 중...")
+                    _run_cmd(git + ["fetch", "origin", "main"], timeout=30)
+                    # 런처 .pyd는 현재 프로세스가 잠그고 있으므로 제외
+                    import glob as _g
+                    for _pyd in _g.glob(os.path.join(PROJECT_ROOT, "server*.pyd")):
+                        rel = os.path.relpath(_pyd, PROJECT_ROOT).replace("\\", "/")
+                        _run_cmd(git + ["update-index", "--assume-unchanged", rel], timeout=5)
+                    code, out = _run_cmd(git + ["reset", "--hard", "origin/main"], timeout=15)
+                    # 제외 복원 (다음 전체 재시작 시 업데이트)
+                    for _pyd in _g.glob(os.path.join(PROJECT_ROOT, "server*.pyd")):
+                        rel = os.path.relpath(_pyd, PROJECT_ROOT).replace("\\", "/")
+                        _run_cmd(git + ["update-index", "--no-assume-unchanged", rel], timeout=5)
+                    if code == 0:
+                        self._log(f"[업데이트] 완료: {out.strip()}")
+                    else:
+                        self._log(f"[업데이트] git pull 실패: {out.strip()}")
 
-            time.sleep(0.5)
-            self.root.after(0, self.root.destroy)
+            # 서버 재시작
+            self._log("[시스템] 서버 재시작 중...")
+            self._start_all_sync(auto_open_web=True)
         threading.Thread(target=_do, daemon=True).start()
 
     # ── 상태 업데이트 (주기적) ──
 
     def _update_status(self):
-        servers = [(self.backend, self.be_card)]
-        if not self._production:
-            servers.append((self.frontend, self.fe_card))
-        for server, card in servers:
-            if server.running:
-                card["indicator"].configure(fg=GREEN)
-                card["status_lbl"].configure(text="실행 중", fg=GREEN)
-            else:
-                card["indicator"].configure(fg=RED)
-                card["status_lbl"].configure(text="정지됨", fg=FG_DIM)
+        if self.backend.running:
+            self.be_card["indicator"].configure(fg=GREEN)
+            self.be_card["status_lbl"].configure(text="실행 중", fg=GREEN)
+            self.statusbar.configure(text="서버 실행 중")
+        else:
+            self.be_card["indicator"].configure(fg=RED)
+            self.be_card["status_lbl"].configure(text="정지됨", fg=FG_DIM)
+            status = self.statusbar.cget("text")
+            if "동기화" not in status and "업데이트" not in status and "준비" not in status:
+                self.statusbar.configure(text="서버 정지됨")
 
-        be_run = self.backend.running
-        fe_run = self.frontend.running if not self._production else False
-        status = self.statusbar.cget("text")
-        if "동기화" not in status:
-            if self._production:
-                self.statusbar.configure(text="서버 실행 중" if be_run else ("모든 서버 정지됨" if "완료" not in status and "준비" not in status else status))
-            elif be_run and fe_run:
-                self.statusbar.configure(text="백엔드 + 프론트엔드 실행 중")
-            elif be_run:
-                self.statusbar.configure(text="백엔드만 실행 중")
-            elif fe_run:
-                self.statusbar.configure(text="프론트엔드만 실행 중")
-            else:
-                if "완료" not in status and "준비" not in status:
-                    self.statusbar.configure(text="모든 서버 정지됨")
+        # 트레이 툴팁 업데이트
+        if self._tray_icon:
+            self._tray_icon.title = "ReplayKit — " + ("실행 중" if self.backend.running else "정지됨")
 
         self.root.after(1000, self._update_status)
 
@@ -639,13 +578,53 @@ class ServerManagerApp:
         threading.Thread(target=_do, daemon=True).start()
 
     def _on_close(self):
+        """창 닫기 → 트레이로 최소화 (트레이 없으면 종료)."""
+        if _HAS_TRAY and self._tray_icon:
+            self.root.withdraw()
+        else:
+            self._quit()
+
+    def _quit(self):
+        """완전 종료."""
         if self.backend.running or self.frontend.running:
             self.backend.stop(self._log)
             if not self._production:
                 self.frontend.stop(self._log)
-        # adb.exe 프로세스 종료
         self._kill_adb()
+        if self._tray_icon:
+            try:
+                self._tray_icon.stop()
+            except Exception:
+                pass
         self.root.destroy()
+
+    def _show_window(self):
+        """트레이에서 창 복원."""
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+    def _setup_tray(self):
+        """시스템 트레이 아이콘 + 우클릭 메뉴."""
+        # 간단한 아이콘 생성 (16x16 파란 원)
+        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        draw.ellipse([8, 8, 56, 56], fill=(68, 114, 196))
+        draw.text((20, 18), "R", fill="white")
+
+        menu = pystray.Menu(
+            pystray.MenuItem("열기", lambda: self.root.after(0, self._show_window), default=True),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("서버 시작", lambda: self.root.after(0, self._start_all)),
+            pystray.MenuItem("서버 재시작", lambda: self.root.after(0, self._restart_all)),
+            pystray.MenuItem("서버 정지", lambda: self.root.after(0, self._stop_all)),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("웹 열기", lambda: self.root.after(0, self._open_web)),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem("종료", lambda: self.root.after(0, self._quit)),
+        )
+        self._tray_icon = pystray.Icon("ReplayKit", img, "ReplayKit", menu)
+        self._tray_icon.run()
 
     @staticmethod
     def _kill_adb():
