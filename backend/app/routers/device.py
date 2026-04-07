@@ -97,6 +97,7 @@ class ConnectRequest(BaseModel):
     module: Optional[str] = None  # lge.auto module name (e.g. "POWER", "CAN")
     connect_type: Optional[str] = None  # "serial" | "socket" | "can" | "none" | "vision_camera"
     extra_fields: Optional[dict] = None  # Additional module-specific fields
+    device_model: Optional[str] = None  # 장비 모델 (GVM, ccNC, Phone 등) — 하드키 매칭용
 
 
 class DisconnectRequest(BaseModel):
@@ -265,7 +266,7 @@ async def connect_device(req: ConnectRequest):
         if ":" in req.address:
             # WiFi ADB — connect first
             await dm.adb.connect_device(req.address)
-        dev = await dm.add_adb_device(req.address, device_id=custom_id, name=req.name or "")
+        dev = await dm.add_adb_device(req.address, device_id=custom_id, name=req.name or "", device_model=req.device_model or "")
         return {
             "result": f"Connected: {dev.name} (ID: {dev.id})",
             "primary": [d.to_dict() for d in dm.list_primary()],
@@ -290,7 +291,7 @@ async def connect_device(req: ConnectRequest):
         if not req.address or not req.port:
             raise HTTPException(status_code=400, detail="HKMC6th requires address (IP) and port (TCP port)")
         try:
-            dev = await dm.add_hkmc6th_device(req.address, req.port, device_id=custom_id, name=req.name or "")
+            dev = await dm.add_hkmc6th_device(req.address, req.port, device_id=custom_id, name=req.name or "", device_model=req.device_model or "")
             return {
                 "result": f"HKMC connected: {dev.name} (ID: {dev.id})",
                 "primary": [d.to_dict() for d in dm.list_primary()],

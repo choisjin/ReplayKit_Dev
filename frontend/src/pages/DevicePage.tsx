@@ -229,6 +229,18 @@ export default function DevicePage() {
   const [connecting, setConnecting] = useState(false);
   const [hkmcPort, setHkmcPort] = useState(5000);
   const [modalTabKey, setModalTabKey] = useState('scan');
+  const [deviceModel, setDeviceModel] = useState('');
+
+  // 주 디바이스 모델 목록 (Device ID prefix가 됨)
+  const DEVICE_MODELS = [
+    { label: 'Android (기본)', value: '' },
+    { label: 'GVM', value: 'GVM' },
+    { label: 'Connected Wide (ccNC)', value: 'Connected_Wide' },
+    { label: 'Connected IC (ccIC)', value: 'Connected_IC' },
+    { label: 'Phone', value: 'Phone' },
+    { label: 'Tablet', value: 'Tablet' },
+    { label: 'HKMC 6th', value: 'HKMC' },
+  ];
 
   // VisionCamera
   const [vcMac, setVcMac] = useState('');
@@ -245,9 +257,7 @@ export default function DevicePage() {
   // Edit device modal
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editDevice, setEditDevice] = useState<ManagedDevice | null>(null);
-  const [editDeviceId, setEditDeviceId] = useState('');
   const [editName, setEditName] = useState('');
-  const [editAddress, setEditAddress] = useState('');
   const [editBaudrate, setEditBaudrate] = useState(115200);
   const [editModule, setEditModule] = useState<string | undefined>(undefined);
   const [editExtraFields, setEditExtraFields] = useState<Record<string, any>>({});
@@ -340,6 +350,7 @@ export default function DevicePage() {
     setSelectedModule(undefined);
     setScanSelectedModule(undefined);
     setExtraFieldValues({});
+    setDeviceModel('');
     setModalTabKey('scan');
     setModalOpen(true);
     handleScan();
@@ -416,7 +427,8 @@ export default function DevicePage() {
         }
       }
       const tcpPort = devType === 'hkmc6th' ? hkmcPort : undefined;
-      const result = await connectDevice(devType, connectAddress.trim(), baudrate, '', modalCategory, selectedModule, moduleConnType, extra, '', tcpPort);
+      const model = (devType === 'adb' || devType === 'hkmc6th') ? (deviceModel || undefined) : undefined;
+      const result = await connectDevice(devType, connectAddress.trim(), baudrate, '', modalCategory, selectedModule, moduleConnType, extra, '', tcpPort, model);
       message.success(result);
       setConnectAddress('');
       setExtraFieldValues({});
@@ -443,7 +455,7 @@ export default function DevicePage() {
   const handleAddAdb = async (serial: string) => {
     setConnecting(true);
     try {
-      const result = await connectDevice('adb', serial);
+      const result = await connectDevice('adb', serial, undefined, '', 'primary', undefined, undefined, undefined, '', undefined, deviceModel || undefined);
       message.success(result);
       closeAddModal();
     } catch (e: any) {
@@ -456,7 +468,7 @@ export default function DevicePage() {
   const handleAddHkmc = async (ip: string, port: number) => {
     setConnecting(true);
     try {
-      const result = await connectDevice('hkmc6th', ip, undefined, '', 'primary', undefined, undefined, undefined, '', port);
+      const result = await connectDevice('hkmc6th', ip, undefined, '', 'primary', undefined, undefined, undefined, '', port, deviceModel || undefined);
       message.success(result);
       closeAddModal();
     } catch (e: any) {
@@ -481,7 +493,6 @@ export default function DevicePage() {
 
   // --- Edit device ---
   const openEditModal = async (dev: ManagedDevice) => {
-    // 모듈 목록 먼저 로드 (connect_fields 표시에 필요)
     let mods = modules;
     if (mods.length === 0) {
       try {
@@ -491,25 +502,14 @@ export default function DevicePage() {
       } catch { /* ignore */ }
     }
     setEditDevice(dev);
-    setEditDeviceId(dev.id);
     setEditName(dev.name);
-    setEditAddress(dev.address);
     setEditBaudrate(dev.info?.baudrate || 115200);
     setEditModule(dev.info?.module);
-    // Collect extra fields from device info + module connect_fields 기본값
     const extras: Record<string, any> = {};
-    for (const [k, v] of Object.entries(dev.info || {})) {
-      if (!['baudrate', 'module', 'connect_type', 'connect_result'].includes(k)) {
-        extras[k] = v;
-      }
-    }
-    // 모듈의 connect_fields 기본값 주입 (저장된 값이 없는 필드)
     const modInfo = mods.find(m => m.name === dev.info?.module);
     if (modInfo?.connect_fields) {
       for (const f of modInfo.connect_fields) {
-        if (!(f.name in extras)) {
-          extras[f.name] = dev.info?.[f.name] ?? f.default ?? '';
-        }
+        extras[f.name] = dev.info?.[f.name] ?? f.default ?? '';
       }
     }
     setEditExtraFields(extras);
@@ -521,16 +521,13 @@ export default function DevicePage() {
     setEditSaving(true);
     try {
       const updates: Record<string, any> = {};
-      if (editDeviceId.trim() && editDeviceId.trim() !== editDevice.id) updates.new_device_id = editDeviceId.trim();
       if (editName !== editDevice.name) updates.name = editName;
-      if (editAddress !== editDevice.address) updates.address = editAddress;
       if (editBaudrate !== (editDevice.info?.baudrate || 115200)) updates.baudrate = editBaudrate;
       if (editModule !== editDevice.info?.module) {
         updates.module = editModule;
         const ct = getModuleConnectType(editModule);
         if (ct) updates.connect_type = ct;
       }
-      // Extra fields
       if (Object.keys(editExtraFields).length > 0) {
         updates.extra_fields = editExtraFields;
       }
@@ -799,9 +796,20 @@ export default function DevicePage() {
               label: <span><SearchOutlined /> {t('device.scan')}</span>,
               children: (
                 <div>
-                  <Button icon={<ReloadOutlined />} onClick={handleScan} loading={scanning} style={{ marginBottom: 8 }}>
-                    {t('device.rescan')}
-                  </Button>
+                  <Space style={{ marginBottom: 8 }} wrap>
+                    <Button icon={<ReloadOutlined />} onClick={handleScan} loading={scanning}>
+                      {t('device.rescan')}
+                    </Button>
+                    {modalCategory === 'primary' && (
+                      <Select
+                        value={deviceModel}
+                        onChange={setDeviceModel}
+                        style={{ minWidth: 200 }}
+                        placeholder="장비 모델 선택"
+                        options={DEVICE_MODELS}
+                      />
+                    )}
+                  </Space>
 
                   {modalCategory === 'primary' && scannedAdb.length > 0 && (
                     <>
@@ -1119,6 +1127,15 @@ export default function DevicePage() {
                 const connectFields = getModuleConnectFields(selectedModule);
                 return (
                   <Space direction="vertical" style={{ width: '100%' }}>
+                    {modalCategory === 'primary' && (
+                      <Select
+                        value={deviceModel}
+                        onChange={setDeviceModel}
+                        style={{ width: '100%' }}
+                        placeholder="장비 모델 선택"
+                        options={DEVICE_MODELS}
+                      />
+                    )}
                     {modalCategory === 'auxiliary' && modules.length > 0 && (
                       <Select
                         allowClear
@@ -1293,28 +1310,35 @@ export default function DevicePage() {
       >
         {editDevice && (
           <Space direction="vertical" style={{ width: '100%' }}>
-            <div>
-              <span style={{ fontSize: 12, color: '#888' }}>Device ID:</span>
-              <Select
-                showSearch
-                value={editDeviceId}
-                onChange={(v) => setEditDeviceId(v)}
-                style={{ width: '100%' }}
-                options={(() => {
-                  const prefix = editDeviceId.replace(/_\d+$/, '');
-                  const ids = Array.from({ length: 10 }, (_, i) => `${prefix}_${i + 1}`);
-                  if (!ids.includes(editDeviceId)) ids.unshift(editDeviceId);
-                  return ids.map(id => ({ label: id, value: id }));
-                })()}
-              />
+            {/* 디바이스 고유 정보 — 읽기 전용 */}
+            <div style={{ background: '#fafafa', borderRadius: 6, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
+                <span style={{ color: '#888', minWidth: 80 }}>Device ID:</span>
+                <span style={{ fontWeight: 500 }}>{editDevice.id}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
+                <span style={{ color: '#888', minWidth: 80 }}>Type:</span>
+                <span>{editDevice.type}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
+                <span style={{ color: '#888', minWidth: 80 }}>Category:</span>
+                <span>{editDevice.category}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
+                <span style={{ color: '#888', minWidth: 80 }}>{`${t('common.address')}:`}</span>
+                <span>{editDevice.address || '-'}</span>
+              </div>
+              {editDevice.info?.resolution && (
+                <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
+                  <span style={{ color: '#888', minWidth: 80 }}>Resolution:</span>
+                  <span>{editDevice.info.resolution.width}x{editDevice.info.resolution.height}</span>
+                </div>
+              )}
             </div>
+            {/* 수정 가능한 필드 */}
             <div>
               <span style={{ fontSize: 12, color: '#888' }}>{`${t('common.name')}:`}</span>
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-            </div>
-            <div>
-              <span style={{ fontSize: 12, color: '#888' }}>{`${t('common.address')}:`}</span>
-              <Input value={editAddress} onChange={(e) => setEditAddress(e.target.value)} />
             </div>
             {(editDevice.type === 'serial' || editDevice.info?.baudrate) && (
               <div>
@@ -1334,39 +1358,16 @@ export default function DevicePage() {
                   allowClear
                   placeholder={t('device.moduleSelectPlaceholder')}
                   value={editModule}
-                  onChange={(val) => {
-                    setEditModule(val);
-                    // 모듈 변경 시 Device ID prefix도 갱신
-                    if (val) {
-                      const num = editDeviceId.match(/_(\d+)$/)?.[1] || '1';
-                      setEditDeviceId(`${val}_${num}`);
-                    }
-                  }}
+                  onChange={setEditModule}
                   style={{ width: '100%' }}
                   options={modules.map(m => ({ label: m.label, value: m.name }))}
                 />
               </div>
             )}
-            {/* Show extra fields from module connect_fields or existing device info */}
             {(() => {
               const fields = getModuleConnectFields(editModule);
               if (fields.length > 0) {
                 return renderConnectFields(fields, editExtraFields, setEditExtraFields);
-              }
-              // Show existing extra info fields as editable
-              const extraKeys = Object.keys(editExtraFields).filter(
-                k => !['baudrate', 'module', 'connect_type', 'connect_result', 'resolution'].includes(k)
-              );
-              if (extraKeys.length > 0) {
-                return extraKeys.map(k => (
-                  <div key={k}>
-                    <span style={{ fontSize: 12, color: '#888' }}>{k}:</span>
-                    <Input
-                      value={editExtraFields[k] ?? ''}
-                      onChange={(e) => setEditExtraFields({ ...editExtraFields, [k]: e.target.value })}
-                    />
-                  </div>
-                ));
               }
               return null;
             })()}

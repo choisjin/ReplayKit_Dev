@@ -712,9 +712,11 @@ class DeviceManager:
         except Exception as e:
             logger.warning("Failed to load auxiliary devices: %s", e)
 
-    def _generate_device_id(self, dev_type: str, module_name: str = "") -> str:
-        """Auto-generate a device ID like Android_1, Serial_1, HKMC_1, POWER_1, etc."""
-        if dev_type == "adb":
+    def _generate_device_id(self, dev_type: str, module_name: str = "", device_model: str = "") -> str:
+        """Auto-generate a device ID like Connected_Wide_1, GVM_1, HKMC_1, POWER_1, etc."""
+        if device_model:
+            prefix = device_model.replace(" ", "_")
+        elif dev_type == "adb":
             prefix = "Android"
         elif dev_type == "serial":
             prefix = "Serial"
@@ -775,9 +777,9 @@ class DeviceManager:
             else:
                 v.status = "offline"
 
-    async def add_adb_device(self, serial: str, device_id: str = "", name: str = "") -> ManagedDevice:
+    async def add_adb_device(self, serial: str, device_id: str = "", name: str = "", device_model: str = "") -> ManagedDevice:
         """ADB 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행)."""
-        final_id = device_id or self._generate_device_id("adb")
+        final_id = device_id or self._generate_device_id("adb", device_model=device_model)
         display_name = name or serial
 
         # 디바이스 정보만 조회 (연결 시도 아님)
@@ -793,6 +795,8 @@ class DeviceManager:
         except Exception:
             pass
 
+        if device_model:
+            info["device_model"] = device_model
         dev = ManagedDevice(
             id=final_id,
             type="adb",
@@ -806,10 +810,13 @@ class DeviceManager:
         self._save_auxiliary_devices()
         return dev
 
-    async def add_hkmc6th_device(self, host: str, port: int, device_id: str = "", name: str = "") -> ManagedDevice:
+    async def add_hkmc6th_device(self, host: str, port: int, device_id: str = "", name: str = "", device_model: str = "") -> ManagedDevice:
         """HKMC 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행)."""
-        final_id = device_id or self._generate_device_id("hkmc6th")
+        final_id = device_id or self._generate_device_id("hkmc6th", device_model=device_model)
         display_name = name or f"HKMC ({host}:{port})"
+        info: dict = {"port": port}
+        if device_model:
+            info["device_model"] = device_model
 
         dev = ManagedDevice(
             id=final_id,
@@ -818,7 +825,7 @@ class DeviceManager:
             address=host,
             status="disconnected",
             name=display_name,
-            info={"port": port},
+            info=info,
         )
         self._devices[final_id] = dev
         self._save_auxiliary_devices()
