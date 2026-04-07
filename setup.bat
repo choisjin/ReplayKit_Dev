@@ -177,14 +177,14 @@ if exist "tools\ffmpeg.exe" (
 )
 
 :: -------------------------------------------------------
-:: [4/5] Node.js (dev mode only)
+:: [4/4] Node.js (dev mode only)
 :: -------------------------------------------------------
 if "%PRODUCTION%"=="1" (
-    echo [4/5] Production mode - skipping Node.js
+    echo [4/4] Production mode - skipping Node.js
     goto :skip_npm
 )
 
-echo [4/5] Checking Node.js...
+echo [4/4] Checking Node.js...
 where npm.cmd >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo.
@@ -228,82 +228,6 @@ if exist "frontend\package.json" (
 )
 
 :skip_npm
-
-:: -------------------------------------------------------
-:: [5/5] Git repository setup
-:: -------------------------------------------------------
-if exist ".git" goto :git_done
-
-:: Refresh PATH from registry
-for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%b"
-for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%b"
-if defined SYS_PATH set "PATH=%SYS_PATH%"
-if defined USR_PATH set "PATH=%PATH%;%USR_PATH%"
-:: Git 설치 경로 탐색 (레지스트리 → 기본 경로 → 하드코딩)
-set "GIT_DIR="
-for /f "tokens=2*" %%a in ('reg query "HKLM\SOFTWARE\GitForWindows" /v InstallPath 2^>nul') do set "GIT_DIR=%%b"
-if not defined GIT_DIR for /f "tokens=2*" %%a in ('reg query "HKCU\SOFTWARE\GitForWindows" /v InstallPath 2^>nul') do set "GIT_DIR=%%b"
-if not defined GIT_DIR if exist "C:\Program Files\Git\cmd\git.exe" set "GIT_DIR=C:\Program Files\Git"
-if not defined GIT_DIR if exist "C:\Program Files (x86)\Git\cmd\git.exe" set "GIT_DIR=C:\Program Files (x86)\Git"
-if defined GIT_DIR set "PATH=%GIT_DIR%\cmd;%PATH%"
-
-where git.exe >nul 2>&1
-if %ERRORLEVEL% equ 0 goto :git_installed
-
-echo [5/5] Git is not installed.
-if not exist "Git-*.exe" goto :git_skip_no_installer
-echo.
-echo       ================================================
-echo       Git installer will now open.
-echo       Use default settings (just click Next).
-echo       ================================================
-echo.
-for %%f in (Git-*.exe) do start "" /wait "%%f"
-echo.
-echo       ------------------------------------------
-echo       Installation complete. Press any key to continue...
-echo       ------------------------------------------
-pause >nul
-:: 설치 후 PATH 재탐색
-for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%b"
-for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%b"
-if defined SYS_PATH set "PATH=%SYS_PATH%"
-if defined USR_PATH set "PATH=%PATH%;%USR_PATH%"
-set "GIT_REG_PATH="
-for /f "tokens=2*" %%a in ('reg query "HKLM\SOFTWARE\GitForWindows" /v InstallPath 2^>nul') do set "GIT_REG_PATH=%%b"
-if not defined GIT_REG_PATH for /f "tokens=2*" %%a in ('reg query "HKCU\SOFTWARE\GitForWindows" /v InstallPath 2^>nul') do set "GIT_REG_PATH=%%b"
-if defined GIT_REG_PATH if exist "%GIT_REG_PATH%\cmd\git.exe" set "PATH=%GIT_REG_PATH%\cmd;%PATH%"
-if exist "%ProgramFiles%\Git\cmd" set "PATH=%ProgramFiles%\Git\cmd;%PATH%"
-if exist "%ProgramFiles(x86)%\Git\cmd" set "PATH=%ProgramFiles(x86)%\Git\cmd;%PATH%"
-if exist "%LOCALAPPDATA%\Programs\Git\cmd" set "PATH=%LOCALAPPDATA%\Programs\Git\cmd;%PATH%"
-where git.exe >nul 2>&1
-if %ERRORLEVEL% equ 0 goto :git_installed
-echo       [Warning] Git not detected - git setup skipped.
-goto :git_done
-
-:git_skip_no_installer
-echo       [Note] Git installer not found - git setup skipped.
-goto :git_done
-
-:git_installed
-if exist ".git" goto :git_done
-if not exist "git_remote.txt" goto :git_done
-echo [5/5] Setting up git repository...
-set /p GIT_REMOTE=<git_remote.txt
-git init -b main
-:: 관리자 설치 → 일반 사용자 실행 시 dubious ownership 방지
-set "SAFE_DIR=%CD:\=/%"
-git config --global --add safe.directory "%SAFE_DIR%"
-git remote add origin "%GIT_REMOTE%"
-git fetch --depth 1 origin main
-git branch --set-upstream-to=origin/main main
-git reset origin/main
-git checkout origin/main -- .gitignore
-echo       git repository initialized
-echo       remote: %GIT_REMOTE%
-goto :git_done
-
-:git_done
 
 echo.
 echo ============================================
