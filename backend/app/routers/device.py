@@ -531,6 +531,24 @@ async def connect_registered_devices(req: ConnectRegisteredRequest):
     }
 
 
+class ReorderDevicesRequest(BaseModel):
+    prefix: str
+    ordered_ids: list[str]
+
+
+@router.post("/reorder")
+async def reorder_devices(req: ReorderDevicesRequest):
+    """그룹 내 디바이스 순서 변경 (ID 번호 재할당)."""
+    try:
+        dm.reorder_devices(req.prefix, req.ordered_ids)
+        return {
+            "primary": [d.to_dict() for d in dm.list_primary()],
+            "auxiliary": [d.to_dict() for d in dm.list_auxiliary()],
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 class UpdateDeviceRequest(BaseModel):
     device_id: str
     new_device_id: Optional[str] = None

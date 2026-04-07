@@ -18,6 +18,8 @@ export const deviceApi = {
   disconnect: (deviceId: string) => api.post('/device/disconnect', { address: deviceId }),
   updateDevice: (device_id: string, updates: Record<string, any>) =>
     api.post('/device/update', { device_id, ...updates }),
+  reorderDevices: (prefix: string, ordered_ids: string[]) =>
+    api.post('/device/reorder', { prefix, ordered_ids }),
   adbRestart: () => api.post('/device/adb-restart'),
   input: (deviceId: string, action: string, params: Record<string, any>) =>
     api.post('/device/input', { device_id: deviceId, action, params }),

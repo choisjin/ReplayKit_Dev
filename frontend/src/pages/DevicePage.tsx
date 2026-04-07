@@ -1,6 +1,9 @@
-import { useState } from 'react';
-import { Button, Card, Checkbox, Col, Input, InputNumber, List, Modal, Row, Select, Space, Table, Tabs, Tag, message } from 'antd';
-import { ReloadOutlined, MobileOutlined, PlusOutlined, DisconnectOutlined, DeleteOutlined, UsbOutlined, WifiOutlined, SearchOutlined, EditOutlined, SyncOutlined, ApiOutlined, LinkOutlined, SettingOutlined } from '@ant-design/icons';
+import { useState, useMemo } from 'react';
+import { Button, Card, Checkbox, Input, InputNumber, List, Modal, Select, Space, Table, Tabs, Tag, message } from 'antd';
+import { ReloadOutlined, PlusOutlined, DisconnectOutlined, DeleteOutlined, WifiOutlined, SearchOutlined, EditOutlined, ApiOutlined, LinkOutlined, SettingOutlined, HolderOutlined } from '@ant-design/icons';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useDevice, ManagedDevice } from '../context/DeviceContext';
 import { deviceApi } from '../services/api';
 import { useTranslation } from '../i18n';
@@ -29,6 +32,48 @@ interface SerialPort {
   manufacturer: string;
   vid: string;
   pid: string;
+}
+
+// 디바이스 ID에서 prefix 추출 (Android_1 → Android, POWER_2 → POWER)
+function getDevicePrefix(id: string): string {
+  const m = id.match(/^(.+?)_\d+$/);
+  return m ? m[1] : id;
+}
+
+// 그룹 표시 이름
+const GROUP_LABELS: Record<string, string> = {
+  Android: 'Android (ADB)',
+  HKMC: 'HKMC 6th',
+  Serial: 'Serial',
+  VisionCam: 'Vision Camera',
+  Device: 'Device',
+};
+
+function SortableDeviceRow({ device, children }: { device: ManagedDevice; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: device.id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '6px 8px',
+        borderBottom: '1px solid #f0f0f0',
+        background: isDragging ? '#fafafa' : undefined,
+      }}
+    >
+      <HolderOutlined
+        {...attributes}
+        {...listeners}
+        style={{ cursor: 'grab', color: '#bbb', flexShrink: 0, fontSize: 14 }}
+      />
+      {children}
+    </div>
+  );
 }
 
 export default function DevicePage() {
@@ -499,25 +544,6 @@ export default function DevicePage() {
     setEditSaving(false);
   };
 
-  const getDeviceIcon = (type: string) => {
-    if (type === 'serial' || type === 'module') return <UsbOutlined style={{ fontSize: 24 }} />;
-    return <MobileOutlined style={{ fontSize: 24 }} />;
-  };
-
-  const getTypeTag = (dev: ManagedDevice) => {
-    if (dev.type === 'hkmc6th') return <Tag color="volcano">HKMC</Tag>;
-    if (dev.type === 'vision_camera') return <Tag color="magenta">VisionCam</Tag>;
-    if (dev.type === 'module') return <Tag color="geekblue">Module</Tag>;
-    if (dev.type === 'serial') return <Tag color="purple">Serial</Tag>;
-    if (dev.type === 'adb' && dev.address?.includes(':')) return <Tag color="blue">WiFi</Tag>;
-    if (dev.type === 'adb') return <Tag color="green">ADB</Tag>;
-    return <Tag>USB</Tag>;
-  };
-
-  const getCategoryTag = (category: string) => {
-    if (category === 'primary') return <Tag color="blue">{t('device.primary')}</Tag>;
-    return <Tag color="orange">{t('device.auxiliary')}</Tag>;
-  };
 
   const isDeviceConnected = (d: ManagedDevice) => d.status === 'device' || d.status === 'connected';
 
@@ -555,91 +581,87 @@ export default function DevicePage() {
     setDisconnectingIds(prev => { const next = new Set(prev); next.delete(deviceId); return next; });
   };
 
-  const renderDeviceList = () => (
-    <List
-      dataSource={allDevices}
-      renderItem={(d) => (
-        <List.Item
-          actions={[
-            isDeviceConnected(d) ? (
-              <Button
-                size="small"
-                icon={<DisconnectOutlined />}
-                loading={disconnectingIds.has(d.id)}
-                onClick={() => handleDisconnectOne(d.id)}
-              >
-                {t('device.disconnectOne')}
-              </Button>
-            ) : (
-              <Button
-                size="small"
-                type="primary"
-                icon={<LinkOutlined />}
-                loading={connectingIds.has(d.id)}
-                onClick={() => handleConnectOne(d.id)}
-              >
-                {t('device.connectOne')}
-              </Button>
-            ),
-            <Button
-              size="small"
-              icon={<EditOutlined />}
-              onClick={() => openEditModal(d)}
-            >
-              {t('common.edit')}
-            </Button>,
-            <Button
-              danger
-              size="small"
-              icon={<DeleteOutlined />}
-              onClick={() => handleDisconnect(d.id)}
-            >
-              {t('common.delete')}
-            </Button>,
-          ]}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
-            <Checkbox
-              checked={selectedDeviceIds.has(d.id)}
-              onChange={(e) => toggleDeviceSelection(d.id, e.target.checked)}
-            />
-            <List.Item.Meta
-              avatar={getDeviceIcon(d.type)}
-              title={<>{d.info?.module || d.name || d.id} <Tag color="default" style={{ fontSize: 11, fontWeight: 'normal' }}>{d.id}</Tag></>}
-              description={
-                <>
-                  <Tag color={getStatusColor(d.status)}>
-                    {getStatusLabel(d.status)}
-                  </Tag>
-                  {getCategoryTag(d.category)}
-                  {getTypeTag(d)}
-                  <span style={{ color: '#888' }}>{d.address}</span>
-                  {d.info?.baudrate && (
-                    <Tag style={{ marginLeft: 4 }}>{d.info.baudrate} baud</Tag>
-                  )}
-                  {d.info?.module && (
-                    <Tag color="cyan" style={{ marginLeft: 4 }}>{d.info.module}</Tag>
-                  )}
-                  {d.info?.bitrate && (
-                    <Tag color="orange" style={{ marginLeft: 4 }}>{d.info.bitrate} bps</Tag>
-                  )}
-                  {d.info?.interface && (
-                    <Tag style={{ marginLeft: 4 }}>{d.info.interface}</Tag>
-                  )}
-                  {d.info?.channel && (
-                    <Tag style={{ marginLeft: 4 }}>{d.info.channel}</Tag>
-                  )}
-                  {d.info?.resolution && (
-                    <Tag style={{ marginLeft: 4 }}>{d.info.resolution.width}x{d.info.resolution.height}</Tag>
-                  )}
-                </>
-              }
-            />
-          </div>
-        </List.Item>
+  // ── 그룹화 + DnD ──
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // 디바이스를 prefix 기준으로 그룹화, 번호순 정렬
+  const deviceGroups = useMemo(() => {
+    const groups: Record<string, ManagedDevice[]> = {};
+    for (const d of allDevices) {
+      const prefix = getDevicePrefix(d.id);
+      if (!groups[prefix]) groups[prefix] = [];
+      groups[prefix].push(d);
+    }
+    // 각 그룹 내 번호순 정렬
+    for (const arr of Object.values(groups)) {
+      arr.sort((a, b) => {
+        const na = parseInt(a.id.match(/_(\d+)$/)?.[1] || '0');
+        const nb = parseInt(b.id.match(/_(\d+)$/)?.[1] || '0');
+        return na - nb;
+      });
+    }
+    return groups;
+  }, [allDevices]);
+
+  const groupOrder = useMemo(() => {
+    // primary 그룹(Android, HKMC, VisionCam) 우선, 나머지는 알파벳
+    const primary = ['Android', 'HKMC', 'VisionCam'];
+    const keys = Object.keys(deviceGroups);
+    const first = primary.filter(k => keys.includes(k));
+    const rest = keys.filter(k => !primary.includes(k)).sort();
+    return [...first, ...rest];
+  }, [deviceGroups]);
+
+  const handleGroupDragEnd = async (prefix: string, event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const group = deviceGroups[prefix];
+    if (!group) return;
+    const oldIdx = group.findIndex(d => d.id === active.id);
+    const newIdx = group.findIndex(d => d.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    // 순서 변경 후 API 호출
+    const reordered = [...group];
+    const [moved] = reordered.splice(oldIdx, 1);
+    reordered.splice(newIdx, 0, moved);
+    try {
+      const res = await deviceApi.reorderDevices(prefix, reordered.map(d => d.id));
+      updateDeviceLists(res.data);
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || 'Reorder failed');
+    }
+  };
+
+  const renderDeviceRow = (d: ManagedDevice) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+      <Checkbox
+        checked={selectedDeviceIds.has(d.id)}
+        onChange={(e) => toggleDeviceSelection(d.id, e.target.checked)}
+        style={{ flexShrink: 0 }}
+      />
+      <Tag color={getStatusColor(d.status)} style={{ flexShrink: 0 }}>
+        {getStatusLabel(d.status)}
+      </Tag>
+      <span style={{ fontWeight: 500, flexShrink: 0 }}>{d.id}</span>
+      {d.name && d.name !== d.id && (
+        <span style={{ color: '#888', flexShrink: 0 }}>{d.name}</span>
       )}
-      locale={{ emptyText: t('device.noDevicesRegistered') }}
-    />
+      <span style={{ color: '#aaa', fontSize: 12, flexShrink: 0 }}>{d.address}</span>
+      {d.info?.module && <Tag color="cyan" style={{ flexShrink: 0 }}>{d.info.module}</Tag>}
+      {d.info?.baudrate && <Tag style={{ flexShrink: 0 }}>{d.info.baudrate}</Tag>}
+      {d.info?.resolution && <Tag style={{ flexShrink: 0 }}>{d.info.resolution.width}x{d.info.resolution.height}</Tag>}
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexShrink: 0 }}>
+        {isDeviceConnected(d) ? (
+          <Button size="small" icon={<DisconnectOutlined />} loading={disconnectingIds.has(d.id)}
+            onClick={() => handleDisconnectOne(d.id)}>{t('device.disconnectOne')}</Button>
+        ) : (
+          <Button size="small" type="primary" icon={<LinkOutlined />} loading={connectingIds.has(d.id)}
+            onClick={() => handleConnectOne(d.id)}>{t('device.connectOne')}</Button>
+        )}
+        <Button size="small" icon={<EditOutlined />} onClick={() => openEditModal(d)} />
+        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDisconnect(d.id)} />
+      </div>
+    </div>
   );
 
   // Render dynamic connect_fields inputs
@@ -701,6 +723,7 @@ export default function DevicePage() {
       </Space>
 
       <Card
+        size="small"
         title={
           <Space>
             <Checkbox
@@ -719,7 +742,44 @@ export default function DevicePage() {
           </Space>
         }
       >
-        {renderDeviceList()}
+        {groupOrder.length === 0 ? (
+          <div style={{ color: '#999', textAlign: 'center', padding: 32 }}>{t('device.noDevicesRegistered')}</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {groupOrder.map(prefix => {
+              const group = deviceGroups[prefix];
+              if (!group || group.length === 0) return null;
+              const label = GROUP_LABELS[prefix] || prefix;
+              const connectedCount = group.filter(isDeviceConnected).length;
+              return (
+                <Card
+                  key={prefix}
+                  size="small"
+                  type="inner"
+                  title={
+                    <Space>
+                      <span style={{ fontWeight: 600 }}>{label}</span>
+                      <Tag>{group.length}</Tag>
+                      {connectedCount > 0 && <Tag color="green">{connectedCount} {t('device.statusConnected')}</Tag>}
+                    </Space>
+                  }
+                  styles={{ body: { padding: 0 } }}
+                >
+                  <DndContext sensors={dndSensors} collisionDetection={closestCenter}
+                    onDragEnd={(e) => handleGroupDragEnd(prefix, e)}>
+                    <SortableContext items={group.map(d => d.id)} strategy={verticalListSortingStrategy}>
+                      {group.map(d => (
+                        <SortableDeviceRow key={d.id} device={d}>
+                          {renderDeviceRow(d)}
+                        </SortableDeviceRow>
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
       {/* 장치 추가 모달 */}

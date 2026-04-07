@@ -1172,6 +1172,57 @@ class DeviceManager:
         self._save_auxiliary_devices()
         logger.info("Device renamed: %s → %s", old_id, new_id)
 
+    def reorder_devices(self, prefix: str, ordered_ids: list[str]) -> None:
+        """그룹 내 디바이스 순서를 변경하고 ID 번호를 재할당합니다.
+        예: prefix="Android", ordered_ids=["Android_2","Android_1"]
+        → Android_2→Android_1, Android_1→Android_2
+        """
+        # 1) 유효성 검증
+        for did in ordered_ids:
+            if did not in self._devices:
+                raise ValueError(f"Device {did} not found")
+
+        # 2) 새 ID 매핑 생성
+        remap: dict[str, str] = {}  # old_id → new_id
+        for idx, old_id in enumerate(ordered_ids, 1):
+            new_id = f"{prefix}_{idx}"
+            if old_id != new_id:
+                remap[old_id] = new_id
+
+        if not remap:
+            return  # 변경 없음
+
+        # 3) 충돌 방지: 임시 ID로 이동
+        temp_map: dict[str, str] = {}  # temp_id → new_id
+        stores = (self._serial_conns, self._hkmc_conns, self._vision_cams)
+        for old_id, new_id in remap.items():
+            temp_id = f"__reorder_{old_id}__"
+            dev = self._devices.pop(old_id)
+            dev.id = temp_id
+            self._devices[temp_id] = dev
+            temp_map[temp_id] = new_id
+            for store in stores:
+                if old_id in store:
+                    store[temp_id] = store.pop(old_id)
+            if old_id in self._ever_connected:
+                self._ever_connected.discard(old_id)
+                self._ever_connected.add(temp_id)
+
+        # 4) 최종 ID 적용
+        for temp_id, new_id in temp_map.items():
+            dev = self._devices.pop(temp_id)
+            dev.id = new_id
+            self._devices[new_id] = dev
+            for store in stores:
+                if temp_id in store:
+                    store[new_id] = store.pop(temp_id)
+            if temp_id in self._ever_connected:
+                self._ever_connected.discard(temp_id)
+                self._ever_connected.add(new_id)
+
+        self._save_auxiliary_devices()
+        logger.info("Devices reordered [%s]: %s", prefix, remap)
+
     async def remove_device(self, device_id: str) -> str:
         """Remove a device from managed list."""
         dev = self.get_device(device_id)
