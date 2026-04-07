@@ -164,6 +164,14 @@ def _prepack_embedded_with_tkinter(embed_zip_path: Path):
         else:
             print(f"  [Warning] pip install failed: {r.stderr[:200]}")
 
+    # Pre-install packages from requirements.txt
+    req_file = PROJECT_ROOT / "requirements.txt"
+    if req_file.exists() and (python_dir / "python.exe").exists():
+        print("  Installing packages from requirements.txt...")
+        _run([str(python_dir / "python.exe"), "-m", "pip", "install",
+              "-r", str(req_file), "-q", "--no-warn-script-location"],
+             check=False, live_output=False)
+
     print(f"  Embedded Python ready: {python_dir}")
 
 
