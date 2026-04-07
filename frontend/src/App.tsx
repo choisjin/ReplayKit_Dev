@@ -222,8 +222,14 @@ function AppContent() {
                       message.loading({ content: t('server.updating'), key: 'update', duration: 0 });
                       try {
                         await serverApi.updateAndRestart();
-                        message.success({ content: t('server.updateSuccess'), key: 'update' });
-                        setTimeout(() => window.location.reload(), 5000);
+                        message.success({ content: t('server.updateSuccess'), key: 'update', duration: 3 });
+                        setTimeout(() => {
+                          window.close();
+                          // window.close()가 동작하지 않는 경우 (직접 URL 입력으로 연 탭)
+                          setTimeout(() => {
+                            document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#666">서버 재시작 중입니다. 이 탭을 닫아주세요.</div>';
+                          }, 500);
+                        }, 2000);
                       } catch {
                         message.error({ content: t('server.updateFailed'), key: 'update' });
                       }

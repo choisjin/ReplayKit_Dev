@@ -531,17 +531,34 @@ class ServerManagerApp:
         self.root.after(2000, self._check_restart_flag)
 
     def _full_restart(self):
-        """기존 프로세스 + 포트 점유까지 완전 정리 후 재시작."""
+        """server.py 자체를 새 프로세스로 재실행 (코드 업데이트 반영)."""
         def _do():
+            self._log("[시스템] 서버 완전 재시작 — 새 프로세스로 전환합니다")
             self.backend.stop(self._log)
             if not self._production:
                 self.frontend.stop(self._log)
             time.sleep(1)
             _kill_existing_servers()
-            time.sleep(1)
-            self.backend.start(self._log)
-            if not self._production:
-                self.frontend.start(self._log)
+
+            # 새 server.py 프로세스 실행 (--restart 플래그로 동기화 건너뛰기)
+            python = sys.executable
+            script = os.path.join(PROJECT_ROOT, "server.py")
+            if sys.platform == "win32":
+                subprocess.Popen(
+                    [python, script, "--restart"],
+                    cwd=PROJECT_ROOT,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS,
+                )
+            else:
+                subprocess.Popen(
+                    [python, script, "--restart"],
+                    cwd=PROJECT_ROOT,
+                    start_new_session=True,
+                )
+
+            # 현재 프로세스 종료
+            time.sleep(0.5)
+            self.root.after(0, self.root.destroy)
         threading.Thread(target=_do, daemon=True).start()
 
     # ── 상태 업데이트 (주기적) ──
