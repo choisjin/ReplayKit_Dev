@@ -1420,10 +1420,11 @@ export default function DevicePage() {
                           if (m.value) opts.set(m.value, `${m.label} [${proj}]`);
                         });
                       });
-                      // 기존 primary prefix 추가 (목록에 없는 것만)
+                      // 기존 primary prefix 추가 (모델 목록에 없고, 모듈명이 아닌 것만)
+                      const moduleNames = new Set(modules.map(m => m.name));
                       primaryDevices.forEach(d => {
                         const p = getDevicePrefix(d.id);
-                        if (!opts.has(p)) opts.set(p, p);
+                        if (!opts.has(p) && !moduleNames.has(p)) opts.set(p, p);
                       });
                       return Array.from(opts.entries())
                         .sort((a, b) => a[1].localeCompare(b[1]))
