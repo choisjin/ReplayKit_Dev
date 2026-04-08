@@ -1844,6 +1844,69 @@ export default function RecordPage() {
     </div>
   );
 
+  // ── Device 일괄 전환 ──
+  const [deviceSwapOpen, setDeviceSwapOpen] = useState(false);
+  const [deviceSwapMap, setDeviceSwapMap] = useState<Record<string, string>>({});
+
+  const openDeviceSwapPopover = () => {
+    // 시나리오에 사용된 고유 device_id 추출
+    const ids = new Set<string>();
+    for (const s of steps) {
+      if (s.device_id) ids.add(s.device_id);
+      if (s.screenshot_device_id) ids.add(s.screenshot_device_id);
+    }
+    const map: Record<string, string> = {};
+    ids.forEach(id => { map[id] = id; });
+    setDeviceSwapMap(map);
+    setDeviceSwapOpen(true);
+  };
+
+  const applyDeviceSwap = () => {
+    // 변경된 매핑만 적용
+    const changed = Object.entries(deviceSwapMap).filter(([from, to]) => from !== to);
+    if (changed.length === 0) {
+      setDeviceSwapOpen(false);
+      return;
+    }
+    setSteps(prev => prev.map(s => {
+      let updated = { ...s };
+      if (s.device_id && deviceSwapMap[s.device_id]) {
+        updated.device_id = deviceSwapMap[s.device_id];
+      }
+      if (s.screenshot_device_id && deviceSwapMap[s.screenshot_device_id]) {
+        updated.screenshot_device_id = deviceSwapMap[s.screenshot_device_id];
+      }
+      return updated;
+    }));
+    setDeviceSwapOpen(false);
+    message.success(t('record.deviceSwapDone'));
+  };
+
+  const renderDeviceSwapContent = () => {
+    const entries = Object.entries(deviceSwapMap);
+    if (entries.length === 0) {
+      return <div style={{ color: '#888', fontSize: 12, padding: 8 }}>{t('record.noDeviceInSteps')}</div>;
+    }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 280 }}>
+        {entries.map(([from, to]) => (
+          <div key={from} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Tag style={{ minWidth: 80, textAlign: 'center' }}>{from}</Tag>
+            <span style={{ color: '#888' }}>→</span>
+            <Select
+              size="small"
+              value={to}
+              onChange={(v) => setDeviceSwapMap(prev => ({ ...prev, [from]: v }))}
+              style={{ flex: 1 }}
+              options={allDevices.map(d => ({ label: `${d.id} ${d.name ? '(' + d.name + ')' : ''}`, value: d.id }))}
+            />
+          </div>
+        ))}
+        <Button size="small" type="primary" onClick={applyDeviceSwap}>{t('common.apply')}</Button>
+      </div>
+    );
+  };
+
   const updateStepJump = useCallback((index: number, field: 'on_pass_goto' | 'on_fail_goto', value: number | null) => {
     setSteps((prev) => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
   }, []);
@@ -3120,15 +3183,26 @@ export default function RecordPage() {
             style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
             styles={{ body: { flex: 1, overflow: 'auto', padding: '4px 8px' } }}
             extra={
-              <Popover
-                open={waitPopoverIndex === 'end'}
-                onOpenChange={(v) => setWaitPopoverIndex(v ? 'end' : null)}
-                trigger="click"
-                placement="bottomRight"
-                content={renderWaitPopoverContent()}
-              >
-                <Button size="small" icon={<PlusOutlined />}>{t('record.addWait')}</Button>
-              </Popover>
+              <Space size={4}>
+                <Popover
+                  open={deviceSwapOpen}
+                  onOpenChange={(v) => { if (v) openDeviceSwapPopover(); else setDeviceSwapOpen(false); }}
+                  trigger="click"
+                  placement="bottomRight"
+                  content={renderDeviceSwapContent()}
+                >
+                  <Button size="small" icon={<SwapOutlined />} disabled={steps.length === 0}>{t('record.deviceSwap')}</Button>
+                </Popover>
+                <Popover
+                  open={waitPopoverIndex === 'end'}
+                  onOpenChange={(v) => setWaitPopoverIndex(v ? 'end' : null)}
+                  trigger="click"
+                  placement="bottomRight"
+                  content={renderWaitPopoverContent()}
+                >
+                  <Button size="small" icon={<PlusOutlined />}>{t('record.addWait')}</Button>
+                </Popover>
+              </Space>
             }
           >
             {stepListMemo}
