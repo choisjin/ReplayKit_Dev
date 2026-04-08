@@ -716,6 +716,8 @@ class DeviceManager:
         """Auto-generate a device ID like Connected_Wide_1, GVM_1, HKMC_1, POWER_1, etc."""
         if device_model:
             prefix = device_model.replace(" ", "_")
+        elif module_name:
+            prefix = module_name
         elif dev_type == "adb":
             prefix = "Android"
         elif dev_type == "serial":
@@ -724,8 +726,6 @@ class DeviceManager:
             prefix = "HKMC"
         elif dev_type == "vision_camera":
             prefix = "VisionCam"
-        elif dev_type == "module" and module_name:
-            prefix = module_name
         else:
             prefix = "Device"
         # Find the highest existing number for this prefix

@@ -1412,16 +1412,34 @@ export default function DevicePage() {
                   style={{ flex: 1 }}
                   showSearch
                   options={(() => {
-                    // 기존 그룹 prefix + DEVICE_PROJECT_MODELS의 value 합치기
-                    const prefixes = new Set<string>();
-                    allDevices.forEach(d => prefixes.add(getDevicePrefix(d.id)));
-                    Object.values(DEVICE_PROJECT_MODELS).flat().forEach(m => {
-                      if (m.value) prefixes.add(m.value);
-                    });
-                    // 모듈 이름도 추가
-                    modules.forEach(m => prefixes.add(m.name));
-                    return Array.from(prefixes).sort((a, b) => a.localeCompare(b))
-                      .map(p => ({ label: p, value: p }));
+                    if (editDevice.category === 'primary') {
+                      // 주 디바이스: 프로젝트별 모델 목록 + 기존 primary prefix
+                      const opts = new Map<string, string>(); // value → label
+                      Object.entries(DEVICE_PROJECT_MODELS).forEach(([proj, models]) => {
+                        models.forEach(m => {
+                          if (m.value) opts.set(m.value, `${m.label} [${proj}]`);
+                        });
+                      });
+                      // 기존 primary prefix 추가 (목록에 없는 것만)
+                      primaryDevices.forEach(d => {
+                        const p = getDevicePrefix(d.id);
+                        if (!opts.has(p)) opts.set(p, p);
+                      });
+                      return Array.from(opts.entries())
+                        .sort((a, b) => a[1].localeCompare(b[1]))
+                        .map(([value, label]) => ({ label, value }));
+                    } else {
+                      // 보조 디바이스: 모듈 목록 + 기존 auxiliary prefix
+                      const opts = new Map<string, string>();
+                      modules.forEach(m => opts.set(m.name, m.label));
+                      auxiliaryDevices.forEach(d => {
+                        const p = getDevicePrefix(d.id);
+                        if (!opts.has(p)) opts.set(p, p);
+                      });
+                      return Array.from(opts.entries())
+                        .sort((a, b) => a[1].localeCompare(b[1]))
+                        .map(([value, label]) => ({ label, value }));
+                    }
                   })()}
                 />
                 <span style={{ color: '#aaa', fontSize: 11, flexShrink: 0 }}>
