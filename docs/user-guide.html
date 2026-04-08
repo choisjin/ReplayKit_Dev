@@ -374,6 +374,7 @@
     <a href="#install-setup" class="toc-h3">설치 방법</a>
     <a href="#install-run" class="toc-h3">실행 방법</a>
     <a href="#install-update" class="toc-h3">업데이트</a>
+    <a href="#install-launcher" class="toc-h3">런처</a>
 
     <a href="#device" class="toc-h2">디바이스 관리</a>
     <a href="#device-primary" class="toc-h3">주 디바이스</a>
@@ -604,13 +605,20 @@ npm run dev</code></pre>
 </div>
 
 <h3 id="install-update">업데이트</h3>
-<p>ReplayKit은 Git 기반 자동 업데이트를 지원합니다. 서버 관리 GUI의 <strong>동기화+시작</strong> 버튼을 클릭하면:</p>
-<ol>
-  <li>로컬 변경사항 자동 초기화 (빌드 파일 충돌 방지)</li>
-  <li>Git으로 최신 코드를 자동 다운로드 (git pull)</li>
-  <li>변경된 Python 패키지 자동 설치</li>
-  <li>서버 자동 재시작 후 브라우저 오픈</li>
+<p>ReplayKit은 두 가지 방법으로 업데이트할 수 있습니다:</p>
+
+<h4>방법 1: 웹에서 업데이트 (권장)</h4>
+<ol class="numbered-steps">
+  <li>좌측 메뉴의 <strong>업데이트</strong> 버튼 클릭</li>
+  <li>확인 대화상자에서 <strong>확인</strong> 클릭</li>
+  <li>화면에 "서버 업데이트 중..." 대기 화면이 표시됩니다</li>
+  <li>서버가 자동으로 종료 → git pull → 재시작됩니다</li>
+  <li>서버가 준비되면 자동으로 새로고침됩니다</li>
 </ol>
+
+<h4>방법 2: ReplayKit.bat 재실행</h4>
+<p>프로그램을 완전히 종료하고 <code>ReplayKit.bat</code>을 다시 실행하면
+시작 시 자동으로 git pull이 실행되어 최신 상태로 업데이트됩니다.</p>
 
 <div class="callout callout-info">
   <strong>💡 업데이트 사용자 데이터 보존</strong>
@@ -618,13 +626,44 @@ npm run dev</code></pre>
   업데이트 시 변경되지 않습니다.
 </div>
 
+<h3 id="install-launcher">런처</h3>
+<p>ReplayKit 런처는 최소화된 컨트롤 패널로, 서버 관리 기능을 제공합니다.</p>
+<table>
+  <tr><th>버튼</th><th>기능</th></tr>
+  <tr><td><strong>▶ / ■</strong></td><td>서버 시작/정지 토글. 실행 중이면 빨간 ■, 정지 상태면 녹색 ▶</td></tr>
+  <tr><td><strong>↻</strong></td><td>서버 재시작 (git pull + 서버 재시작)</td></tr>
+  <tr><td><strong>🌐</strong></td><td>웹 브라우저 열기</td></tr>
+  <tr><td><strong>━</strong></td><td>시스템 트레이로 최소화</td></tr>
+  <tr><td><strong>✕</strong></td><td>프로그램 완전 종료</td></tr>
+</table>
+
+<div class="callout callout-info">
+  <strong>💡 시스템 트레이</strong>
+  런처 창을 닫으면(━ 버튼 또는 X 버튼) 시스템 트레이로 최소화됩니다.
+  트레이 아이콘을 우클릭하면 서버 시작/정지/재시작/웹 열기/종료 메뉴가 표시됩니다.
+  트레이 아이콘을 더블클릭하면 런처 창이 다시 나타납니다.
+</div>
+
+<div class="callout callout-info">
+  <strong>💡 런처 로그 확인</strong>
+  웹 화면 좌측 상단의 <strong>ReplayKit</strong> 로고를 <strong>5번 연속 클릭</strong>하면
+  런처 로그 창이 나타나 서버 시작/동기화/업데이트 과정의 로그를 확인할 수 있습니다.
+</div>
+
 
 <!-- ============================== 디바이스 ============================== -->
 <h2 id="device">디바이스 관리</h2>
 <p>
   ReplayKit의 첫 화면인 <strong>디바이스</strong> 탭에서 테스트에 사용할 장치들을 등록하고 관리합니다.
-  디바이스는 <strong>주 디바이스</strong>와 <strong>보조 디바이스</strong>로 나뉩니다.
+  디바이스는 <strong>주 디바이스</strong>와 <strong>보조 디바이스</strong>로 나뉘며,
+  같은 타입의 디바이스끼리 <strong>그룹으로 묶여</strong> 표시됩니다.
 </p>
+<div class="callout callout-info">
+  <strong>💡 Device ID 규칙</strong>
+  각 디바이스에는 <code>모델명_번호</code> 형식의 고유 ID가 부여됩니다.
+  예: <code>Connected_Wide_1</code>, <code>CAN_2</code>.
+  그룹 내에서 <strong>드래그앤드롭</strong>으로 순서를 변경하면 번호가 자동 재할당됩니다.
+</div>
 
 <h3 id="device-primary">주 디바이스</h3>
 <p>화면 조작과 스크린샷 캡처의 대상이 되는 디바이스입니다.</p>
@@ -660,9 +699,10 @@ npm run dev</code></pre>
 
 <h4>디바이스 연결하기</h4>
 <ol class="numbered-steps">
-  <li><strong>스캔</strong> 버튼 클릭 — ADB, HKMC, Vision Camera가 동시에 자동 감지됩니다</li>
-  <li>감지된 디바이스 목록에서 원하는 기기를 선택하고 <strong>연결</strong> 클릭</li>
-  <li>감지되지 않는 경우 <strong>수동 연결</strong> 탭에서 주소를 직접 입력할 수 있습니다</li>
+  <li><strong>주 디바이스 추가</strong> 또는 <strong>보조 디바이스 추가</strong> 버튼 클릭</li>
+  <li>주 디바이스의 경우 <strong>프로젝트</strong>와 <strong>장비 모델</strong>을 선택합니다. 모델에 따라 Device ID prefix가 결정됩니다 (예: GVM → <code>GVM_1</code>)</li>
+  <li><strong>스캔</strong>으로 자동 감지된 기기를 선택하거나, <strong>수동 연결</strong> 탭에서 주소를 직접 입력합니다</li>
+  <li>보조 디바이스의 경우 <strong>모듈</strong>을 선택하면 모듈명이 Device ID prefix가 됩니다 (예: CAN → <code>CAN_1</code>)</li>
 </ol>
 
 <div class="callout callout-warning">
@@ -725,13 +765,28 @@ npm run dev</code></pre>
   <tr><td><span class="badge badge-red">오류</span></td><td>빨강</td><td>연결 시도 중 오류 발생</td></tr>
 </table>
 
+<h4>그룹 및 순서 관리</h4>
+<p>디바이스는 같은 타입(Device ID prefix)끼리 그룹 카드로 묶여 표시됩니다.
+  그룹 내에서 <strong>드래그앤드롭</strong>(좌측 ⠿ 핸들)으로 순서를 변경하면
+  Device ID 번호가 자동으로 재할당됩니다.</p>
+<p>디바이스를 <strong>삭제</strong>하면 같은 그룹의 남은 디바이스 번호가 자동으로 1부터 재정렬됩니다.</p>
+
+<h4>디바이스 정보 수정</h4>
+<p><strong>편집</strong> 버튼을 클릭하면 수정 모달이 열립니다:</p>
+<ul>
+  <li><strong>Device ID (prefix)</strong> — 드롭다운에서 변경 가능. 주 디바이스는 프로젝트별 모델 목록, 보조 디바이스는 모듈 목록이 표시됩니다. 변경 시 새 그룹의 마지막 번호 다음으로 자동 배정됩니다.</li>
+  <li><strong>이름</strong> — 디바이스 표시명 변경</li>
+  <li><strong>Baudrate</strong> — 시리얼 디바이스의 통신 속도 변경</li>
+  <li><strong>모듈</strong> — 보조 디바이스의 연결 모듈 변경</li>
+</ul>
+
 <h4>개별 디바이스 버튼</h4>
 <p>각 디바이스 항목 우측에 상태에 따라 버튼이 표시됩니다:</p>
 <ul>
   <li><strong>연결</strong> — 연결 끊김 상태의 디바이스에 표시. 클릭하면 연결을 시도합니다</li>
   <li><strong>연결 끊기</strong> — 연결된 디바이스에 표시. 클릭하면 연결만 끊고 등록은 유지합니다</li>
   <li><strong>편집</strong> — 디바이스의 이름, 주소, 설정 등을 수정합니다</li>
-  <li><strong>삭제</strong> — 디바이스 등록을 완전히 해제합니다 (연결도 끊김)</li>
+  <li><strong>삭제</strong> — 디바이스 등록을 완전히 해제합니다 (연결도 끊김, 번호 자동 재정렬)</li>
 </ul>
 
 <h4>일괄 작업 버튼</h4>
@@ -941,6 +996,28 @@ npm run dev</code></pre>
   <tr><td>📷</td><td>기대 이미지 캡처 — 비교 모드 선택 팝업</td></tr>
 </table>
 
+<h4>Device 일괄 전환</h4>
+<p>스텝 카드 상단의 <strong>⇄ Device 전환</strong> 버튼을 클릭하면,
+시나리오에 사용된 모든 Device ID 목록이 표시됩니다.
+각 ID 옆의 드롭다운에서 변경할 디바이스를 선택하고 <strong>적용</strong>을 클릭하면
+모든 스텝의 <code>device_id</code>와 <code>screenshot_device_id</code>가 일괄 변경됩니다.</p>
+<div class="callout callout-info">
+  <strong>💡 활용 예시</strong>
+  다른 PC에서 만든 시나리오를 가져왔을 때, 또는 디바이스를 교체했을 때
+  Device ID를 일괄 변경하여 바로 재생할 수 있습니다.
+</div>
+
+<h4>하드키 롱프레스</h4>
+<p>HKMC 디바이스의 하드키 버튼을 길게 누르면 빨간색 게이지가 차오릅니다.
+  3초 이상 유지 시 버튼 전체가 빨간색으로 변하며 <strong>롱프레스(Long)</strong>로 인식됩니다.
+  게이지가 차기 전에 놓으면 <strong>숏프레스(Short)</strong>로 처리됩니다.</p>
+
+<h4>화면 크기 자동 조정</h4>
+<p>세로형 디바이스(스마트폰 등)에서 화면이 카드를 가득 채워 슬라이더가 보이지 않는 문제를 방지합니다.
+  <strong>화면 영역 자르기</strong> 또는 <strong>하드키 패널</strong>이 활성화되면
+  화면 영역이 자동으로 축소되어 하단에 컨트롤 공간이 확보됩니다.
+  좌표 변환은 화면 비율 기반으로 계산되므로 정확도에 영향 없습니다.</p>
+
 <div class="callout callout-info">
   <strong>💡 줄무늬 배경</strong>
   스텝 목록은 홀짝 줄에 번갈아 배경색이 적용되어 스텝 간 구분이 쉽습니다.
@@ -1071,6 +1148,19 @@ npm run dev</code></pre>
   </li>
 </ol>
 
+<h4>재생 전 절전 모드 확인</h4>
+<p>재생 시작 시 PC의 절전 모드 설정을 자동으로 확인합니다.
+  절전 모드가 활성화되어 있으면 경고 대화상자가 표시됩니다:</p>
+<ul>
+  <li><strong>절전 차단 후 재생</strong> — 재생 중 절전 모드를 임시로 차단합니다. 재생 완료 후 자동 복원됩니다.</li>
+  <li><strong>취소</strong> — 재생을 취소합니다. Windows 설정에서 직접 절전을 해제한 뒤 다시 시도할 수 있습니다.</li>
+</ul>
+<div class="callout callout-warning">
+  <strong>⚠️ 장시간 재생 시 주의</strong>
+  PC가 절전 모드에 들어가면 네트워크 연결이 끊겨 재생이 비정상 중단될 수 있습니다.
+  반복 재생 등 장시간 작업 시에는 <strong>절전 차단</strong> 옵션을 사용하세요.
+</div>
+
 <h4>재생 중 제어</h4>
 <table>
   <tr><th>버튼</th><th>기능</th></tr>
@@ -1078,6 +1168,17 @@ npm run dev</code></pre>
   <tr><td><strong>재개</strong></td><td>일시정지된 재생을 계속</td></tr>
   <tr><td><strong>중지</strong></td><td>재생을 즉시 중단하고 현재까지의 결과를 저장</td></tr>
 </table>
+
+<h4>반복 재생 시 중간 결과 저장</h4>
+<p>반복 횟수를 2회 이상으로 설정한 경우, 각 사이클이 완료될 때마다 결과가 자동 저장됩니다.
+  비정상 종료(절전, 네트워크 끊김 등) 시에도 완료된 사이클까지의 결과가 보존되어
+  테스트 결과 페이지에서 확인할 수 있습니다.</p>
+
+<div class="callout callout-info">
+  <strong>💡 WebSocket 끊김 시 자동 중지</strong>
+  브라우저와 서버 간의 WebSocket 연결이 끊기면 재생이 자동으로 중지됩니다.
+  완료된 사이클까지의 결과는 저장됩니다.
+</div>
 
 <h3 id="scenario-group">그룹 관리</h3>
 <p>
