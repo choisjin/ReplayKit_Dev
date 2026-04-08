@@ -2634,13 +2634,14 @@ export default function RecordPage() {
             style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}
             styles={{
               header: { flexWrap: 'wrap', height: 'auto', minHeight: 40, padding: '4px 12px' },
-              body: { flex: 1, overflow: 'hidden', padding: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' },
+              body: { flex: 1, overflow: 'auto', padding: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' },
             }}
           >
             {screenshotDeviceId && screenshot ? (
               <>
               <div style={{
-                position: 'relative', display: 'inline-block', maxWidth: '100%', maxHeight: '100%',
+                position: 'relative', display: 'inline-block', maxWidth: '100%',
+                maxHeight: (viewCropEnabled || (isScreenHkmc && hkmcKeys.length > 0)) ? 'calc(100% - 120px)' : '100%',
               }}>
                 {(() => {
                   // 뷰포트 크롭
