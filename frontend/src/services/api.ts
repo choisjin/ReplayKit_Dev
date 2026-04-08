@@ -152,6 +152,7 @@ export const serverApi = {
   openResultsFolder: () => api.post('/settings/open-results-folder'),
   gitLog: (limit?: number, fetch?: boolean) => api.get('/settings/git-log', { params: { limit: limit || 100, fetch: fetch || false } }),
   launcherLog: (lines?: number) => api.get('/settings/launcher-log', { params: { lines: lines || 500 } }),
+  powerStatus: () => api.get('/settings/power-status'),
 };
 
 // Custom HKMC keys APIs

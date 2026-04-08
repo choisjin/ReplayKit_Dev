@@ -13,6 +13,23 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 from ..models.scenario import CompareMode, Scenario, ScenarioResult, Step, StepResult, StepType, SubResult
+
+
+def _set_sleep_block(block: bool):
+    """Windows 절전 모드 차단/해제. 비Windows에서는 무시."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        ES_CONTINUOUS = 0x80000000
+        if block:
+            ctypes.windll.kernel32.SetThreadExecutionState(
+                ES_CONTINUOUS | 0x00000001 | 0x00000002  # SYSTEM + DISPLAY
+            )
+        else:
+            ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+    except Exception:
+        pass
 from .adb_service import ADBService
 from .device_manager import DeviceManager
 from .image_compare_service import ImageCompareService
@@ -223,6 +240,7 @@ class PlaybackService:
 
         self._device_map = self._resolve_device_map(scenario, device_map_override)
         self._running = True
+        _set_sleep_block(True)
         self._should_stop = False
         self._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self._setup_run_output_dir(scenario.name)
@@ -279,6 +297,7 @@ class PlaybackService:
             result.status = "error"
         finally:
             self._running = False
+            _set_sleep_block(False)
             self._cleanup_run_output_dir()
             result.finished_at = datetime.now(timezone.utc).isoformat()
 
@@ -307,6 +326,7 @@ class PlaybackService:
         """
         self._device_map = self._resolve_device_map(scenario, device_map_override)
         self._running = True
+        _set_sleep_block(True)
         # 그룹 재생에서 호출 시 _should_stop을 리셋하면 안 됨 (이미 설정된 경우)
         if not self._result_timestamp:
             self._should_stop = False
@@ -364,6 +384,7 @@ class PlaybackService:
                 idx = next_idx
         finally:
             self._running = False
+            _set_sleep_block(False)
             if not _is_group_member:
                 self._cleanup_run_output_dir()
 

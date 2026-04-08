@@ -331,6 +331,33 @@ async def server_restart():
     return {"status": "restarting"}
 
 
+@router.get("/power-status")
+async def power_status():
+    """PC 절전 모드 설정 조회 (Windows 전용)."""
+    result = {"ac_standby_seconds": None, "dc_standby_seconds": None, "warning": None}
+    if sys.platform != "win32":
+        result["warning"] = "Windows만 지원"
+        return result
+    try:
+        import ctypes
+        import ctypes.wintypes as wt
+        powrprof = ctypes.windll.powrprof
+        GUID = ctypes.c_byte * 16
+        SLEEP_SUB = (GUID)(0x38, 0x83, 0x30, 0x23, 0x82, 0x15, 0xD2, 0x11, 0x9C, 0xE7, 0x00, 0x80, 0xC7, 0x3C, 0x88, 0x81)
+        STANDBY = (GUID)(0x1D, 0xC1, 0xF6, 0x29, 0xEA, 0x42, 0x6D, 0x47, 0x82, 0x8A, 0x3B, 0x06, 0x42, 0x6B, 0xD1, 0xFD)
+        val = wt.DWORD(0)
+        powrprof.PowerReadACValueIndex(None, None, ctypes.byref(SLEEP_SUB), ctypes.byref(STANDBY), ctypes.byref(val))
+        result["ac_standby_seconds"] = val.value
+        powrprof.PowerReadDCValueIndex(None, None, ctypes.byref(SLEEP_SUB), ctypes.byref(STANDBY), ctypes.byref(val))
+        result["dc_standby_seconds"] = val.value
+        if val.value > 0 or result["ac_standby_seconds"] > 0:
+            mins = min(result["ac_standby_seconds"] or 99999, result["dc_standby_seconds"] or 99999) // 60
+            result["warning"] = f"절전 모드가 {mins}분으로 설정되어 있습니다. 장시간 재생 시 중단될 수 있습니다."
+    except Exception as e:
+        result["warning"] = f"절전 설정 조회 실패: {e}"
+    return result
+
+
 @router.get("/launcher-log")
 async def get_launcher_log(lines: int = 200):
     """런처 로그 읽기 (.launcher.log)."""

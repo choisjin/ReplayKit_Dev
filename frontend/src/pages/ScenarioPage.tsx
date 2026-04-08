@@ -9,7 +9,7 @@ import {
   DownOutlined, RightOutlined, ClearOutlined, UploadOutlined,
   ExportOutlined, ImportOutlined, CheckCircleOutlined, WarningOutlined,
 } from '@ant-design/icons';
-import { scenarioApi, deviceApi, resultsApi } from '../services/api';
+import { scenarioApi, deviceApi, resultsApi, serverApi } from '../services/api';
 import { useDevice } from '../context/DeviceContext';
 import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from '../i18n';
@@ -694,6 +694,32 @@ export default function ScenarioPage() {
   };
 
   const startPlayback = async (name: string, deviceMap: Record<string, string>) => {
+    // 절전 모드 확인
+    try {
+      const ps = await serverApi.powerStatus();
+      if (ps.data.warning) {
+        // 'block' = 절전 차단 후 재생, 'cancel' = 취소
+        const choice = await new Promise<'block' | 'cancel'>(resolve => {
+          const modal = Modal.confirm({
+            title: t('scenario.sleepWarningTitle'),
+            content: (
+              <div>
+                <p>{ps.data.warning}</p>
+                <p style={{ color: '#888', fontSize: 12 }}>{t('scenario.sleepBlockDesc')}</p>
+              </div>
+            ),
+            okText: t('scenario.sleepBlock'),
+            cancelText: t('common.cancel'),
+            onOk: () => resolve('block'),
+            onCancel: () => resolve('cancel'),
+          });
+          void modal;
+        });
+        if (choice === 'cancel') return;
+        // 'block' → playback_service가 SetThreadExecutionState로 자동 차단
+      }
+    } catch { /* 조회 실패 시 무시 */ }
+
     pauseScreenStream();
     const repeat = getRepeatCount(name);
     // 웹캠 자동녹화: 웹캠 열기 + 연결 확인
