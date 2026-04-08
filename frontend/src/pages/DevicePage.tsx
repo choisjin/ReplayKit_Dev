@@ -313,8 +313,25 @@ export default function DevicePage() {
 
   const handleDisconnect = async (deviceId: string) => {
     try {
+      const prefix = getDevicePrefix(deviceId);
       const result = await disconnectDevice(deviceId);
       message.info(result);
+      // 삭제 후 같은 그룹 디바이스 번호 재정렬
+      await fetchDevices();
+      // fetchDevices 후 최신 목록에서 같은 prefix 디바이스 추출
+      const remaining = [...primaryDevices, ...auxiliaryDevices]
+        .filter(d => d.id !== deviceId && getDevicePrefix(d.id) === prefix)
+        .sort((a, b) => {
+          const na = parseInt(a.id.match(/_(\d+)$/)?.[1] || '0');
+          const nb = parseInt(b.id.match(/_(\d+)$/)?.[1] || '0');
+          return na - nb;
+        });
+      if (remaining.length > 0) {
+        try {
+          const res = await deviceApi.reorderDevices(prefix, remaining.map(d => d.id));
+          updateDeviceLists(res.data);
+        } catch { /* 재정렬 실패해도 삭제는 완료 */ }
+      }
     } catch {
       message.error(t('device.disconnectFailed'));
     }
