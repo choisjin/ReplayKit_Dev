@@ -277,6 +277,7 @@ export default function DevicePage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editDevice, setEditDevice] = useState<ManagedDevice | null>(null);
   const [editName, setEditName] = useState('');
+  const [editDeviceId, setEditDeviceId] = useState('');
   const [editBaudrate, setEditBaudrate] = useState(115200);
   const [editModule, setEditModule] = useState<string | undefined>(undefined);
   const [editExtraFields, setEditExtraFields] = useState<Record<string, any>>({});
@@ -539,6 +540,7 @@ export default function DevicePage() {
       } catch { /* ignore */ }
     }
     setEditDevice(dev);
+    setEditDeviceId(dev.id);
     setEditName(dev.name);
     setEditBaudrate(dev.info?.baudrate || 115200);
     setEditModule(dev.info?.module);
@@ -558,6 +560,20 @@ export default function DevicePage() {
     setEditSaving(true);
     try {
       const updates: Record<string, any> = {};
+      // Device ID (prefix) 변경
+      const oldPrefix = getDevicePrefix(editDevice.id);
+      const newPrefix = getDevicePrefix(editDeviceId);
+      if (editDeviceId !== editDevice.id && newPrefix !== oldPrefix) {
+        // 새 그룹의 마지막 번호 + 1
+        const samePrefix = allDevices.filter(d => getDevicePrefix(d.id) === newPrefix && d.id !== editDevice.id);
+        const maxNum = samePrefix.reduce((max, d) => {
+          const n = parseInt(d.id.match(/_(\d+)$/)?.[1] || '0');
+          return Math.max(max, n);
+        }, 0);
+        updates.new_device_id = `${newPrefix}_${maxNum + 1}`;
+      } else if (editDeviceId !== editDevice.id) {
+        updates.new_device_id = editDeviceId;
+      }
       if (editName !== editDevice.name) updates.name = editName;
       if (editBaudrate !== (editDevice.info?.baudrate || 115200)) updates.baudrate = editBaudrate;
       if (editModule !== editDevice.info?.module) {
@@ -572,6 +588,18 @@ export default function DevicePage() {
       message.success(t('device.editSuccess'));
       setEditModalOpen(false);
       await fetchDevices();
+      // 기존 그룹 번호 재정렬
+      if (updates.new_device_id && newPrefix !== oldPrefix) {
+        const oldGroup = [...primaryDevices, ...auxiliaryDevices]
+          .filter(d => d.id !== editDevice.id && getDevicePrefix(d.id) === oldPrefix)
+          .sort((a, b) => parseInt(a.id.match(/_(\d+)$/)?.[1] || '0') - parseInt(b.id.match(/_(\d+)$/)?.[1] || '0'));
+        if (oldGroup.length > 0) {
+          try {
+            const res = await deviceApi.reorderDevices(oldPrefix, oldGroup.map(d => d.id));
+            updateDeviceLists(res.data);
+          } catch { /* ignore */ }
+        }
+      }
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('device.editFailed'));
     }
@@ -1365,19 +1393,44 @@ export default function DevicePage() {
       >
         {editDevice && (
           <Space direction="vertical" style={{ width: '100%' }}>
-            {/* 디바이스 고유 정보 — 읽기 전용 */}
+            {/* 디바이스 정보 */}
             <div style={{ background: '#fafafa', borderRadius: 6, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
+              <div style={{ display: 'flex', gap: 8, fontSize: 13, alignItems: 'center' }}>
                 <span style={{ color: '#888', minWidth: 80 }}>Device ID:</span>
-                <span style={{ fontWeight: 500 }}>{editDevice.id}</span>
+                <Select
+                  size="small"
+                  value={getDevicePrefix(editDeviceId)}
+                  onChange={(prefix) => {
+                    // 새 prefix 그룹의 다음 번호로 임시 ID 생성
+                    const samePrefix = allDevices.filter(d => getDevicePrefix(d.id) === prefix && d.id !== editDevice.id);
+                    const maxNum = samePrefix.reduce((max, d) => {
+                      const n = parseInt(d.id.match(/_(\d+)$/)?.[1] || '0');
+                      return Math.max(max, n);
+                    }, 0);
+                    setEditDeviceId(`${prefix}_${maxNum + 1}`);
+                  }}
+                  style={{ flex: 1 }}
+                  showSearch
+                  options={(() => {
+                    // 기존 그룹 prefix + DEVICE_PROJECT_MODELS의 value 합치기
+                    const prefixes = new Set<string>();
+                    allDevices.forEach(d => prefixes.add(getDevicePrefix(d.id)));
+                    Object.values(DEVICE_PROJECT_MODELS).flat().forEach(m => {
+                      if (m.value) prefixes.add(m.value);
+                    });
+                    // 모듈 이름도 추가
+                    modules.forEach(m => prefixes.add(m.name));
+                    return Array.from(prefixes).sort((a, b) => a.localeCompare(b))
+                      .map(p => ({ label: p, value: p }));
+                  })()}
+                />
+                <span style={{ color: '#aaa', fontSize: 11, flexShrink: 0 }}>
+                  {editDeviceId !== editDevice.id ? `${editDevice.id} → ${editDeviceId}` : editDeviceId}
+                </span>
               </div>
               <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
                 <span style={{ color: '#888', minWidth: 80 }}>Type:</span>
                 <span>{editDevice.type}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
-                <span style={{ color: '#888', minWidth: 80 }}>Category:</span>
-                <span>{editDevice.category}</span>
               </div>
               <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
                 <span style={{ color: '#888', minWidth: 80 }}>{`${t('common.address')}:`}</span>
