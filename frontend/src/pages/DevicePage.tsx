@@ -242,7 +242,7 @@ export default function DevicePage() {
       { label: 'GVM', value: 'GVM' },
     ],
     'General': [
-      { label: 'Android', value: '' },
+      { label: 'Android', value: 'Android' },
       { label: 'Phone', value: 'Phone' },
     ],
   };
