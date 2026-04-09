@@ -206,11 +206,12 @@ class ServerProcess:
 class ServerManagerApp:
     def __init__(self):
         self._log_buffer: list[str] = []
-        # 로그 파일 초기화
-        try:
-            open(os.path.join(PROJECT_ROOT, ".launcher.log"), "w").close()
-        except Exception:
-            pass
+        # 날짜별 로그 디렉토리
+        self._log_dir = os.path.join(PROJECT_ROOT, "logs")
+        os.makedirs(self._log_dir, exist_ok=True)
+        self._log_date = datetime.now().strftime("%Y-%m-%d")
+        # 7일 지난 로그 파일 삭제
+        self._cleanup_old_logs(7)
 
         self.root = tk.Tk()
         self.root.title("ReplayKit")
@@ -365,10 +366,26 @@ class ServerManagerApp:
         self._log_buffer.append(entry)
         if len(self._log_buffer) > 2000:
             self._log_buffer = self._log_buffer[-1500:]
-        # 로그 파일에도 기록 (웹에서 조회용)
+        # 날짜별 로그 파일에 기록
         try:
-            with open(os.path.join(PROJECT_ROOT, ".launcher.log"), "a", encoding="utf-8") as f:
+            today = datetime.now().strftime("%Y-%m-%d")
+            if today != self._log_date:
+                self._log_date = today
+                self._cleanup_old_logs(7)
+            log_file = os.path.join(self._log_dir, f"{today}.log")
+            with open(log_file, "a", encoding="utf-8") as f:
                 f.write(entry + "\n")
+        except Exception:
+            pass
+
+    def _cleanup_old_logs(self, keep_days: int):
+        """keep_days일 이전 로그 파일 삭제."""
+        try:
+            import glob as _g
+            cutoff = time.time() - keep_days * 86400
+            for f in _g.glob(os.path.join(self._log_dir, "*.log")):
+                if os.path.getmtime(f) < cutoff:
+                    os.remove(f)
         except Exception:
             pass
 

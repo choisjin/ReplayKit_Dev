@@ -359,17 +359,25 @@ async def power_status():
 
 
 @router.get("/launcher-log")
-async def get_launcher_log(lines: int = 200):
-    """런처 로그 읽기 (.launcher.log)."""
-    log_file = _PROJECT_ROOT / ".launcher.log"
+async def get_launcher_log(lines: int = 200, date: str = ""):
+    """런처 로그 읽기 (날짜별 로그 파일)."""
+    from datetime import datetime as _dt
+    log_dir = _PROJECT_ROOT / "logs"
+    if not log_dir.is_dir():
+        return {"lines": [], "dates": []}
+    # 사용 가능한 날짜 목록
+    dates = sorted([f.stem for f in log_dir.glob("*.log")], reverse=True)
+    # 요청 날짜 없으면 오늘
+    target_date = date or _dt.now().strftime("%Y-%m-%d")
+    log_file = log_dir / f"{target_date}.log"
     if not log_file.exists():
-        return {"lines": []}
+        return {"lines": [], "dates": dates}
     try:
         content = log_file.read_text(encoding="utf-8", errors="replace")
         all_lines = content.strip().split("\n") if content.strip() else []
-        return {"lines": all_lines[-lines:]}
+        return {"lines": all_lines[-lines:], "dates": dates}
     except Exception:
-        return {"lines": []}
+        return {"lines": [], "dates": dates}
 
 
 @router.post("/update-and-restart")

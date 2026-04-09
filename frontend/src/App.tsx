@@ -56,18 +56,26 @@ function AppContent() {
   const logoClickRef = useRef<number[]>([]);
   const [logModalOpen, setLogModalOpen] = useState(false);
   const [launcherLog, setLauncherLog] = useState<string[]>([]);
+  const [logDates, setLogDates] = useState<string[]>([]);
+  const [logSelectedDate, setLogSelectedDate] = useState('');
+
+  const loadLog = (date?: string) => {
+    serverApi.launcherLog(1000, date).then(res => {
+      setLauncherLog(res.data.lines || []);
+      setLogDates(res.data.dates || []);
+      if (!date && res.data.dates?.length > 0) setLogSelectedDate(res.data.dates[0]);
+    }).catch(() => {});
+  };
+
   const handleLogoClick = () => {
     const now = Date.now();
     const clicks = logoClickRef.current;
     clicks.push(now);
-    // 최근 2초 이내 클릭만 유지
     while (clicks.length > 0 && now - clicks[0] > 2000) clicks.shift();
     if (clicks.length >= 5) {
       clicks.length = 0;
-      serverApi.launcherLog(500).then(res => {
-        setLauncherLog(res.data.lines || []);
-        setLogModalOpen(true);
-      }).catch(() => {});
+      loadLog();
+      setLogModalOpen(true);
     }
   };
 
@@ -374,7 +382,20 @@ function AppContent() {
       <ChatWidget open={chatOpen} onClose={() => setChatOpen(false)} />
 
       <Modal
-        title="Launcher Log"
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span>Launcher Log</span>
+            {logDates.length > 0 && (
+              <select
+                value={logSelectedDate}
+                onChange={(e) => { setLogSelectedDate(e.target.value); loadLog(e.target.value); }}
+                style={{ fontSize: 12, padding: '2px 6px', borderRadius: 4, border: '1px solid #d9d9d9' }}
+              >
+                {logDates.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            )}
+          </div>
+        }
         open={logModalOpen}
         onCancel={() => setLogModalOpen(false)}
         footer={null}

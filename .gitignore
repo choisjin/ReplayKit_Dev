@@ -6,6 +6,10 @@ __pycache__/
 *.pyo
 *.egg-info/
 
+# 로그
+logs/
+.launcher.log
+
 # 빌드 산출물
 build/
 dist/
