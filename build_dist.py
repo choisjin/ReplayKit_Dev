@@ -164,13 +164,21 @@ def _prepack_embedded_with_tkinter(embed_zip_path: Path):
         else:
             print(f"  [Warning] pip install failed: {r.stderr[:200]}")
 
-    # Pre-install packages from requirements.txt
+    # Pre-install packages from requirements.txt (변경 시에만)
     req_file = PROJECT_ROOT / "requirements.txt"
     if req_file.exists() and (python_dir / "python.exe").exists():
-        print("  Installing packages from requirements.txt...")
-        _run([str(python_dir / "python.exe"), "-m", "pip", "install",
-              "-r", str(req_file), "-q", "--no-warn-script-location"],
-             check=False, live_output=False)
+        import hashlib
+        req_hash = hashlib.md5(req_file.read_bytes()).hexdigest()
+        hash_file = python_dir / ".req_hash"
+        old_hash = hash_file.read_text().strip() if hash_file.exists() else ""
+        if req_hash != old_hash:
+            print("  Installing packages from requirements.txt...")
+            _run([str(python_dir / "python.exe"), "-m", "pip", "install",
+                  "-r", str(req_file), "-q", "--no-warn-script-location"],
+                 check=False, live_output=False)
+            hash_file.write_text(req_hash)
+        else:
+            print("  Packages already up to date — skipped")
 
     print(f"  Embedded Python ready: {python_dir}")
 
