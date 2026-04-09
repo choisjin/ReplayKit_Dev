@@ -88,6 +88,9 @@ const statusColor = (s: string) =>
 const imageUrl = (path: string | null) => {
   if (!path) return null;
   let rel = path.replace(/\\/g, '/');
+  const resultsIdx = rel.indexOf('/results/');
+  if (resultsIdx >= 0) return '/results-files/' + rel.substring(resultsIdx + '/results/'.length);
+  if (/^\d{8}_\d{6}_/.test(rel)) return '/results-files/' + rel;
   const idx = rel.indexOf('/screenshots/');
   if (idx >= 0) {
     rel = rel.substring(idx + '/screenshots/'.length);
@@ -814,6 +817,33 @@ export default function ResultsPage() {
                 {t('common.delete')} ({selectedRowKeys.length})
               </Button>
             )}
+            <Button
+              size="small"
+              onClick={async () => {
+                Modal.confirm({
+                  title: t('results.migrateLegacyTitle'),
+                  content: t('results.migrateLegacyDesc'),
+                  okText: t('results.migrateLegacyOk'),
+                  onOk: async () => {
+                    const hide = message.loading(t('results.migrating'), 0);
+                    try {
+                      const res = await resultsApi.migrateLegacy();
+                      hide();
+                      message.success(t('results.migrateComplete', { count: String(res.data.migrated) }));
+                      if (res.data.errors?.length) {
+                        Modal.warning({ title: t('results.migrateErrors'), content: res.data.errors.join('\n') });
+                      }
+                      fetchResults();
+                    } catch {
+                      hide();
+                      message.error(t('results.migrateFailed'));
+                    }
+                  },
+                });
+              }}
+            >
+              {t('results.migrateLegacy')}
+            </Button>
             <Button icon={<ReloadOutlined />} onClick={fetchResults} loading={loading} size="small">
               {t('common.refresh')}
             </Button>

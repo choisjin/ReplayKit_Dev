@@ -589,6 +589,14 @@ const translations = {
 
     // === Results Page ===
     'results.title': '테스트 실행 결과',
+    'results.migrateLegacy': '레거시 정리',
+    'results.migrateLegacyTitle': '레거시 결과 정리',
+    'results.migrateLegacyDesc': '이전 구조(screenshots/ 분리 저장)의 결과를 새 구조(results/ 통합)로 이동합니다.',
+    'results.migrateLegacyOk': '정리 시작',
+    'results.migrating': '레거시 결과 정리 중...',
+    'results.migrateComplete': '{count}건 정리 완료',
+    'results.migrateErrors': '일부 오류 발생',
+    'results.migrateFailed': '정리 실패',
     'results.scenario': '시나리오',
     'results.execTime': '실행 시간',
     'results.scenarios': '개 시나리오',
@@ -1258,6 +1266,14 @@ const translations = {
 
     // === Results Page ===
     'results.title': 'Test Results',
+    'results.migrateLegacy': 'Migrate Legacy',
+    'results.migrateLegacyTitle': 'Migrate Legacy Results',
+    'results.migrateLegacyDesc': 'Move legacy results (screenshots/ separate) to new structure (results/ unified).',
+    'results.migrateLegacyOk': 'Start',
+    'results.migrating': 'Migrating legacy results...',
+    'results.migrateComplete': '{count} items migrated',
+    'results.migrateErrors': 'Some errors occurred',
+    'results.migrateFailed': 'Migration failed',
     'results.scenario': 'Scenario',
     'results.execTime': 'Execution Time',
     'results.scenarios': 'scenarios',

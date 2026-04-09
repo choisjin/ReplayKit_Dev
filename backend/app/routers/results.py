@@ -559,6 +559,91 @@ async def update_step_result(filename: str, body: dict):
     return {"status": "ok", "result_status": data["status"]}
 
 
+@router.post("/migrate-legacy")
+async def migrate_legacy():
+    """레거시 결과 파일을 새 구조로 마이그레이션.
+    screenshots/{name}/actual_{ts}/ → results/{ts}_{name}/screenshots/
+    results/{name}_{ts}.json → results/{ts}_{name}/result.json
+    """
+    import re as _re
+    migrated = 0
+    errors = []
+
+    # 1) screenshots 내 actual_ 폴더 → results 런 폴더로 이동
+    if SCREENSHOTS_DIR.is_dir():
+        for scenario_dir in SCREENSHOTS_DIR.iterdir():
+            if not scenario_dir.is_dir():
+                continue
+            sc_name = scenario_dir.name
+            for actual_dir in list(scenario_dir.iterdir()):
+                if not actual_dir.is_dir() or not actual_dir.name.startswith("actual_"):
+                    continue
+                ts = actual_dir.name.replace("actual_", "")  # e.g. 20260408_174101
+                if not _re.match(r"\d{8}_\d{6}", ts):
+                    continue
+                safe_name = _re.sub(r'[\\/:*?"<>|→]', '_', sc_name).replace(" ", "_")
+                run_dir = RESULTS_DIR / f"{ts}_{safe_name}"
+                run_dir.mkdir(parents=True, exist_ok=True)
+                dst_ss = run_dir / "screenshots"
+                if not dst_ss.exists():
+                    try:
+                        shutil.move(str(actual_dir), str(dst_ss))
+                        migrated += 1
+                    except Exception as e:
+                        errors.append(f"screenshots/{sc_name}/{actual_dir.name}: {e}")
+                else:
+                    # 이미 존재하면 파일 단위로 머지
+                    for f in actual_dir.iterdir():
+                        if f.is_file():
+                            dst_f = dst_ss / f.name
+                            if not dst_f.exists():
+                                shutil.move(str(f), str(dst_f))
+                    # 빈 폴더 삭제
+                    try:
+                        actual_dir.rmdir()
+                    except Exception:
+                        pass
+                    migrated += 1
+
+    # 2) results 내 플랫 JSON → 런 폴더로 이동
+    if RESULTS_DIR.is_dir():
+        for json_file in list(RESULTS_DIR.glob("*.json")):
+            # {name}_{timestamp}.json 패턴 매칭
+            m = _re.match(r"^(.+?)_(\d{8}_\d{6})\.json$", json_file.name)
+            if not m:
+                continue
+            sc_name = m.group(1)
+            ts = m.group(2)
+            safe_name = _re.sub(r'[\\/:*?"<>|→]', '_', sc_name).replace(" ", "_")
+            run_dir = RESULTS_DIR / f"{ts}_{safe_name}"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            dst = run_dir / "result.json"
+            if not dst.exists():
+                try:
+                    shutil.move(str(json_file), str(dst))
+                    # Excel도 함께 이동
+                    xlsx = json_file.with_suffix(".xlsx")
+                    if xlsx.exists():
+                        shutil.move(str(xlsx), str(run_dir / "result.xlsx"))
+                    migrated += 1
+                except Exception as e:
+                    errors.append(f"{json_file.name}: {e}")
+
+    # 3) 빈 screenshots 하위 폴더 정리
+    if SCREENSHOTS_DIR.is_dir():
+        for d in list(SCREENSHOTS_DIR.iterdir()):
+            if d.is_dir():
+                try:
+                    # 하위에 actual_ 폴더가 없고 기대 이미지만 있으면 유지
+                    remaining = [x for x in d.iterdir() if x.is_dir() and x.name.startswith("actual_")]
+                    if not remaining and not any(d.iterdir()):
+                        d.rmdir()
+                except Exception:
+                    pass
+
+    return {"migrated": migrated, "errors": errors}
+
+
 @router.get("/{filename:path}")
 async def get_result(filename: str):
     """Get a specific test result (런 폴더 또는 레거시 플랫 파일)."""

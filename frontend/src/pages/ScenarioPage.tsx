@@ -131,8 +131,14 @@ const statusColor = (s: string) =>
 const imageUrl = (path: string | null) => {
   if (!path) return null;
   let rel = path.replace(/\\/g, '/');
-  const idx = rel.indexOf('/screenshots/');
-  if (idx >= 0) rel = rel.substring(idx + '/screenshots/'.length);
+  // 런 폴더 내 이미지: results/{timestamp}_{name}/screenshots/... → /results-files/...
+  const resultsIdx = rel.indexOf('/results/');
+  if (resultsIdx >= 0) return '/results-files/' + rel.substring(resultsIdx + '/results/'.length);
+  // 런 폴더 상대 경로 (timestamp_name/screenshots/...)
+  if (/^\d{8}_\d{6}_/.test(rel)) return '/results-files/' + rel;
+  // 기존 screenshots 폴더
+  const ssIdx = rel.indexOf('/screenshots/');
+  if (ssIdx >= 0) rel = rel.substring(ssIdx + '/screenshots/'.length);
   return '/screenshots/' + rel;
 };
 

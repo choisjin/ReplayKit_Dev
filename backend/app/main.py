@@ -639,7 +639,7 @@ async def websocket_playback(websocket: WebSocket):
                                 failed_steps=result.failed_steps,
                                 error_steps=result.error_steps,
                             )
-                            await playback_service._save_result(_interim)
+                            await playback_service._save_result(_interim, interim=True)
 
                     # 중단 처리
                     if playback_service._should_stop:
@@ -865,7 +865,7 @@ async def websocket_playback(websocket: WebSocket):
                                 failed_steps=unified_result.failed_steps,
                                 error_steps=unified_result.error_steps,
                             )
-                            await playback_service._save_result(_interim)
+                            await playback_service._save_result(_interim, interim=True)
 
                     # 통합 결과 저장 (1개 파일)
                     unified_result.finished_at = datetime.now(timezone.utc).isoformat()

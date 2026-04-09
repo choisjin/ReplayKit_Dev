@@ -494,8 +494,18 @@ class PlaybackService:
             t4 = time.time()
             actual_path = None
             if ss_device:
-                actual_subdir = f"actual_{self._result_timestamp}" if self._result_timestamp else "actual"
-                actual_dir = SCREENSHOTS_DIR / scenario_name / actual_subdir
+                # 스크린샷을 results 런 폴더에 직접 저장
+                if self._run_output_dir and self._run_output_dir.exists():
+                    # 그룹 재생: {run_dir}/{scenario_name}/screenshots/
+                    # 단일 재생: {run_dir}/screenshots/
+                    if not self._run_output_dir_owned:
+                        safe_sc = re.sub(r'[\\/:*?"<>|→]', '_', scenario_name).replace(" ", "_")
+                        actual_dir = self._run_output_dir / safe_sc / "screenshots"
+                    else:
+                        actual_dir = self._run_output_dir / "screenshots"
+                else:
+                    actual_subdir = f"actual_{self._result_timestamp}" if self._result_timestamp else "actual"
+                    actual_dir = SCREENSHOTS_DIR / scenario_name / actual_subdir
                 actual_dir.mkdir(parents=True, exist_ok=True)
                 actual_path = str(actual_dir / f"{file_prefix}.png")
 
@@ -534,8 +544,7 @@ class PlaybackService:
                             None, cam.CaptureToFile, actual_path
                         )
 
-                actual_rel = f"{scenario_name}/{actual_subdir}/{file_prefix}.png"
-                step_result.actual_image = actual_rel
+                step_result.actual_image = self._rel_path(actual_path, scenario_name)
 
                 # Verify against expected image
                 if verify and has_expected:
@@ -576,7 +585,7 @@ class PlaybackService:
                                 self.image_compare.generate_multi_crop_annotated(
                                     actual_path, judgement.get("sub_results", []), annotated_path
                                 )
-                                step_result.actual_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_annotated.png"
+                                step_result.actual_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_annotated.png"), scenario_name)
                             except Exception as e:
                                 logger.warning("Failed to generate multi-crop annotated image: %s", e)
 
@@ -594,7 +603,7 @@ class PlaybackService:
                                                 cv2.rectangle(dark, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 255, 0), 2)
                                         exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
                                         safe_imwrite(exp_ann_path, dark)
-                                        step_result.expected_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_expected_annotated.png"
+                                        step_result.expected_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_expected_annotated.png"), scenario_name)
                                 except Exception as e:
                                     logger.warning("Failed to generate multi-crop expected annotated: %s", e)
 
@@ -631,7 +640,7 @@ class PlaybackService:
                                         cv2.rectangle(img_annotated, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 2)
                                     annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
                                     safe_imwrite(annotated_path, img_annotated)
-                                    step_result.actual_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_annotated.png"
+                                    step_result.actual_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_annotated.png"), scenario_name)
                             except Exception as e:
                                 logger.warning("Failed to generate exclude annotated image: %s", e)
 
@@ -661,7 +670,7 @@ class PlaybackService:
                                             cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 2)
                                         exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
                                         safe_imwrite(exp_ann_path, overlay)
-                                        step_result.expected_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_expected_annotated.png"
+                                        step_result.expected_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_expected_annotated.png"), scenario_name)
                                 except Exception as e:
                                     logger.warning("Failed to generate exclude expected annotated: %s", e)
 
@@ -704,7 +713,7 @@ class PlaybackService:
                                         cv2.rectangle(img_annotated, (x, y), (x + w, y + h), (0, 0, 255), 3)
                                         annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
                                         safe_imwrite(annotated_path, img_annotated)
-                                        step_result.actual_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_annotated.png"
+                                        step_result.actual_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_annotated.png"), scenario_name)
                                 except Exception as e:
                                     logger.warning("Failed to generate annotated image: %s", e)
                             elif step.roi:
@@ -716,7 +725,7 @@ class PlaybackService:
                                         cv2.rectangle(img_annotated, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 3)
                                         annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
                                         safe_imwrite(annotated_path, img_annotated)
-                                        step_result.actual_annotated_image = f"{scenario_name}/{actual_subdir}/{file_prefix}_annotated.png"
+                                        step_result.actual_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_annotated.png"), scenario_name)
                                         step_result.match_location = {"x": r.x, "y": r.y, "width": r.width, "height": r.height}
                                 except Exception as e:
                                     logger.warning("Failed to generate annotated image: %s", e)
@@ -1135,13 +1144,27 @@ class PlaybackService:
                 else:
                     await self.adb.multi_finger_swipe(fingers, params.get("duration_ms", 500), serial=adb_serial, display_id=adb_display_id)
 
+    def _rel_path(self, abs_path: str, scenario_name: str) -> str:
+        """절대 경로 → 웹 서빙용 상대 경로.
+        런 폴더 내: /results-files/ 기준, 아닌 경우: /screenshots/ 기준."""
+        p = Path(abs_path)
+        if self._run_output_dir:
+            try:
+                return str(p.relative_to(RESULTS_DIR)).replace("\\", "/")
+            except ValueError:
+                pass
+        try:
+            return str(p.relative_to(SCREENSHOTS_DIR)).replace("\\", "/")
+        except ValueError:
+            return p.name
+
     def _setup_run_output_dir(self, scenario_name: str) -> None:
         """재생 런별 출력 디렉토리 생성: results/{timestamp}_{scenario_name}/
 
         구조:
           results/{ts}_{name}/
           ├── result.json          ← 결과 JSON
-          ├── screenshots/         ← 실제 스크린샷 디렉토리 (심볼릭 링크)
+          ├── screenshots/         ← 실제 스크린샷 (직접 저장)
           ├── logs/                ← DLT/Serial 로그
           └── recordings/         ← 동영상 파일
         """
@@ -1150,25 +1173,9 @@ class PlaybackService:
         folder_name = f"{self._result_timestamp}_{safe_name}"
         run_dir = RESULTS_DIR / folder_name
         run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "screenshots").mkdir(exist_ok=True)
         (run_dir / "logs").mkdir(exist_ok=True)
         (run_dir / "recordings").mkdir(exist_ok=True)
-
-        # 스크린샷은 기존 위치에 저장하되 런 폴더에서 링크로 참조
-        actual_subdir = f"actual_{self._result_timestamp}"
-        actual_dir = SCREENSHOTS_DIR / scenario_name / actual_subdir
-        actual_dir.mkdir(parents=True, exist_ok=True)
-        link_path = run_dir / "screenshots"
-        if not link_path.exists():
-            try:
-                # Windows: directory junction (관리자 권한 불필요)
-                import _winapi
-                _winapi.CreateJunction(str(actual_dir), str(link_path))
-            except Exception:
-                try:
-                    link_path.symlink_to(actual_dir, target_is_directory=True)
-                except Exception:
-                    # 심볼릭 링크 실패 시 경로만 텍스트로 기록
-                    (run_dir / "screenshots_path.txt").write_text(str(actual_dir), encoding="utf-8")
 
         self._run_output_dir = run_dir
         _current_run_output_dir = run_dir
@@ -1181,8 +1188,9 @@ class PlaybackService:
         _current_run_output_dir = None
         self._result_timestamp = ""
 
-    async def _save_result(self, result: ScenarioResult) -> str:
-        """Save execution result to JSON + Excel (런 폴더 내 result.json + result.xlsx)."""
+    async def _save_result(self, result: ScenarioResult, interim: bool = False) -> str:
+        """Save execution result to JSON + Excel (런 폴더 내 result.json + result.xlsx).
+        interim=True: 중간 저장 — _run_output_dir을 유지."""
         timestamp = self._result_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
 
         if self._run_output_dir and self._run_output_dir.exists():
@@ -1192,12 +1200,13 @@ class PlaybackService:
             filepath = RESULTS_DIR / f"{result.scenario_name}_{timestamp}.json"
 
         filepath.write_text(result.model_dump_json(indent=2), encoding="utf-8")
-        logger.info("Result saved: %s", filepath)
+        logger.info("Result saved%s: %s", " (interim)" if interim else "", filepath)
 
         # Excel 자동 생성
         self._save_excel(filepath)
 
-        self._run_output_dir = None
+        if not interim:
+            self._run_output_dir = None
         return str(filepath)
 
     def _save_excel(self, json_path: Path) -> None:

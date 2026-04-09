@@ -142,6 +142,7 @@ export const resultsApi = {
     api.post(`/results/update-step/${filename}`, { step_index: stepIndex, message, ...(status ? { status } : {}) }),
   openFolder: (filename: string) =>
     api.post('/results/open-folder', { filename }),
+  migrateLegacy: () => api.post('/results/migrate-legacy'),
 };
 
 // Server management APIs
