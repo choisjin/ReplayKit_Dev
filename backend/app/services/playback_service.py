@@ -1178,7 +1178,6 @@ class PlaybackService:
         folder_name = f"{self._result_timestamp}_{safe_name}"
         run_dir = RESULTS_DIR / folder_name
         run_dir.mkdir(parents=True, exist_ok=True)
-        (run_dir / "screenshots").mkdir(exist_ok=True)
         (run_dir / "logs").mkdir(exist_ok=True)
         (run_dir / "recordings").mkdir(exist_ok=True)
 

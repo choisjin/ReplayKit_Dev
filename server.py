@@ -498,18 +498,23 @@ class ServerManagerApp:
         except Exception:
             pass
 
-        # 5) 고아 results 런 폴더 정리 (result.json 없는 폴더 삭제)
+        # 5) 고아 results 정리 (result.json 없는 폴더 + 레거시 플랫 파일 삭제)
         try:
             _res_dir = os.path.join(PROJECT_ROOT, "backend", "results")
             if os.path.isdir(_res_dir):
                 _cleaned = 0
-                for d in os.listdir(_res_dir):
-                    dp = os.path.join(_res_dir, d)
-                    if os.path.isdir(dp) and not os.path.isfile(os.path.join(dp, "result.json")):
-                        _shutil.rmtree(dp, ignore_errors=True)
+                for item in os.listdir(_res_dir):
+                    fp = os.path.join(_res_dir, item)
+                    if os.path.isdir(fp):
+                        if not os.path.isfile(os.path.join(fp, "result.json")):
+                            _shutil.rmtree(fp, ignore_errors=True)
+                            _cleaned += 1
+                    elif os.path.isfile(fp) and item.endswith((".json", ".xlsx")):
+                        # 레거시 플랫 파일 — 대응하는 런 폴더가 없으면 삭제
                         _cleaned += 1
+                        os.remove(fp)
                 if _cleaned:
-                    log_callback(f"[동기화] 고아 결과 폴더 {_cleaned}개 삭제")
+                    log_callback(f"[동기화] 고아 결과 {_cleaned}개 삭제")
         except Exception:
             pass
 
