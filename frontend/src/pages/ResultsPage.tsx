@@ -531,10 +531,14 @@ export default function ResultsPage() {
     return `${min}m ${remSec}s`;
   };
 
-  const formatTime = (iso: string) => {
+  const formatTime = (iso: string, inline = false) => {
     if (!iso) return '-';
     try {
-      return new Date(iso).toLocaleString(lang === 'ko' ? 'ko-KR' : 'en-US');
+      const d = new Date(iso);
+      const date = d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+      const time = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      if (inline) return `${date} ${time}`;
+      return <>{date}<br />{time}</>;
     } catch {
       return iso;
     }
@@ -609,7 +613,7 @@ export default function ResultsPage() {
       title: t('results.execTime'),
       key: 'time',
       width: 200,
-      render: (_: any, g: ResultGroup) => <span style={{ whiteSpace: 'nowrap' }}>{formatTime(g.timestamp)}</span>,
+      render: (_: any, g: ResultGroup) => <span style={{ fontSize: 12, lineHeight: 1.4 }}>{formatTime(g.timestamp)}</span>,
       sorter: (a: ResultGroup, b: ResultGroup) => (a.timestamp || '').localeCompare(b.timestamp || ''),
       defaultSortOrder: 'descend' as const,
     },
@@ -707,7 +711,7 @@ export default function ResultsPage() {
       dataIndex: 'timestamp',
       key: 'timestamp',
       align: 'center' as const,
-      render: (v: string | null) => <span style={{ whiteSpace: 'nowrap' }}>{v ? formatTime(v) : '-'}</span>,
+      render: (v: string | null) => <span style={{ fontSize: 12, lineHeight: 1.4 }}>{v ? formatTime(v) : '-'}</span>,
       _hide: false,
     },
     {
@@ -1034,8 +1038,8 @@ export default function ResultsPage() {
             >
               <Descriptions.Item label={t('results.scenario')}>{detail.scenario_name}</Descriptions.Item>
               <Descriptions.Item label={t('scenario.device')}>{detail.device_serial || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('scenario.startTime')}>{formatTime(detail.started_at)}</Descriptions.Item>
-              <Descriptions.Item label={t('scenario.endTime')}>{formatTime(detail.finished_at)}</Descriptions.Item>
+              <Descriptions.Item label={t('scenario.startTime')}>{formatTime(detail.started_at, true)}</Descriptions.Item>
+              <Descriptions.Item label={t('scenario.endTime')}>{formatTime(detail.finished_at, true)}</Descriptions.Item>
               <Descriptions.Item label={t('results.totalExecTime')}>
                 <strong>{formatDuration(totalTime(detail.step_results))}</strong>
               </Descriptions.Item>

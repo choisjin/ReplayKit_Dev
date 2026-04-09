@@ -152,9 +152,15 @@ const formatDuration = (ms: number) => {
   return `${min}m ${remSec}s`;
 };
 
-const formatTime = (iso: string, lang: string = 'ko') => {
+const formatTime = (iso: string, _lang: string = 'ko', inline = false) => {
   if (!iso) return '-';
-  try { return new Date(iso).toLocaleString(lang === 'ko' ? 'ko-KR' : 'en-US'); } catch { return iso; }
+  try {
+    const d = new Date(iso);
+    const date = d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+    const time = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    if (inline) return `${date} ${time}`;
+    return <>{date}<br />{time}</>;
+  } catch { return iso; }
 };
 
 export default function ScenarioPage() {
@@ -1157,7 +1163,7 @@ export default function ScenarioPage() {
 
   const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 11, color: '#888' }}>{ko}</span></div>;
   const makeStepResultColumns = (totalRepeat: number) => [
-    { title: _colTitle('Time Stamp', t('scenario.colTimestamp')), dataIndex: 'timestamp', key: 'timestamp', align: 'center' as const, render: (v: string | null) => <span style={{ whiteSpace: 'nowrap' }}>{v ? formatTime(v, lang) : '-'}</span> },
+    { title: _colTitle('Time Stamp', t('scenario.colTimestamp')), dataIndex: 'timestamp', key: 'timestamp', align: 'center' as const, render: (v: string | null) => <span style={{ fontSize: 12, lineHeight: 1.4 }}>{v ? formatTime(v, lang) : '-'}</span> },
     { title: _colTitle('Repeat', t('scenario.colCurrentTotal')), dataIndex: 'repeat_index', key: 'repeat', align: 'center' as const, render: (v: number) => `${v}/${totalRepeat}` },
     { title: _colTitle('Step', t('scenario.colOrder')), dataIndex: 'step_id', key: 'step_id', align: 'center' as const },
     { title: _colTitle('Device', t('scenario.colDevice')), dataIndex: 'device_id', key: 'device_id', align: 'center' as const, render: (v: string) => v ? <Tag color={v.startsWith('Android') ? 'green' : v.startsWith('Serial') ? 'purple' : 'geekblue'} style={{ margin: 0 }}>{v}</Tag> : '-' },
