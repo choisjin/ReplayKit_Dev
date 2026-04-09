@@ -219,10 +219,15 @@ class RecordingService:
         return [p.stem for p in SCENARIOS_DIR.glob("*.json") if p.name not in ("groups.json", "folders.json")]
 
     async def delete_scenario(self, name: str) -> bool:
-        """Delete a scenario file."""
+        """Delete a scenario file + screenshots folder."""
+        import shutil
         filepath = SCENARIOS_DIR / f"{name}.json"
         if filepath.exists():
             filepath.unlink()
+            # 스크린샷 폴더 삭제 (기대 이미지 포함)
+            ss_dir = SCREENSHOTS_DIR / name
+            if ss_dir.is_dir():
+                shutil.rmtree(str(ss_dir), ignore_errors=True)
             # Remove from any groups
             groups = self._load_groups()
             changed = False
