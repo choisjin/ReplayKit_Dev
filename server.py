@@ -731,6 +731,47 @@ def _kill_existing_servers():
                     pass
 
 
+def _check_existing_server() -> bool:
+    """기존 서버가 실행 중인지 확인. 실행 중이면 사용자에게 처리 방법을 묻는다.
+    Returns: True=계속 진행, False=종료"""
+    ports_to_check = [8000]
+    occupied = []
+    for port in ports_to_check:
+        for conn in psutil.net_connections(kind="tcp"):
+            if conn.laddr.port == port and conn.status == "LISTEN" and conn.pid:
+                try:
+                    p = psutil.Process(conn.pid)
+                    occupied.append((port, conn.pid, p.name()))
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    occupied.append((port, conn.pid, "?"))
+    if not occupied:
+        return True
+
+    # Tkinter 대화상자로 선택
+    import tkinter.messagebox as mbox
+    _root = tk.Tk()
+    _root.withdraw()
+    msg = "ReplayKit 서버가 이미 실행 중입니다.\n\n"
+    for port, pid, name in occupied:
+        msg += f"  포트 {port} — PID {pid} ({name})\n"
+    msg += "\n기존 서버를 종료하고 새로 시작하시겠습니까?"
+    result = mbox.askyesnocancel("ReplayKit", msg,
+                                  icon="warning",
+                                  default=mbox.NO)
+    _root.destroy()
+    if result is True:
+        # Yes: 기존 서버 종료 후 계속
+        _kill_existing_servers()
+        time.sleep(1)
+        return True
+    elif result is False:
+        # No: 기존 서버 유지, 새 인스턴스 종료
+        return False
+    else:
+        # Cancel: 종료
+        return False
+
+
 def main():
     # pythonw.exe에서 stdout/stderr가 None인 경우 처리 (print 오류 방지)
     if sys.stdout is None:
@@ -747,6 +788,10 @@ def main():
         time.sleep(2)
         _kill_existing_servers()
         time.sleep(1)
+    else:
+        # 일반 시작: 기존 서버 확인
+        if not _check_existing_server():
+            return
 
     app = ServerManagerApp()
 
