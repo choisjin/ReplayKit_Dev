@@ -171,14 +171,15 @@ def _build_excel_workbook(data: dict, filepath: Path = None):
         duration_ms = sr.get("execution_time_ms", 0)
 
         try:
-            from datetime import datetime as _dt
+            from datetime import datetime as _dt, timezone as _tz
             ts = _dt.fromisoformat(timestamp.replace("Z", "+00:00"))
-            ts_str = ts.strftime("%Y-%m-%d %H:%M:%S")
+            ts_local = ts.astimezone()  # 시스템 로컬 시간대로 변환
+            ts_str = ts_local.strftime("%Y-%m-%d %H:%M:%S")
         except Exception:
             ts_str = timestamp or ""
 
         dur_str = f"{duration_ms}ms" if duration_ms < 1000 else f"{duration_ms / 1000:.1f}s"
-        delay_str = f"{delay_ms}ms" if delay_ms < 1000 else f"{delay_ms / 1000:.1f}s"
+        delay_str = f"{delay_ms}ms" if delay_ms and delay_ms >= 1000 else (f"{delay_ms}ms" if delay_ms else "-")
 
         ws.cell(row=ri, column=1, value=ts_str).border = thin_border
         ws.cell(row=ri, column=2, value=total_repeat).border = thin_border

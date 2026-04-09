@@ -582,10 +582,18 @@ async def websocket_playback(websocket: WebSocket):
                         started_at=datetime.now(timezone.utc).isoformat(),
                     )
 
+                    # repeat > 1: 그룹 재생과 동일한 구조로 관리
+                    # 시나리오 이름으로 상위 폴더를 만들고 사이클별 하위 폴더 생성
+                    _is_multi_cycle = repeat > 1
+                    if _is_multi_cycle:
+                        playback_service._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        playback_service._setup_run_output_dir(scenario_name)
+
+                    global_step_seq = 0
                     last_completed_iteration = 0
                     for iteration in range(1, repeat + 1):
                         playback_service._monitor_state["current_cycle"] = iteration
-                        if repeat > 1:
+                        if _is_multi_cycle:
                             await _safe_send({
                                 "type": "iteration_start",
                                 "iteration": iteration,
@@ -593,17 +601,31 @@ async def websocket_playback(websocket: WebSocket):
                             })
 
                         _step_idx = 0
-                        async for item in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, device_map_override=device_map_override):
+                        _pending_seq = 0
+                        async for item in playback_service.execute_scenario_stream(
+                            scen, verify=verify, repeat_index=iteration,
+                            device_map_override=device_map_override,
+                            group_scenario_index=iteration if _is_multi_cycle else 0,
+                        ):
                             if isinstance(item, dict) and item.get("_type") == "step_start":
                                 _step_idx += 1
                                 playback_service._monitor_state["current_step"] = _step_idx
+                                start_data = {k: v for k, v in item.items() if k != "_type"}
+                                if _is_multi_cycle:
+                                    global_step_seq += 1
+                                    _pending_seq = global_step_seq
+                                    start_data["step_id"] = _pending_seq
+                                    start_data["description"] = f"[Cycle {iteration}] {start_data.get('description', '')}"
                                 await _safe_send({
                                     "type": "step_start",
-                                    "data": {k: v for k, v in item.items() if k != "_type"},
+                                    "data": start_data,
                                     "iteration": iteration,
                                 })
                             else:
                                 step_result = item
+                                if _is_multi_cycle:
+                                    step_result.step_id = _pending_seq
+                                    step_result.description = f"[Cycle {iteration}] {step_result.description}" if step_result.description else f"[Cycle {iteration}]"
                                 result.step_results.append(step_result)
                                 if step_result.status == "pass":
                                     result.passed_steps += 1
@@ -625,12 +647,12 @@ async def websocket_playback(websocket: WebSocket):
                         last_completed_iteration = iteration
 
                         # 매 사이클 완료 시 중간 결과 저장 (비정상 종료 대비)
-                        if repeat > 1:
+                        if _is_multi_cycle:
                             _interim = ScenarioResult(
                                 scenario_name=scenario_name,
                                 device_serial="multi-device",
                                 status="fail" if result.failed_steps > 0 or result.error_steps > 0 else "pass",
-                                total_steps=len(scen.steps),
+                                total_steps=global_step_seq if _is_multi_cycle else len(scen.steps),
                                 total_repeat=last_completed_iteration,
                                 started_at=result.started_at,
                                 finished_at=datetime.now(timezone.utc).isoformat(),
@@ -646,10 +668,12 @@ async def websocket_playback(websocket: WebSocket):
                         if last_completed_iteration == 0:
                             await _safe_send({"type": "playback_stopped", "result_filename": ""})
                         else:
-                            # 마지막 저장된 중간 결과 파일명 반환
-                            total_steps_per_cycle = len(scen.steps)
-                            keep_count = last_completed_iteration * total_steps_per_cycle
-                            result.step_results = result.step_results[:keep_count]
+                            if _is_multi_cycle:
+                                result.total_steps = global_step_seq
+                            else:
+                                total_steps_per_cycle = len(scen.steps)
+                                keep_count = last_completed_iteration * total_steps_per_cycle
+                                result.step_results = result.step_results[:keep_count]
                             result.passed_steps = sum(1 for sr in result.step_results if sr.status == "pass")
                             result.failed_steps = sum(1 for sr in result.step_results if sr.status == "fail")
                             result.error_steps = sum(1 for sr in result.step_results if sr.status not in ("pass", "fail"))
@@ -660,6 +684,8 @@ async def websocket_playback(websocket: WebSocket):
                             await _safe_send({"type": "playback_stopped", "result_filename": _result_filename(result_path)})
                     else:
                         # 정상 완료 — 최종 결과 저장 (중간 결과 덮어쓰기)
+                        if _is_multi_cycle:
+                            result.total_steps = global_step_seq
                         result.finished_at = datetime.now(timezone.utc).isoformat()
                         result.status = "fail" if (result.failed_steps > 0 or result.error_steps > 0) else "pass"
                         result_path = await playback_service._save_result(result)
@@ -667,6 +693,9 @@ async def websocket_playback(websocket: WebSocket):
                 except Exception as e:
                     await _safe_send({"type": "error", "message": str(e)})
                 finally:
+                    if _is_multi_cycle:
+                        playback_service._cleanup_run_output_dir()
+                        playback_service._running = False
                     if stop_listener_task and not stop_listener_task.done():
                         stop_listener_task.cancel()
                         try:
