@@ -827,15 +827,24 @@ export default function ScenarioPage() {
         }
       } else if (msg.type === 'preflight_error') {
         setPlaying(false); setCurrentStepId(null);
-        Modal.error({
+        Modal.confirm({
           title: t('scenario.deviceCheckFailed'),
           content: (
-            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-              {(msg.errors || []).map((e: string, i: number) => (
-                <div key={i} style={{ padding: '4px 0', color: '#ff4d4f' }}>• {e}</div>
-              ))}
+            <div>
+              <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
+                {(msg.errors || []).map((e: string, i: number) => (
+                  <div key={i} style={{ padding: '4px 0', color: '#ff4d4f' }}>• {e}</div>
+                ))}
+              </div>
+              <div style={{ color: '#888', fontSize: 12 }}>{t('scenario.preflightSwapHint')}</div>
             </div>
           ),
+          okText: t('scenario.changeDeviceMap'),
+          cancelText: t('common.close'),
+          onOk: () => {
+            // device_map 편집 모달 다시 열기
+            setDeviceMapModalVisible(true);
+          },
         });
         ws.close();
       } else if (msg.type === 'error') {
@@ -1034,15 +1043,23 @@ export default function ScenarioPage() {
         }
       } else if (msg.type === 'preflight_error') {
         setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
-        Modal.error({
+        Modal.confirm({
           title: t('scenario.deviceCheckFailed'),
           content: (
-            <div style={{ maxHeight: 300, overflowY: 'auto' }}>
-              {(msg.errors || []).map((e: string, i: number) => (
-                <div key={i} style={{ padding: '4px 0', color: '#ff4d4f' }}>• {e}</div>
-              ))}
+            <div>
+              <div style={{ maxHeight: 200, overflowY: 'auto', marginBottom: 12 }}>
+                {(msg.errors || []).map((e: string, i: number) => (
+                  <div key={i} style={{ padding: '4px 0', color: '#ff4d4f' }}>• {e}</div>
+                ))}
+              </div>
+              <div style={{ color: '#888', fontSize: 12 }}>{t('scenario.preflightSwapHint')}</div>
             </div>
           ),
+          okText: t('scenario.changeDeviceMap'),
+          cancelText: t('common.close'),
+          onOk: () => {
+            setDeviceMapModalVisible(true);
+          },
         });
         ws.close();
       } else if (msg.type === 'error') {
