@@ -646,7 +646,7 @@ class PlaybackService:
 
                             if step_result.status != "pass":
                                 diff_path = str(actual_dir / f"diff_{file_prefix}.png")
-                                diff_rel = f"{scenario_name}/{actual_subdir}/diff_{file_prefix}.png"
+                                diff_rel = self._rel_path(diff_path, scenario_name)
                                 try:
                                     self.image_compare.generate_diff_heatmap(
                                         expected_path, actual_path, diff_path,
@@ -732,7 +732,7 @@ class PlaybackService:
 
                             if step_result.status != "pass":
                                 diff_path = str(actual_dir / f"diff_{file_prefix}.png")
-                                diff_rel = f"{scenario_name}/{actual_subdir}/diff_{file_prefix}.png"
+                                diff_rel = self._rel_path(diff_path, scenario_name)
                                 try:
                                     self.image_compare.generate_diff_heatmap(
                                         expected_path, compare_actual, diff_path
