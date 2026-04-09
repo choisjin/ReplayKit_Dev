@@ -415,6 +415,32 @@
     <a href="#modules" class="toc-h2">모듈 가이드</a>
     <a href="#module-cmd" class="toc-h3">CMD (명령어 실행)</a>
     <a href="#module-dlt" class="toc-h3">DLTViewer (DLT 로그)</a>
+    <a href="#module-power" class="toc-h3">POWER (전원 공급기)</a>
+    <a href="#module-riden" class="toc-h3">RIDEN (전원 공급기)</a>
+    <a href="#module-keysight" class="toc-h3">KeysightPower (전원 공급기)</a>
+    <a href="#module-can" class="toc-h3">CAN (CAN 버스)</a>
+    <a href="#module-canoe" class="toc-h3">CANoe (시뮬레이션)</a>
+    <a href="#module-canat" class="toc-h3">CANat (CAN 디바이스)</a>
+    <a href="#module-pcan" class="toc-h3">PCANClient (Peak CAN)</a>
+    <a href="#module-bench" class="toc-h3">BENCH (벤치 소켓)</a>
+    <a href="#module-ivi-bench" class="toc-h3">IVIQEBenchIO (QE 벤치)</a>
+    <a href="#module-sp25" class="toc-h3">SP25Bench (SP25 벤치)</a>
+    <a href="#module-smartbench" class="toc-h3">SmartBench (스마트 벤치)</a>
+    <a href="#module-ccic-bench" class="toc-h3">CCIC_BENCH (CCIC 벤치)</a>
+    <a href="#module-uart" class="toc-h3">Uart (UART 통신)</a>
+    <a href="#module-serial-plugin" class="toc-h3">SerialPlugin (시리얼)</a>
+    <a href="#module-serial-logging" class="toc-h3">SerialLogging (시리얼 로깅)</a>
+    <a href="#module-dlt-logging" class="toc-h3">DLTLogging (DLT 로깅)</a>
+    <a href="#module-mlp" class="toc-h3">MLP (MLP 로깅)</a>
+    <a href="#module-ssh" class="toc-h3">SSHManager (SSH 접속)</a>
+    <a href="#module-ignition" class="toc-h3">Ignition (이그니션)</a>
+    <a href="#module-android" class="toc-h3">Android (ADB 제어)</a>
+    <a href="#module-image" class="toc-h3">ImageProcessing (이미지)</a>
+    <a href="#module-audio" class="toc-h3">AudioLibrary (오디오)</a>
+    <a href="#module-vision" class="toc-h3">VisionCamera (비전 카메라)</a>
+    <a href="#module-trace" class="toc-h3">Trace (트레이스 분석)</a>
+    <a href="#module-tigris" class="toc-h3">TigrisCheck (Tigris 검사)</a>
+    <a href="#module-winutil" class="toc-h3">COMMON_WINDOWS (유틸)</a>
 
     <a href="#appendix" class="toc-h2">부록</a>
     <a href="#appendix-steps" class="toc-h3">스텝 유형 총정리</a>
@@ -1108,7 +1134,7 @@ npm run dev</code></pre>
   <li><strong>반복 횟수</strong> — 재생 반복 횟수 설정 (기본 1회)</li>
   <li><strong>재생</strong> — 시나리오 실행 (디바이스 미연결 시 오류 메시지 표시)</li>
   <li><strong>웹캠 녹화</strong> — 재생 중 웹캠으로 화면 녹화</li>
-  <li><strong>삭제</strong> — 시나리오 제거</li>
+  <li><strong>삭제</strong> — 시나리오 및 관련 스크린샷을 함께 제거</li>
   <li><strong>그룹 추가</strong> — 시나리오를 특정 그룹에 배정</li>
 </ul>
 
@@ -1133,6 +1159,15 @@ npm run dev</code></pre>
   연결되지 않은 디바이스가 있으면 오류 메시지가 표시되고 재생이 시작되지 않습니다.
   디바이스 탭에서 먼저 연결하세요.
 </div>
+
+<h4>Preflight 검사 및 디바이스 매핑</h4>
+<p>재생 시작 전에 시나리오에 사용된 디바이스가 현재 연결된 디바이스와 일치하는지 <strong>preflight 검사</strong>가 자동 수행됩니다.
+  디바이스 ID가 다르거나 연결이 안 된 경우 <strong>디바이스 매핑 변경 대화상자</strong>가 표시됩니다:</p>
+<ul>
+  <li>시나리오에 기록된 디바이스와 현재 연결된 디바이스를 대조하여 표시</li>
+  <li>불일치하는 디바이스를 현재 연결된 다른 디바이스로 <strong>재매핑</strong> 가능</li>
+  <li>매핑을 변경하면 해당 재생에만 적용되며 원본 시나리오는 수정되지 않습니다</li>
+</ul>
 
 <ol class="numbered-steps">
   <li>시나리오 상세 타이틀의 <strong>재생</strong> 버튼을 클릭합니다</li>
@@ -1199,6 +1234,10 @@ npm run dev</code></pre>
   <li>그룹 <strong>재생</strong>을 클릭하면 포함된 시나리오가 순차적으로 실행됩니다</li>
 </ol>
 
+<h4>그룹 재생 결과 저장 구조</h4>
+<p>그룹 재생 시 각 시나리오의 스크린샷은 <code>results/{결과폴더}/{인덱스}_{시나리오명}/screenshots/</code> 구조로 저장됩니다.
+  인덱스는 그룹 내 실행 순서(0부터 시작)를 나타냅니다.</p>
+
 <h3 id="scenario-export">내보내기 / 가져오기</h3>
 
 <h4>내보내기 (Export)</h4>
@@ -1234,14 +1273,28 @@ npm run dev</code></pre>
 <p>모든 재생 결과가 최신순으로 나열됩니다. 각 항목에는 다음 정보가 표시됩니다:</p>
 <ul>
   <li>시나리오 이름</li>
-  <li>실행 일시</li>
+  <li>실행 일시 (24시간 형식, 날짜와 시간이 두 줄로 표시)</li>
   <li>전체 스텝 수 / Pass / Fail 수</li>
   <li>상태 (전체 결과)</li>
 </ul>
 <p>시나리오 이름으로 <strong>필터링</strong>하거나, 선택 후 <strong>일괄 삭제</strong>도 가능합니다.</p>
 
+<h4>스크린샷 저장 구조</h4>
+<p>재생 시 생성되는 스크린샷은 <code>results/{결과폴더}/screenshots/</code> 하위에 직접 저장됩니다.
+  기대 이미지, 실제 캡처, 차이점(diff) 이미지가 각 스텝별로 관리됩니다.</p>
+
+<h4>레거시 결과 정리</h4>
+<p>이전 버전에서 생성된 플랫 파일 구조의 결과가 남아 있는 경우, <strong>레거시 정리</strong> 버튼이 표시됩니다.
+  클릭하면 오래된 결과 파일을 정리하고 새 구조로 마이그레이션합니다.</p>
+
 <h3 id="results-detail">결과 상세</h3>
-<p>결과를 클릭하면 각 스텝별 상세 정보를 볼 수 있습니다:</p>
+<p>결과를 클릭하면 각 스텝별 상세 정보를 볼 수 있습니다.
+  상단의 필터를 사용하여 원하는 결과만 표시할 수 있습니다:</p>
+<ul>
+  <li><strong>Status</strong> — Pass / Warning / Fail / Error 별 필터링</li>
+  <li><strong>Device</strong> — 특정 디바이스의 스텝만 표시</li>
+  <li><strong>Repeat</strong> — 반복 재생 시 특정 회차만 표시</li>
+</ul>
 
 <table>
   <tr><th>항목</th><th>내용</th></tr>
@@ -1386,6 +1439,18 @@ npm run dev</code></pre>
   각 스텝의 <strong>커맨드 수정</strong>에서 <code>delay_after_ms</code> 값을 변경합니다.
   기본값은 1000ms (1초)이며, 화면 전환이 느린 경우 늘리면 됩니다.
 </p>
+
+<h4>Q: "서버가 이미 실행 중입니다" 메시지가 나와요</h4>
+<p>
+  ReplayKit은 서버 중복 실행을 자동으로 감지합니다.
+  이미 실행 중인 인스턴스가 있으면 대화상자가 표시되며, 기존 프로세스를 종료 후 다시 시작할 수 있습니다.
+</p>
+
+<h4>서버 자동 관리 기능</h4>
+<ul>
+  <li><strong>고아 결과 폴더 자동 정리</strong> — 서버 시작 시 <code>result.json</code> 파일이 없는 불완전한 결과 폴더를 자동으로 삭제합니다.</li>
+  <li><strong>로그 날짜별 저장</strong> — 서버 로그는 날짜별 파일로 관리되며, 7일이 지난 로그는 자동으로 삭제됩니다.</li>
+</ul>
 
 <h3 id="tips-shortcuts">단축키</h3>
 <table>
@@ -1667,6 +1732,553 @@ npm run dev</code></pre>
     <li><code>WaitLog</code>로 기대하는 DLT 로그가 나타나는지 검증</li>
   </ol>
 </div>
+
+
+<!-- ============================== 전원 제어 모듈 ============================== -->
+<h3 id="module-power">POWER — 전원 공급기 제어</h3>
+<p>
+  시리얼(RS-232) 연결된 VUPOWER/K3010 전원 공급 장비의 전압/전류를 설정하고 측정하는 모듈입니다.
+</p>
+<h4>연결 설정</h4>
+<p>디바이스 페이지에서 보조 디바이스 추가 시 모듈 <code>POWER</code> 선택, COM 포트와 통신 속도를 설정합니다.</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>SetOutput</code></td><td>전원 출력 ON/OFF</td><td><code>status</code>: 'ON' 또는 'OFF'</td></tr>
+  <tr><td><code>SetValue</code></td><td>전압 또는 전류 설정</td><td><code>set_type</code>: 'VOLT'/'CURR', <code>value</code>: 설정값</td></tr>
+  <tr><td><code>ReadValue</code></td><td>현재 전압/전류 측정</td><td><code>set_type</code>: 'VOLT'/'CURR'</td></tr>
+  <tr><td><code>SendCmd</code></td><td>직접 명령어 전송 (고급)</td><td><code>cmd</code>: 명령어 문자열</td></tr>
+</table>
+<h4>사용 예시</h4>
+<table>
+  <tr><th>목적</th><th>함수</th><th>설정</th></tr>
+  <tr><td>14.4V 설정</td><td><code>SetValue</code></td><td>set_type: <code>VOLT</code>, value: <code>14.4</code></td></tr>
+  <tr><td>출력 켜기</td><td><code>SetOutput</code></td><td>status: <code>ON</code></td></tr>
+  <tr><td>전류 측정</td><td><code>ReadValue</code></td><td>set_type: <code>CURR</code></td></tr>
+</table>
+
+<h3 id="module-riden">RIDEN — RIDEN 전원 공급기</h3>
+<p>
+  시리얼 연결된 RIDEN 전원 공급 장비를 제어하는 모듈입니다.
+  연결과 전압 설정을 <code>TurnOn</code> 한 번에 처리하는 간단한 구조입니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>TurnOn</code></td><td>전원 공급기 켜기 + 전압 설정</td><td><code>port</code>: COM 포트, <code>voltage</code>: 전압(V)</td></tr>
+  <tr><td><code>Turnoff</code></td><td>전원 공급기 끄기</td><td><code>port</code>: COM 포트</td></tr>
+</table>
+
+<h3 id="module-keysight">KeysightPower — Keysight 전원 공급기</h3>
+<p>
+  이더넷/GPIB 연결된 Keysight 전원 공급기의 전압 설정, 파형 시퀀스 제어를 수행하는 모듈입니다.
+  단순 전압 설정뿐 아니라 Step/Ramp/Pulse/Sine/Exp 등 복합 파형 시퀀스를 프로그래밍할 수 있습니다.
+</p>
+<h4>기본 제어 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>connectPowerSupply</code></td><td>이더넷 연결</td><td><code>eth</code>: 인터페이스 (선택)</td></tr>
+  <tr><td><code>closePowerSupply</code></td><td>연결 해제</td><td>(없음)</td></tr>
+  <tr><td><code>setVoltage</code></td><td>출력 전압 설정</td><td><code>volt</code>: 전압(V)</td></tr>
+  <tr><td><code>setMaxVoltage</code></td><td>최대 전압 제한</td><td><code>volt</code>: 최대 전압(V)</td></tr>
+  <tr><td><code>turnOnOutput</code></td><td>출력 켜기</td><td>(없음)</td></tr>
+  <tr><td><code>turnOffOutput</code></td><td>출력 끄기</td><td>(없음)</td></tr>
+  <tr><td><code>checkMeasCurrentLessThan</code></td><td>전류 임계값 이하 확인</td><td><code>Threshold</code>: 전류(A)</td></tr>
+  <tr><td><code>powerSupply_ask</code></td><td>SCPI 명령 전송</td><td><code>cmd</code>: SCPI 명령어</td></tr>
+</table>
+<h4>파형 시퀀스 함수</h4>
+<p>전압 변동/과도(transient) 테스트를 위한 임의 파형(Arbitrary Waveform)을 구성합니다.</p>
+<table>
+  <tr><th>함수</th><th>파형 유형</th><th>주요 파라미터</th></tr>
+  <tr><td><code>addToSeq_Step</code></td><td>계단(Step)</td><td>vStart, vEnd, tStart, tEnd</td></tr>
+  <tr><td><code>addToSeq_Ramp</code></td><td>경사(Ramp)</td><td>vStart, vEnd, tStart, tRamp, tEnd, repeat</td></tr>
+  <tr><td><code>addToSeq_Puls</code></td><td>펄스</td><td>vStart, vTop, tStart, tTop, tEnd, repeat</td></tr>
+  <tr><td><code>addToSeq_Sine</code></td><td>정현파</td><td>ampl, offs, freq, repeat</td></tr>
+  <tr><td><code>addToSeq_Exp</code></td><td>지수</td><td>vStart, vEnd, tStart, tWave, tConst, repeat</td></tr>
+  <tr><td><code>addToSeq_Stair</code></td><td>계단형</td><td>vStart, vEnd, tStart, tStep, tEnd, nStep, repeat</td></tr>
+  <tr><td><code>addToSeq_Trap</code></td><td>사다리꼴</td><td>vStart, vTop, tRise, tTop, tFall, repeat</td></tr>
+  <tr><td><code>setSeqArb</code></td><td colspan="2">구성된 시퀀스를 장비에 설정</td></tr>
+  <tr><td><code>runSeqArb</code></td><td colspan="2">시퀀스 실행 (<code>repeat</code>: 반복 횟수)</td></tr>
+</table>
+
+<!-- ============================== CAN 통신 모듈 ============================== -->
+<h3 id="module-can">CAN — CAN 버스 통신</h3>
+<p>
+  PCAN/Vector/Kvaser 등 CAN 인터페이스를 통해 차량 CAN 메시지를 송수신하는 모듈입니다.
+  python-can 라이브러리 기반으로 다양한 CAN 하드웨어를 지원합니다.
+</p>
+<h4>연결 설정</h4>
+<p>
+  디바이스 페이지에서 보조 디바이스 추가 시 모듈 <code>CAN</code> 선택.
+  <code>Bus</code> 함수가 자동 호출되어 CAN 인터페이스에 연결됩니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>send_msg</code></td><td>CAN 메시지 전송 (1회 또는 주기적)</td><td>
+    <code>message_id</code>: ID (16진수, 예: '0x123')<br>
+    <code>cycle_time</code>: 주기(ms), 0이면 1회<br>
+    <code>can_message</code>: 데이터 (예: '00 11 22 33')<br>
+    <code>bus_channel</code>: 채널<br>
+    <code>message_type</code>: 'FD' 또는 'Classic'
+  </td></tr>
+  <tr><td><code>stop_all_periodic_tasks</code></td><td>모든 주기적 전송 중지</td><td>(없음)</td></tr>
+  <tr><td><code>start_log_save</code></td><td>CAN 로그 파일 저장 시작</td><td><code>logpath</code>: 저장 경로</td></tr>
+  <tr><td><code>stop_log_save</code></td><td>CAN 로그 저장 중지</td><td>(없음)</td></tr>
+  <tr><td><code>shutdown</code></td><td>CAN 디바이스 연결 해제</td><td>(없음)</td></tr>
+</table>
+
+<h3 id="module-canoe">CANoe — CANoe 시뮬레이션 제어</h3>
+<p>
+  Vector CANoe 소프트웨어의 시뮬레이션 시작/중지, 환경변수/시스템변수 설정을 제어하는 모듈입니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>open_simulation</code></td><td>시뮬레이션 열기 (.cfg 로드)</td><td><code>cfgname</code>: .cfg 파일 경로</td></tr>
+  <tr><td><code>close_simulation</code></td><td>시뮬레이션 닫기/종료</td><td>(없음)</td></tr>
+  <tr><td><code>start_Measurement</code></td><td>측정 시작</td><td>(없음)</td></tr>
+  <tr><td><code>stop_Measurement</code></td><td>측정 중지</td><td>(없음)</td></tr>
+  <tr><td><code>get_EnvVar</code></td><td>환경 변수 읽기</td><td><code>var</code>: 변수 이름</td></tr>
+  <tr><td><code>set_EnvVar</code></td><td>환경 변수 설정</td><td><code>var</code>: 변수 이름, <code>value</code>: 값</td></tr>
+</table>
+
+<h3 id="module-canat">CANat — CANat 디바이스</h3>
+<p>
+  CANat 하드웨어를 통해 CAN 버스 메시지를 송수신하는 모듈입니다.
+  채널별로 CAN FD / Classic 모드를 개별 설정할 수 있습니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>init</code></td><td>초기화 및 연결</td><td><code>comport</code>, <code>log_path</code>, <code>ch1_fd</code>, <code>ch2_fd</code></td></tr>
+  <tr><td><code>disconnect</code></td><td>연결 해제</td><td>(없음)</td></tr>
+  <tr><td><code>send_can_message</code></td><td>CAN 메시지 전송</td><td><code>message_id</code>, <code>cycle_time</code>, <code>can_message</code>, <code>bus_channel</code>, <code>message_type</code></td></tr>
+  <tr><td><code>stop_can_message</code></td><td>특정 메시지 전송 중지</td><td><code>message_id</code>, <code>bus_channel</code></td></tr>
+  <tr><td><code>send_cam_message_all_stop</code></td><td>모든 전송 중지</td><td>(없음)</td></tr>
+  <tr><td><code>can_message_save_start</code></td><td>로그 저장 시작</td><td><code>save_path</code></td></tr>
+  <tr><td><code>can_message_save_stop</code></td><td>로그 저장 중지</td><td>(없음)</td></tr>
+</table>
+
+<h3 id="module-pcan">PCANClient — Peak CAN 클라이언트</h3>
+<p>
+  Peak CAN 디바이스를 통해 CAN 메시지를 송수신하는 모듈입니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>send_msg</code></td><td>CAN 메시지 전송</td><td><code>channel</code>, <code>msg_id</code>, <code>type</code>, <code>length</code>, <code>cycle_time</code>, <code>msg_data</code></td></tr>
+  <tr><td><code>stop</code></td><td>특정 메시지 전송 중지</td><td><code>channel</code>, <code>msg_id</code></td></tr>
+  <tr><td><code>stop_all</code></td><td>모든 전송 중지</td><td>(없음)</td></tr>
+</table>
+
+<!-- ============================== 벤치 장비 모듈 ============================== -->
+<h3 id="module-bench">BENCH — 벤치 소켓 통신</h3>
+<p>
+  TCP 소켓으로 벤치 장비와 데이터를 주고받고 전류를 측정하는 모듈입니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>socket_connect</code></td><td>벤치 장비에 소켓 연결</td><td><code>host</code>: IP 주소</td></tr>
+  <tr><td><code>socket_close</code></td><td>소켓 연결 해제</td><td>(없음)</td></tr>
+  <tr><td><code>SendData</code></td><td>데이터 전송</td><td><code>data</code>: 전송 데이터</td></tr>
+  <tr><td><code>check_current</code></td><td>전류 범위 확인</td><td><code>min_current</code>, <code>max_current</code> (A), <code>meas_time</code> (초)</td></tr>
+</table>
+
+<h3 id="module-ivi-bench">IVIQEBenchIOClient — IVI QE 벤치</h3>
+<p>
+  시리얼 연결된 QE 테스트 벤치의 릴레이, 전원, 센서, 오디오, LCD, 버튼, USB 등을 종합 제어하는 모듈입니다.
+  차량 시뮬레이션에 필요한 대부분의 신호를 제어할 수 있는 대규모 모듈입니다.
+</p>
+<h4>연결 설정</h4>
+<p>디바이스 페이지에서 보조 디바이스 추가 시 모듈 <code>IVIQEBenchIOClient</code> 선택. 시리얼 포트 자동 연결됩니다.</p>
+
+<h4>전원/이그니션 제어</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>ACCOnOff</code></td><td>ACC 전원 ON/OFF</td><td><code>state</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>BatteryOnOff</code></td><td>배터리 전원 ON/OFF</td><td><code>nState</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>IGNControl</code></td><td>이그니션 전원 제어</td><td><code>status</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>IGN3Control</code></td><td>이그니션 3 전원 제어</td><td><code>nStatus</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>ALTControl</code></td><td>알터네이터 신호 제어</td><td><code>status</code>: 0=OFF, 1=ON</td></tr>
+</table>
+
+<h4>차량 신호 시뮬레이션</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>ReverseControl</code></td><td>후진 기어 신호</td><td><code>nStatus</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>ParkingControl</code></td><td>주차 신호</td><td><code>nStatus</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>SpeedControl</code></td><td>차량 속도 신호</td><td><code>nStatus</code>: 0=정지, 1=주행</td></tr>
+  <tr><td><code>DoorControl</code></td><td>도어 열림/닫힘</td><td><code>nStatus</code>: 0=닫힘, 1=열림</td></tr>
+  <tr><td><code>ILLControl</code></td><td>일루미네이션(조명 연동)</td><td><code>nStatus</code>: 0=OFF, 1=ON</td></tr>
+</table>
+
+<h4>USB/릴레이 제어</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>USB1Control</code></td><td>USB 1 포트 릴레이</td><td><code>Status</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>USBSelectorControl</code></td><td>USB 셀렉터 포트 선택</td><td><code>nOnPortNum</code>: 포트 번호</td></tr>
+  <tr><td><code>ShieldBoxControl</code></td><td>실드 박스 개폐</td><td><code>nStatus</code>: 0=닫기, 1=열기</td></tr>
+  <tr><td><code>Relay_10</code> ~ <code>Relay_14</code></td><td>개별 릴레이 제어</td><td><code>nStatus</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>RelayInitialization</code></td><td>모든 릴레이 초기화</td><td><code>init_value</code>: 초기화 값</td></tr>
+</table>
+
+<h4>측정/센서</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>CheckVoltage</code></td><td>전압 범위 확인</td><td><code>nMin</code>, <code>nMax</code> (V)</td></tr>
+  <tr><td><code>CheckCurrent</code></td><td>전류 범위 확인</td><td><code>nMin</code>, <code>nMax</code> (A)</td></tr>
+  <tr><td><code>EXT_CURRENT</code></td><td>외부 전류 지연 후 범위 확인</td><td><code>min_current</code>, <code>max_current</code>, <code>check_delay</code></td></tr>
+  <tr><td><code>CheckSound</code></td><td>오디오 출력 상태 확인</td><td><code>nStatus</code>: 상태값</td></tr>
+  <tr><td><code>CheckLCD</code></td><td>LCD 디스플레이 상태 확인</td><td><code>nStatus</code>: 상태값</td></tr>
+</table>
+
+<h4>버튼 제어</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>TenButton</code></td><td>10버튼 패널</td><td><code>nButton</code>: 번호(0~9), <code>nDelay</code>: 지속시간(ms)</td></tr>
+  <tr><td><code>ThreeButton</code></td><td>3버튼 패널</td><td><code>nButton</code>: 번호(0~2), <code>nDelay</code>: 지속시간(ms)</td></tr>
+  <tr><td><code>TwoButton</code></td><td>2버튼 패널</td><td><code>nButton</code>: 번호(0~1), <code>nDelay</code>: 지속시간(ms)</td></tr>
+</table>
+
+<div class="callout callout-info">
+  <strong>IVIQEBenchIOClient 전체 함수 목록:</strong>
+  이 외에도 <code>ACCSinglePulse</code>, <code>BatterySinglePulse</code>, <code>FileToSD</code>, <code>SystemReset</code>,
+  <code>RequestAudioFrequency</code>, <code>RequestLightSensorControl</code> 등 80여 개 함수를 제공합니다.
+  전체 목록은 설정 화면의 <strong>모듈 가이드 패널</strong>에서 확인할 수 있습니다.
+</div>
+
+<h3 id="module-sp25">SP25Bench — SP25 테스트 벤치</h3>
+<p>SP25 테스트 벤치를 제어하는 모듈입니다. eCall, 리부팅, 팩토리 리셋을 지원합니다.</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>eCall</code></td><td>eCall(긴급 통화) 실행</td><td>(없음)</td></tr>
+  <tr><td><code>factory_reset</code></td><td>공장 초기화</td><td>(없음)</td></tr>
+  <tr><td><code>reboot</code></td><td>장비 재부팅</td><td>(없음)</td></tr>
+</table>
+
+<h3 id="module-smartbench">SmartBench — Smart Bench TCP 제어</h3>
+<p>
+  TCP 소켓으로 Smart Bench 장비의 전원, 버튼, 전류, LED를 제어하는 모듈입니다.
+</p>
+<h4>연결 설정</h4>
+<p>디바이스 페이지에서 보조 디바이스 추가 시 모듈 <code>SmartBench</code> 선택. IP 주소를 설정합니다.</p>
+<h4>전원 릴레이 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>Battery</code></td><td>Battery(+B) 릴레이</td><td><code>status</code>: 'on'/'off'</td></tr>
+  <tr><td><code>ACC</code></td><td>ACC 릴레이</td><td><code>status</code>: 'on'/'off'</td></tr>
+  <tr><td><code>IGN</code></td><td>IGN 릴레이</td><td><code>status</code>: 'on'/'off'</td></tr>
+  <tr><td><code>IGN3</code></td><td>IGN3 릴레이</td><td><code>status</code>: 'on'/'off'</td></tr>
+  <tr><td><code>USB</code></td><td>USB 릴레이</td><td><code>status</code>: 'on'/'off'</td></tr>
+</table>
+<h4>검증/제어 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>CheckCurrent</code></td><td>전류 범위 진입 대기 (연속 3회 PASS)</td><td><code>min_current</code>, <code>max_current</code> (A), <code>check_delay</code> (ms)</td></tr>
+  <tr><td><code>CheckCurrentMoment</code></td><td>순간 전류 범위 확인</td><td><code>min_current</code>, <code>max_current</code> (A)</td></tr>
+  <tr><td><code>CheckCurrentMaintain</code></td><td>전류 범위 유지 검증</td><td><code>min_current</code>, <code>max_current</code> (A), <code>check_delay</code> (ms)</td></tr>
+  <tr><td><code>ButtonPress</code></td><td>버튼 누르기</td><td><code>button_num</code>: 번호, <code>press_time</code>: 시간(ms)</td></tr>
+  <tr><td><code>LEDCheck</code></td><td>LED 상태 검증</td><td><code>data</code>: 검증 데이터 문자열</td></tr>
+  <tr><td><code>Relay</code></td><td>릴레이 직접 제어</td><td><code>relay_num</code>: 번호, <code>status</code>: 'on'/'off'</td></tr>
+  <tr><td><code>SendRaw</code></td><td>원시 명령 전송 (고급)</td><td><code>command</code>: 명령어</td></tr>
+</table>
+
+<h3 id="module-ccic-bench">CCIC_BENCH — CCIC 우현벤치</h3>
+<p>
+  UDP 통신으로 차량 전원(IGN/ACC/배터리)을 제어하는 테스트 벤치 장비입니다.
+  각 릴레이에 대해 제어(설정)와 읽기(상태 확인) 함수 쌍을 제공합니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>IGN1</code> / <code>IGN1_Read</code></td><td>이그니션 1 제어 / 상태 읽기</td><td><code>on_off</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>IGN2</code> / <code>IGN2_Read</code></td><td>이그니션 2 제어 / 상태 읽기</td><td><code>on_off</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>ACC</code> / <code>ACC_Read</code></td><td>ACC 전원 제어 / 상태 읽기</td><td><code>on_off</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>BATTERY</code> / <code>BATTERY_Read</code></td><td>배터리 릴레이 제어 / 상태 읽기</td><td><code>on_off</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>BatterySet</code></td><td>배터리 출력 전압 설정</td><td><code>voltage</code>: 전압(V), 기본 14.4</td></tr>
+  <tr><td><code>BatteryCheck</code></td><td>현재 배터리 전압 측정</td><td>(없음)</td></tr>
+  <tr><td><code>AmpereCheck</code></td><td>소비 전류 측정</td><td>(없음)</td></tr>
+  <tr><td><code>SendCommand</code></td><td>직접 UDP 명령 전송</td><td><code>cmd1</code>, <code>cmd2</code>, <code>data_hex</code></td></tr>
+</table>
+
+<!-- ============================== 시리얼/UART 모듈 ============================== -->
+<h3 id="module-uart">Uart — UART 통신</h3>
+<p>
+  시리얼 포트로 UART 통신을 수행하고 로그를 저장하는 모듈입니다.
+  리눅스 콘솔 접속 등에 사용합니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>connect</code></td><td>UART 포트 연결 (로그 없음)</td><td><code>port</code>, <code>bps</code>, <code>endline</code></td></tr>
+  <tr><td><code>add_uart_port</code></td><td>연결 + 로그 저장 시작</td><td><code>port</code>, <code>bps</code>, <code>logFilePath</code>, <code>endline</code></td></tr>
+  <tr><td><code>close</code></td><td>연결 해제</td><td>(없음)</td></tr>
+  <tr><td><code>send_string</code></td><td>문자열 명령 전송</td><td><code>command</code>: 예 'ls -al'</td></tr>
+  <tr><td><code>send_char</code></td><td>단일 문자 전송</td><td><code>char</code>: 한 글자</td></tr>
+  <tr><td><code>send_control_character</code></td><td>제어 문자 전송 (Ctrl+C 등)</td><td><code>control_character</code>: 예 'ETX'</td></tr>
+  <tr><td><code>start_save_file</code></td><td>로그 파일 저장 시작</td><td><code>path_log</code>: 저장 경로</td></tr>
+  <tr><td><code>stop_save_file</code></td><td>로그 파일 저장 중지</td><td>(없음)</td></tr>
+</table>
+
+<h3 id="module-serial-plugin">SerialPlugin — 범용 시리얼 통신</h3>
+<p>
+  RS-232 시리얼 포트로 데이터를 송수신하는 범용 플러그인입니다.
+  텍스트/HEX 전송, 응답 읽기, 키워드 대기(블로킹/비블로킹)를 지원합니다.
+</p>
+<h4>연결 설정</h4>
+<p>디바이스 페이지에서 보조 디바이스 추가 시 <code>시리얼</code> 유형 선택. COM 포트와 Baud Rate를 설정합니다.</p>
+<h4>송수신 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>SendCommand</code></td><td>텍스트 명령 전송</td><td><code>command</code>, <code>encoding</code> (기본 utf-8), <code>append_newline</code> (기본 True)</td></tr>
+  <tr><td><code>SendHex</code></td><td>16진수 바이트 전송</td><td><code>hex_string</code>: 예 'FF 01 A0'</td></tr>
+  <tr><td><code>ReadLine</code></td><td>한 줄 읽기</td><td><code>timeout</code>: 대기 시간(초)</td></tr>
+  <tr><td><code>ReadAll</code></td><td>버퍼 전체 읽기</td><td><code>timeout</code>: 대기 시간(초)</td></tr>
+  <tr><td><code>SendAndRead</code></td><td>전송 후 응답 읽기</td><td><code>command</code>, <code>timeout</code>, <code>encoding</code></td></tr>
+  <tr><td><code>ReadHex</code></td><td>지정 바이트 읽기 (HEX)</td><td><code>count</code>: 바이트 수, <code>timeout</code></td></tr>
+  <tr><td><code>SetBaudrate</code></td><td>통신 속도 변경</td><td><code>baudrate</code>: 예 115200</td></tr>
+</table>
+<h4>키워드 감시 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>LOG_SERIAL</code></td><td>키워드 대기 (<strong>블로킹</strong>)</td><td><code>keyword</code>: 키워드 (공백=AND), <code>timeout</code>: 초</td></tr>
+  <tr><td><code>StartMonitor</code></td><td>백그라운드 감시 (<strong>비블로킹</strong>)</td><td><code>keyword</code>, <code>timeout</code></td></tr>
+  <tr><td><code>StopMonitor</code></td><td>모니터링 중지</td><td><code>monitor_id</code></td></tr>
+  <tr><td><code>GetMonitorResult</code></td><td>모니터링 결과 확인</td><td><code>monitor_id</code></td></tr>
+</table>
+<div class="callout callout-info">
+  <strong>LOG_SERIAL vs StartMonitor:</strong>
+  <code>LOG_SERIAL</code>은 키워드 출현까지 스텝 진행을 멈추는 <strong>블로킹</strong> 방식입니다.
+  <code>StartMonitor</code>는 다음 스텝으로 즉시 넘어가는 <strong>비블로킹</strong> 방식으로, 나중에 <code>GetMonitorResult</code>로 결과를 확인합니다.
+</div>
+
+<h3 id="module-serial-logging">SerialLogging — 시리얼 로깅</h3>
+<p>
+  시리얼 포트에 연결하여 로그를 캡처·저장하고 키워드 PASS/FAIL 판정을 수행하는 모듈입니다.
+  DLTLogging과 동일한 인터페이스(StartSave/StopSave/MarkStep/Search)를 시리얼 환경에 제공합니다.
+</p>
+<h4>연결 설정</h4>
+<p>디바이스 페이지에서 보조 디바이스 추가 시 모듈 <code>SerialLogging</code> 선택. COM 포트와 Baud Rate를 설정합니다.</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>StartSave</code></td><td>연결 + 캡처 + 저장 시작</td><td><code>save_path</code>: 저장 경로 (빈 값이면 자동)</td></tr>
+  <tr><td><code>StopSave</code></td><td>저장 중단 + 연결 해제</td><td>(없음)</td></tr>
+  <tr><td><code>MarkStep</code></td><td>스텝 경계 표시</td><td><code>step_index</code>: 스텝 인덱스</td></tr>
+  <tr><td><code>SearchAll</code></td><td>전체 로그 키워드 검색</td><td><code>keyword</code>: 키워드 (공백=AND), <code>count</code></td></tr>
+  <tr><td><code>SearchRange</code></td><td>스텝 구간 내 검색</td><td><code>keyword</code>, <code>from_step</code>, <code>to_step</code>, <code>count</code></td></tr>
+  <tr><td><code>WaitLog</code></td><td>키워드 대기 (블로킹)</td><td><code>keyword</code>, <code>timeout</code></td></tr>
+  <tr><td><code>SendCommand</code></td><td>시리얼 명령어 전송</td><td><code>command</code>, <code>encoding</code>, <code>append_newline</code></td></tr>
+  <tr><td><code>SendHex</code></td><td>HEX 바이트 전송</td><td><code>hex_string</code>: 예 'FF 01 A0'</td></tr>
+  <tr><td><code>SendAndWait</code></td><td>명령 전송 + 키워드 응답 대기</td><td><code>command</code>, <code>keyword</code>, <code>timeout</code></td></tr>
+  <tr><td><code>ClearLogs</code></td><td>로그 버퍼/스텝 마킹 초기화</td><td>(없음)</td></tr>
+</table>
+<div class="callout callout-info">
+  <strong>전형적인 시리얼 로그 검증 흐름:</strong>
+  <ol style="margin-bottom:0">
+    <li><code>StartSave</code>로 연결 + 로그 저장 시작</li>
+    <li><code>ClearLogs</code>로 버퍼 초기화</li>
+    <li><code>SendCommand</code>로 명령 전송 (예: reboot)</li>
+    <li><code>WaitLog</code>로 기대 로그 출현 대기</li>
+    <li>또는 <code>SendAndWait</code>로 명령 전송과 응답 대기를 한번에 처리</li>
+  </ol>
+</div>
+
+<!-- ============================== 로깅/모니터링 모듈 ============================== -->
+<h3 id="module-dlt-logging">DLTLogging — DLT 로깅 (GUI 불필요)</h3>
+<p>
+  DLT 데몬에 TCP 직접 연결하여 로그를 캡처·저장하고 키워드 PASS/FAIL 판정을 수행하는 모듈입니다.
+  DLTViewer와 달리 GUI 없이 순수 로그 저장/검색 기능만 제공하여 가볍습니다.
+  <code>MarkStep</code>으로 스텝 경계를 표시하여 구간별 검색이 가능합니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>StartSave</code></td><td>DLT 연결 + 캡처 + 저장 시작</td><td><code>save_path</code>: 저장 경로 (빈 값이면 자동)</td></tr>
+  <tr><td><code>StopSave</code></td><td>저장 중단 + 연결 해제</td><td>(없음)</td></tr>
+  <tr><td><code>MarkStep</code></td><td>스텝 경계 표시 (구간 검색용)</td><td><code>step_index</code>: 스텝 인덱스</td></tr>
+  <tr><td><code>SearchAll</code></td><td>전체 로그 키워드 검색 → PASS/FAIL</td><td><code>keyword</code> (공백=AND), <code>count</code></td></tr>
+  <tr><td><code>SearchRange</code></td><td>스텝 구간 내 검색 → PASS/FAIL</td><td><code>keyword</code>, <code>from_step</code>, <code>to_step</code>, <code>count</code></td></tr>
+  <tr><td><code>WaitLog</code></td><td>키워드 대기 (블로킹)</td><td><code>keyword</code>, <code>timeout</code> (초)</td></tr>
+  <tr><td><code>ClearLogs</code></td><td>로그 버퍼/스텝 마킹 초기화</td><td>(없음)</td></tr>
+</table>
+<div class="callout callout-info">
+  <strong>DLTViewer vs DLTLogging:</strong>
+  <ul style="margin-bottom:0">
+    <li><code>DLTViewer</code> — GUI 뷰어 실행 가능, 실시간 로그 검색/모니터링, 프로젝트 파일 관리</li>
+    <li><code>DLTLogging</code> — GUI 없이 가볍게 로그 저장 + 스텝 구간별 PASS/FAIL 판정에 최적화</li>
+  </ul>
+</div>
+
+<h3 id="module-mlp">MLP — MLP 로깅</h3>
+<p>
+  MIB Log Protocol(MLP)로 IVI/SAFE 시스템의 실시간 로그를 수신하여 저장하는 모듈입니다.
+  ICAS3EU/ICAS3CN/MIB3OI 모델을 지원합니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>set_config</code></td><td>MLP 설정 구성</td><td>
+    <code>model</code>: 'ICAS3EU'/'ICAS3CN'/'MIB3OI'<br>
+    <code>mlp_ivi_file_path</code>: IVI 로그 경로<br>
+    <code>mlp_safe_file_path</code>: SAFE 로그 경로 (선택)
+  </td></tr>
+  <tr><td><code>logging_start</code></td><td>로그 저장 시작</td><td>(없음, set_config 먼저 호출)</td></tr>
+  <tr><td><code>logging_stop</code></td><td>로그 저장 중지</td><td>(없음)</td></tr>
+</table>
+
+<!-- ============================== 원격/네트워크 모듈 ============================== -->
+<h3 id="module-ssh">SSHManager — SSH 접속</h3>
+<p>
+  SSH로 원격 장비에 접속하여 명령 실행, 파일 전송(SFTP)을 수행하는 모듈입니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>create_ssh_client</code></td><td>SSH 연결 생성</td><td><code>hostname</code>, <code>username</code>, <code>password</code>, <code>key_filePath</code> (선택)</td></tr>
+  <tr><td><code>close_ssh_client</code></td><td>SSH 연결 종료</td><td>(없음)</td></tr>
+  <tr><td><code>send_command</code></td><td>원격 명령 실행</td><td><code>command</code>: 예 'ls -al'</td></tr>
+  <tr><td><code>send_file</code></td><td>로컬 → 원격 파일 전송</td><td><code>local_path</code>, <code>remote_path</code></td></tr>
+  <tr><td><code>get_file</code></td><td>원격 → 로컬 파일 가져오기</td><td><code>remote_path</code>, <code>local_path</code></td></tr>
+  <tr><td><code>get_file_list_in_dir</code></td><td>원격 디렉토리 파일 목록</td><td><code>path</code>, <code>_filter</code> (예: '*.log')</td></tr>
+</table>
+
+<h3 id="module-ignition">Ignition — 이그니션 제어</h3>
+<p>
+  ICAS3/MIB3 장비의 이그니션을 TCP 소켓으로 제어하는 모듈입니다.
+  기본 주소: <code>192.168.1.4:15500</code>. testiface가 대상 장비에서 실행 중이어야 합니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>connect</code></td><td>TCP 연결</td><td><code>host</code> (기본 192.168.1.4), <code>port</code> (기본 15500)</td></tr>
+  <tr><td><code>close</code></td><td>연결 해제</td><td>(없음)</td></tr>
+  <tr><td><code>send_packet</code></td><td>이그니션 명령 패킷 전송</td><td><code>cmd</code>: 16진수 문자열 (예: '02 2c 01 09')</td></tr>
+  <tr><td><code>compare_packet</code></td><td>수신 패킷 비교</td><td><code>expected</code>: 예상 16진수 문자열</td></tr>
+</table>
+
+<!-- ============================== Android/디바이스 모듈 ============================== -->
+<h3 id="module-android">Android — ADB 제어</h3>
+<p>
+  ADB를 통해 Android 디바이스를 제어하는 모듈입니다.
+  터치, 스와이프, 앱 설치/제거, 스크린 캡처, 셸 명령 등을 지원합니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>adb_tap</code></td><td>화면 터치</td><td><code>x</code>, <code>y</code>, <code>serial</code> (선택)</td></tr>
+  <tr><td><code>adb_swipe</code></td><td>스와이프</td><td><code>x1</code>, <code>y1</code>, <code>x2</code>, <code>y2</code>, <code>duration</code> (ms)</td></tr>
+  <tr><td><code>key_event</code></td><td>키 이벤트 전송</td><td><code>keycode</code> (예: 'KEYCODE_HOME'), <code>long_press</code></td></tr>
+  <tr><td><code>TypingtoScrenn</code></td><td>텍스트 입력</td><td><code>text</code>: 입력 문자열</td></tr>
+  <tr><td><code>adb_shell</code></td><td>셸 명령 실행</td><td><code>cmd</code>: 예 'getprop ro.build.version.release'</td></tr>
+  <tr><td><code>adb_screencap</code></td><td>스크린 캡처</td><td><code>img_path</code>: PC 저장 경로</td></tr>
+  <tr><td><code>adb_push</code></td><td>PC → 디바이스 파일 전송</td><td><code>src</code>, <code>dest</code></td></tr>
+  <tr><td><code>adb_pull</code></td><td>디바이스 → PC 파일 가져오기</td><td><code>src</code>, <code>dest</code></td></tr>
+  <tr><td><code>install_apk</code></td><td>APK 설치</td><td><code>apk_path</code></td></tr>
+  <tr><td><code>uninstall_apk</code></td><td>앱 제거</td><td><code>apk_package</code>: 패키지명</td></tr>
+  <tr><td><code>adb_reboot</code></td><td>디바이스 재부팅</td><td><code>serial</code> (선택)</td></tr>
+  <tr><td><code>start_logcat</code></td><td>로그캣 저장 시작</td><td><code>logpath</code></td></tr>
+  <tr><td><code>stop_logcat</code></td><td>로그캣 저장 중지</td><td>(없음)</td></tr>
+</table>
+
+<!-- ============================== 이미지/카메라/오디오 모듈 ============================== -->
+<h3 id="module-image">ImageProcessing — 이미지 처리</h3>
+<p>
+  OCR(문자 인식), 이미지 비교, 템플릿 매칭 등 이미지 분석을 수행하는 모듈입니다.
+</p>
+<div class="callout callout-warning">
+  <strong>사전 요구사항:</strong> OCR 기능 사용 시 Tesseract-OCR이 설치되어 있어야 합니다.
+</div>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>image_compare</code></td><td>두 이미지 비교 (일치율)</td><td><code>origin</code>, <code>expected</code>: 이미지 경로</td></tr>
+  <tr><td><code>imagesearch</code></td><td>이미지 내 템플릿 검색</td><td><code>origin</code>, <code>expected</code>, <code>threshold</code> (0~100)</td></tr>
+  <tr><td><code>image_cut</code></td><td>이미지 영역 크롭</td><td><code>origin</code>, <code>cut_img</code>, <code>x1</code>, <code>y1</code>, <code>x2</code>, <code>y2</code></td></tr>
+  <tr><td><code>image_valid</code></td><td>이미지 유효성 확인</td><td><code>image</code>: 이미지 경로</td></tr>
+  <tr><td><code>ocr</code></td><td>OCR 텍스트 인식</td><td><code>img_path</code>, <code>language</code> ('eng'/'kor'), <code>psm</code></td></tr>
+  <tr><td><code>ocr_coordinate</code></td><td>특정 문자열 좌표 찾기</td><td><code>img_path</code>, <code>string</code>, <code>language</code></td></tr>
+  <tr><td><code>ocr_sentence</code></td><td>문장 좌표 찾기</td><td><code>img_path</code>, <code>string</code>, <code>language</code></td></tr>
+  <tr><td><code>is_similar</code></td><td>두 텍스트 유사도 비교</td><td><code>text1</code>, <code>text2</code>, <code>tolerance</code></td></tr>
+</table>
+
+<h3 id="module-audio">AudioLibrary — 오디오 분석</h3>
+<p>
+  오디오 녹음 및 음소거 판별을 수행하는 모듈입니다.
+  음악/라디오 소스에서 무음 여부를 확인합니다 (신호/노이즈 비율 25dB 기준).
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>select_channels</code></td><td>오디오 입력 디바이스 선택</td><td><code>audio_device_s</code>: 디바이스명 일부 (예: 'USB')</td></tr>
+  <tr><td><code>start_recording</code></td><td>녹음 시작</td><td><code>record_seconds</code>: 녹음 시간(초), <code>rate</code>, <code>chunk</code></td></tr>
+  <tr><td><code>stop_recording</code></td><td>녹음 중지</td><td>(없음)</td></tr>
+  <tr><td><code>isMute</code></td><td>음소거 상태 판별</td><td>(없음) → TRUE=음소거 / FALSE=소리 있음</td></tr>
+  <tr><td><code>get_max_value</code></td><td>최대 진폭 값</td><td>(없음)</td></tr>
+  <tr><td><code>close</code></td><td>리소스 해제</td><td>(없음)</td></tr>
+</table>
+<div class="callout callout-warning">
+  <strong>isMute 정확도:</strong> 음악/라디오 소스에 최적화되어 있습니다.
+  단일 톤(비프음)이나 화이트 노이즈에서는 정확하지 않을 수 있습니다.
+</div>
+
+<h3 id="module-vision">VisionCamera — 비전 카메라</h3>
+<p>
+  GigE Vision 산업용 카메라로 화면을 캡처하는 모듈입니다.
+  ADB 스크린캡처 대신 외부 카메라로 실제 디스플레이를 촬영할 때 사용합니다.
+</p>
+<h4>연결 설정</h4>
+<p>디바이스 페이지에서 보조 디바이스 추가 시 모듈 <code>VisionCamera</code> 선택. 카메라 IP를 설정합니다.</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>Connect</code></td><td>카메라 연결</td><td>(없음)</td></tr>
+  <tr><td><code>Disconnect</code></td><td>연결 해제</td><td>(없음)</td></tr>
+  <tr><td><code>Capture</code></td><td>캡처 → 파일 저장</td><td><code>save_path</code>: 저장 경로</td></tr>
+  <tr><td><code>CaptureBytes</code></td><td>캡처 → 바이트 반환</td><td><code>fmt</code>: 'png' 또는 'jpeg'</td></tr>
+  <tr><td><code>CropCapture</code></td><td>특정 영역만 크롭 캡처</td><td><code>save_path</code>, <code>left</code>, <code>top</code>, <code>right</code>, <code>bottom</code></td></tr>
+  <tr><td><code>GetInfo</code></td><td>카메라 정보 조회</td><td>(없음)</td></tr>
+</table>
+
+<!-- ============================== 분석/유틸리티 모듈 ============================== -->
+<h3 id="module-trace">Trace — 트레이스 분석</h3>
+<p>
+  함수 호출 트레이스를 분석하여 예상 호출 순서와 실제 호출 순서를 비교하는 모듈입니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>initialize</code></td><td>분석기 초기화</td><td>(없음)</td></tr>
+  <tr><td><code>append_expected</code></td><td>예상 호출 쌍 추가</td><td><code>caller</code>: 호출자, <code>callee</code>: 피호출자</td></tr>
+  <tr><td><code>set_actual</code></td><td>실제 트레이스 파일 설정</td><td><code>path</code>: 트레이스 디렉토리 경로</td></tr>
+  <tr><td><code>compare</code></td><td>예상 vs 실제 비교</td><td>(없음) → 각 호출 쌍 일치 여부 반환</td></tr>
+  <tr><td><code>timeliness</code></td><td>시간 제한 내 호출 확인</td><td><code>time_diff</code>: 허용 시간(ms)</td></tr>
+</table>
+
+<h3 id="module-tigris">TigrisCheck — Tigris 검사</h3>
+<p>
+  특정 ADB 디바이스에서 Tigris 테스트 스위트를 실행하고 결과를 확인하는 모듈입니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>checkTigris</code></td><td>Tigris 검사 실행</td><td><code>ADBID</code>: 디바이스 시리얼, <code>TIGRIS_FOLDER</code>: 폴더 경로, <code>SUITE_NAME</code>: 테스트 스위트</td></tr>
+</table>
+
+<h3 id="module-winutil">COMMON_WINDOWS — Windows 유틸리티</h3>
+<p>
+  Windows 명령어 출력을 파일로 저장하는 유틸리티 모듈입니다.
+</p>
+<h4>주요 함수</h4>
+<table>
+  <tr><th>함수</th><th>설명</th><th>파라미터</th></tr>
+  <tr><td><code>start_save_file_from_command</code></td><td>명령 실행 + 출력 로그 저장</td><td><code>command</code>: 명령어, <code>path_dir_log</code>: 저장 디렉토리</td></tr>
+  <tr><td><code>stop_save_file</code></td><td>로그 저장 중지</td><td>(없음)</td></tr>
+  <tr><td><code>get_file_path</code></td><td>현재 로그 파일 경로</td><td>(없음)</td></tr>
+</table>
 
 
 <!-- ============================== 부록 ============================== -->

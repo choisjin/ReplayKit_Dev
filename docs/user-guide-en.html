@@ -352,51 +352,54 @@
 <body>
 
 <!-- Theme toggle -->
-<button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">🌓</button>
+<button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">&#x1F313;</button>
 
 <!-- Mobile hamburger -->
-<button class="hamburger" onclick="toggleSidebar()">☰</button>
+<button class="hamburger" onclick="toggleSidebar()">&#x2630;</button>
 <div class="overlay" onclick="toggleSidebar()"></div>
 
 <div class="layout">
 
 <!-- Sidebar / TOC -->
 <aside class="sidebar" id="sidebar">
-  <div class="sidebar-logo">📋 ReplayKit</div>
+  <div class="sidebar-logo">&#x1F4CB; ReplayKit</div>
   <div class="sidebar-version">User Guide v1.0</div>
   <nav id="toc">
     <a href="#intro" class="toc-h2">Introduction</a>
     <a href="#overview" class="toc-h3">System Overview</a>
     <a href="#workflow" class="toc-h3">Core Workflow</a>
 
-    <a href="#install" class="toc-h2">Installation & Launch</a>
+    <a href="#install" class="toc-h2">Installation &amp; Launch</a>
     <a href="#install-req" class="toc-h3">System Requirements</a>
     <a href="#install-setup" class="toc-h3">Installation</a>
-    <a href="#install-run" class="toc-h3">Running the App</a>
+    <a href="#install-run" class="toc-h3">Running</a>
     <a href="#install-update" class="toc-h3">Updates</a>
+    <a href="#install-launcher" class="toc-h3">Launcher</a>
 
     <a href="#device" class="toc-h2">Device Management</a>
     <a href="#device-primary" class="toc-h3">Primary Device</a>
-    <a href="#device-auxiliary" class="toc-h3">Auxiliary Devices</a>
+    <a href="#device-auxiliary" class="toc-h3">Auxiliary Device</a>
     <a href="#device-actions" class="toc-h3">Device Actions</a>
 
     <a href="#record" class="toc-h2">Recording</a>
-    <a href="#record-start" class="toc-h3">Start Recording</a>
+    <a href="#record-start" class="toc-h3">Starting a Recording</a>
     <a href="#record-gestures" class="toc-h3">Gesture Recording</a>
     <a href="#record-steps" class="toc-h3">Step Types</a>
-    <a href="#record-expected" class="toc-h3">Expected Images</a>
+    <a href="#record-expected" class="toc-h3">Expected Image</a>
     <a href="#record-compare" class="toc-h3">Image Comparison Modes</a>
     <a href="#record-edit" class="toc-h3">Step Editing</a>
+    <a href="#record-wait" class="toc-h3">Wait Step</a>
     <a href="#record-conditional" class="toc-h3">Conditional Jump</a>
 
     <a href="#scenario" class="toc-h2">Scenario Management</a>
     <a href="#scenario-list" class="toc-h3">Scenario List</a>
-    <a href="#scenario-play" class="toc-h3">Playback (Execution)</a>
+    <a href="#scenario-detail" class="toc-h3">Scenario Details</a>
+    <a href="#scenario-play" class="toc-h3">Playback (Run)</a>
     <a href="#scenario-group" class="toc-h3">Group Management</a>
     <a href="#scenario-export" class="toc-h3">Export / Import</a>
 
     <a href="#results" class="toc-h2">Test Results</a>
-    <a href="#results-list" class="toc-h3">Result List</a>
+    <a href="#results-list" class="toc-h3">Results List</a>
     <a href="#results-detail" class="toc-h3">Result Details</a>
     <a href="#results-export" class="toc-h3">Excel Export</a>
     <a href="#results-webcam" class="toc-h3">Webcam Recording</a>
@@ -405,17 +408,43 @@
 
     <a href="#webcam" class="toc-h2">Webcam PiP</a>
 
-    <a href="#tips" class="toc-h2">Tips & Troubleshooting</a>
+    <a href="#tips" class="toc-h2">Tips &amp; Troubleshooting</a>
     <a href="#tips-faq" class="toc-h3">FAQ</a>
     <a href="#tips-shortcuts" class="toc-h3">Shortcuts</a>
 
     <a href="#modules" class="toc-h2">Module Guide</a>
     <a href="#module-cmd" class="toc-h3">CMD (Command Execution)</a>
-    <a href="#module-dlt" class="toc-h3">DLTViewer (DLT Log)</a>
+    <a href="#module-dlt" class="toc-h3">DLTViewer (DLT Logs)</a>
+    <a href="#module-power" class="toc-h3">POWER (Power Supply)</a>
+    <a href="#module-riden" class="toc-h3">RIDEN (Power Supply)</a>
+    <a href="#module-keysight" class="toc-h3">KeysightPower (Power Supply)</a>
+    <a href="#module-can" class="toc-h3">CAN (CAN Bus)</a>
+    <a href="#module-canoe" class="toc-h3">CANoe (Simulation)</a>
+    <a href="#module-canat" class="toc-h3">CANat (CAN Device)</a>
+    <a href="#module-pcan" class="toc-h3">PCANClient (Peak CAN)</a>
+    <a href="#module-bench" class="toc-h3">BENCH (Bench Socket)</a>
+    <a href="#module-ivi-bench" class="toc-h3">IVIQEBenchIO (QE Bench)</a>
+    <a href="#module-sp25" class="toc-h3">SP25Bench (SP25 Bench)</a>
+    <a href="#module-smartbench" class="toc-h3">SmartBench (Smart Bench)</a>
+    <a href="#module-ccic-bench" class="toc-h3">CCIC_BENCH (CCIC Bench)</a>
+    <a href="#module-uart" class="toc-h3">Uart (UART Communication)</a>
+    <a href="#module-serial-plugin" class="toc-h3">SerialPlugin (Serial)</a>
+    <a href="#module-serial-logging" class="toc-h3">SerialLogging (Serial Logging)</a>
+    <a href="#module-dlt-logging" class="toc-h3">DLTLogging (DLT Logging)</a>
+    <a href="#module-mlp" class="toc-h3">MLP (MLP Logging)</a>
+    <a href="#module-ssh" class="toc-h3">SSHManager (SSH Access)</a>
+    <a href="#module-ignition" class="toc-h3">Ignition (Ignition Control)</a>
+    <a href="#module-android" class="toc-h3">Android (ADB Control)</a>
+    <a href="#module-image" class="toc-h3">ImageProcessing (Image)</a>
+    <a href="#module-audio" class="toc-h3">AudioLibrary (Audio)</a>
+    <a href="#module-vision" class="toc-h3">VisionCamera (Vision Camera)</a>
+    <a href="#module-trace" class="toc-h3">Trace (Trace Analysis)</a>
+    <a href="#module-tigris" class="toc-h3">TigrisCheck (Tigris Check)</a>
+    <a href="#module-winutil" class="toc-h3">COMMON_WINDOWS (Utilities)</a>
 
     <a href="#appendix" class="toc-h2">Appendix</a>
-    <a href="#appendix-steps" class="toc-h3">Step Type Reference</a>
-    <a href="#appendix-compare" class="toc-h3">Comparison Mode Reference</a>
+    <a href="#appendix-steps" class="toc-h3">Step Types Reference</a>
+    <a href="#appendix-compare" class="toc-h3">Comparison Modes Reference</a>
     <a href="#appendix-status" class="toc-h3">Result Status Codes</a>
   </nav>
 </aside>
@@ -426,34 +455,34 @@
 <!-- ============================== Introduction ============================== -->
 <h1 id="intro">
   ReplayKit User Guide
-  <small>Test Automation Platform — Record, Replay, and Verify in One</small>
+  <small>Test Automation Platform &mdash; Recording, Playback, and Verification in One</small>
 </h1>
 
 <h3 id="overview">System Overview</h3>
 <p>
-  <strong>ReplayKit</strong> is a <strong>test automation platform</strong> that records user interactions
-  on Android and IVI (In-Vehicle Infotainment) devices, automatically replays them while verifying
+  <strong>ReplayKit</strong> is a <strong>test automation platform</strong> that records user interactions on
+  Android and IVI (In-Vehicle Infotainment) devices, automatically plays them back while verifying
   results through screenshot-based image comparison (SSIM), and generates Excel reports.
 </p>
 
 <table>
   <tr><th>Component</th><th>Technology</th><th>Role</th></tr>
-  <tr><td>Backend</td><td>Python (FastAPI)</td><td>Device control, record/playback engine, image comparison</td></tr>
+  <tr><td>Backend</td><td>Python (FastAPI)</td><td>Device control, recording/playback engine, image comparison</td></tr>
   <tr><td>Frontend</td><td>React + TypeScript + Ant Design</td><td>User interface (web browser)</td></tr>
   <tr><td>Device Connection</td><td>ADB / TCP Socket / Serial</td><td>Android, HKMC IVI, serial devices, etc.</td></tr>
 </table>
 
 <h3 id="workflow">Core Workflow</h3>
 <div class="step-flow">
-  <span class="step-item">① Connect Device</span>
-  <span class="step-arrow">→</span>
-  <span class="step-item">② Record Actions</span>
-  <span class="step-arrow">→</span>
-  <span class="step-item">③ Set Expected Images</span>
-  <span class="step-arrow">→</span>
-  <span class="step-item">④ Play Scenario</span>
-  <span class="step-arrow">→</span>
-  <span class="step-item">⑤ Review Results & Report</span>
+  <span class="step-item">&#x2460; Connect Device</span>
+  <span class="step-arrow">&rarr;</span>
+  <span class="step-item">&#x2461; Record Actions</span>
+  <span class="step-arrow">&rarr;</span>
+  <span class="step-item">&#x2462; Set Expected Images</span>
+  <span class="step-arrow">&rarr;</span>
+  <span class="step-item">&#x2463; Play Scenario</span>
+  <span class="step-arrow">&rarr;</span>
+  <span class="step-item">&#x2464; Review Results &amp; Report</span>
 </div>
 
 <div class="figure" style="padding:24px 16px;">
@@ -505,7 +534,7 @@
     <text class="lb" x="247" y="155" text-anchor="middle">Send Commands</text>
     <!-- Arrow: Engine -> Result -->
     <line x1="515" y1="105" x2="628" y2="105" stroke="var(--accent)" stroke-width="2.5" marker-end="url(#ah)"/>
-    <text class="lb" x="572" y="97" text-anchor="middle">Verification Results</text>
+    <text class="lb" x="572" y="97" text-anchor="middle">Verification Result</text>
     <!-- Arrow: Engine down to Compare -->
     <line x1="380" y1="180" x2="380" y2="228" stroke="var(--text-muted)" stroke-width="2" marker-end="url(#ah-m)"/>
     <text class="lb" x="393" y="210" text-anchor="start">Screenshot</text>
@@ -521,71 +550,71 @@
 
 
 <!-- ============================== Installation ============================== -->
-<h2 id="install">Installation & Launch</h2>
+<h2 id="install">Installation &amp; Launch</h2>
 
 <h3 id="install-req">System Requirements</h3>
 <table>
   <tr><th>Item</th><th>Requirement</th></tr>
-  <tr><td>OS</td><td>Windows 10 or later (64-bit)</td></tr>
-  <tr><td>Python</td><td>Embedded Python included (no separate installation required)</td></tr>
-  <tr><td>Git</td><td>Installation prompt provided if not found (required for auto-update)</td></tr>
-  <tr><td>Node.js</td><td>Only needed for development mode (not required for distribution)</td></tr>
-  <tr><td>Browser</td><td>Chrome, Edge, or other modern browsers</td></tr>
-  <tr><td>Device</td><td>Android device with USB debugging enabled, HKMC IVI, GigE Vision camera, or DLT-capable ECU</td></tr>
-  <tr><td>Vimba X SDK</td><td>Required for Vision Camera usage (selectable during installation)</td></tr>
-  <tr><td>DLT Viewer SDK</td><td>Required for DLT log GUI viewer (selectable during installation)</td></tr>
+  <tr><td>Operating System</td><td>Windows 10 or later (64-bit)</td></tr>
+  <tr><td>Python</td><td>Embedded Python included (no separate installation needed)</td></tr>
+  <tr><td>Git</td><td>Installation prompt provided if not installed (required for automatic updates)</td></tr>
+  <tr><td>Node.js</td><td>Only required for development mode (not needed for distribution builds)</td></tr>
+  <tr><td>Browser</td><td>Chrome, Edge, or any modern browser</td></tr>
+  <tr><td>Devices</td><td>Android device with USB debugging enabled, HKMC IVI, GigE Vision camera, or DLT-enabled ECU</td></tr>
+  <tr><td>Vimba X SDK</td><td>Required for Vision Camera usage (optional during installation)</td></tr>
+  <tr><td>DLT Viewer SDK</td><td>Required for DLT log GUI viewer (optional during installation)</td></tr>
 </table>
 
 <h3 id="install-setup">Installation</h3>
 
 <h4>Method 1: Using the Installer (Recommended)</h4>
 <ol class="numbered-steps">
-  <li>Run <code>ReplayKit_Setup_1.0.exe</code> → Allow administrator privileges</li>
+  <li>Run <code>ReplayKit_Setup_1.0.exe</code> &rarr; Allow administrator privileges</li>
   <li>Confirm the installation path (default: <code>C:\ReplayKit</code>)</li>
   <li><strong>Select components</strong>:
     <ul>
-      <li><strong>ReplayKit Core</strong> — Base (required, includes embedded Python)</li>
-      <li><strong>DLT Viewer SDK</strong> — Check if you use the DLT log viewer GUI (included in Standard by default)</li>
-      <li><strong>Vimba X SDK</strong> — Check if you use a Vision Camera (included in Full selection)</li>
+      <li><strong>ReplayKit Core</strong> &mdash; Required (includes embedded Python)</li>
+      <li><strong>DLT Viewer SDK</strong> &mdash; Check if you use the DLT log viewer GUI (included in Standard)</li>
+      <li><strong>Vimba X SDK</strong> &mdash; Check if you use Vision Camera (included in Full)</li>
     </ul>
   </li>
-  <li>After file copying completes, the <strong>setup window</strong> (setup.bat) opens automatically</li>
-  <li>Python is included in embedded form, so <strong>no separate installation is needed</strong></li>
-  <li><strong>If Git is not installed</strong> — The Git installer launches automatically:
+  <li>After file copy completes, the <strong>environment setup window</strong> (setup.bat) opens automatically</li>
+  <li>Python is included as embedded, so <strong>no separate installation is needed</strong></li>
+  <li><strong>If Git is not installed</strong> &mdash; The Git installer will launch automatically:
     <ul>
-      <li>Click Next with the default settings to install</li>
+      <li>Click Next with default settings to install</li>
       <li>After installation, <strong>press any key</strong> to continue</li>
     </ul>
   </li>
-  <li>Python packages are installed automatically → Git repository initialized → Done</li>
+  <li>Python packages install automatically &rarr; Git repository initialized &rarr; Done</li>
   <li>Launch ReplayKit after installation completes</li>
 </ol>
 
 <div class="callout callout-info">
-  <strong>💡 Embedded Python</strong>
-  The distribution includes Python 3.10 Embedded, so there is no need to install Python separately on your system.
-  When setup.bat runs, it automatically installs pip and required packages into the embedded Python.
-  In a development environment, you can also use system Python 3.10 + venv.
+  <strong>&#x1F4A1; Embedded Python</strong>
+  The distribution includes Python 3.10 Embedded, so you do not need to install Python on your system separately.
+  Running setup.bat automatically installs pip and required packages into the embedded Python.
+  For development, you can also use system Python 3.10 + venv.
 </div>
 
 <h4>Method 2: Manual Installation (Development Environment)</h4>
 <pre><code># Initial setup in the project folder (one-time only)
 setup.bat
 
-# If embedded Python is not present, it automatically creates system Python 3.10 + venv
-# Installs venv, Python packages, and Node packages all at once</code></pre>
+# If embedded Python is not found, it automatically creates a venv using system Python 3.10
+# Installs venv, Python packages, and Node packages</code></pre>
 
-<h3 id="install-run">Running the App</h3>
+<h3 id="install-run">Running</h3>
 
-<h4>Running the Distribution</h4>
+<h4>Distribution Launch</h4>
 <p>Double-click <code>ReplayKit.bat</code> to launch the server management GUI.</p>
 
-<h4>Development: Server Management GUI</h4>
+<h4>Development Environment: Server Management GUI</h4>
 <pre><code>python server.py</code></pre>
-<p>A Tkinter-based GUI window opens, allowing you to manage the backend and frontend simultaneously.
-Once the server is ready, <strong>the browser opens automatically.</strong></p>
+<p>A Tkinter-based GUI window opens to manage both backend and frontend simultaneously.
+When the server is ready, <strong>the browser opens automatically.</strong></p>
 
-<h4>Development: Manual Launch</h4>
+<h4>Development Environment: Manual Launch</h4>
 <pre><code># Terminal 1: Backend
 venv\Scripts\activate
 python -m uvicorn backend.app.main:app --reload --port 8000
@@ -594,38 +623,76 @@ python -m uvicorn backend.app.main:app --reload --port 8000
 cd frontend
 npm run dev</code></pre>
 
-<p>After launching, navigate to <code>http://localhost:5173</code> in your browser to see the ReplayKit interface.</p>
+<p>After launch, open <code>http://localhost:5173</code> in your browser to access the ReplayKit interface.</p>
 
 <div class="callout callout-info">
-  <strong>💡 Tip</strong>
+  <strong>&#x1F4A1; Tip</strong>
   The frontend automatically proxies API requests to the backend, so no separate CORS configuration is needed.
 </div>
 
 <h3 id="install-update">Updates</h3>
-<p>ReplayKit supports Git-based automatic updates. Click the <strong>Sync + Start</strong> button in the server management GUI to:</p>
-<ol>
-  <li>Automatically reset local changes (to prevent build file conflicts)</li>
-  <li>Download the latest code via Git (git pull)</li>
-  <li>Automatically install updated Python packages</li>
-  <li>Automatically restart the server and open the browser</li>
+<p>ReplayKit can be updated in two ways:</p>
+
+<h4>Method 1: Update from the Web (Recommended)</h4>
+<ol class="numbered-steps">
+  <li>Click the <strong>Update</strong> button in the left menu</li>
+  <li>Click <strong>OK</strong> in the confirmation dialog</li>
+  <li>A "Server updating..." waiting screen appears</li>
+  <li>The server automatically shuts down &rarr; runs git pull &rarr; restarts</li>
+  <li>The page refreshes automatically when the server is ready</li>
 </ol>
 
+<h4>Method 2: Re-run ReplayKit.bat</h4>
+<p>Close the program completely and re-run <code>ReplayKit.bat</code>.
+On startup, git pull runs automatically to update to the latest version.</p>
+
 <div class="callout callout-info">
-  <strong>💡 User Data Preserved During Updates</strong>
-  Scenarios, test results, device settings, path configurations, and other user data are not tracked by Git,
+  <strong>&#x1F4A1; User Data Preserved During Updates</strong>
+  User data such as scenarios, test results, device settings, and path configurations are not tracked by git,
   so they remain unchanged during updates.
+</div>
+
+<h3 id="install-launcher">Launcher</h3>
+<p>The ReplayKit Launcher is a minimized control panel that provides server management functions.</p>
+<table>
+  <tr><th>Button</th><th>Function</th></tr>
+  <tr><td><strong>&#x25B6; / &#x25A0;</strong></td><td>Start/Stop server toggle. Red &#x25A0; when running, green &#x25B6; when stopped</td></tr>
+  <tr><td><strong>&#x21BB;</strong></td><td>Restart server (git pull + server restart)</td></tr>
+  <tr><td><strong>&#x1F310;</strong></td><td>Open web browser</td></tr>
+  <tr><td><strong>&#x2501;</strong></td><td>Minimize to system tray</td></tr>
+  <tr><td><strong>&#x2715;</strong></td><td>Exit program completely</td></tr>
+</table>
+
+<div class="callout callout-info">
+  <strong>&#x1F4A1; System Tray</strong>
+  Closing the launcher window (&#x2501; button or X button) minimizes it to the system tray.
+  Right-click the tray icon to access Start/Stop/Restart/Open Web/Exit menus.
+  Double-click the tray icon to restore the launcher window.
+</div>
+
+<div class="callout callout-info">
+  <strong>&#x1F4A1; Launcher Logs</strong>
+  Click the <strong>ReplayKit</strong> logo in the top-left of the web interface <strong>5 times consecutively</strong>
+  to open the launcher log window, where you can view server startup/sync/update logs.
 </div>
 
 
 <!-- ============================== Device ============================== -->
 <h2 id="device">Device Management</h2>
 <p>
-  On the <strong>Device</strong> tab — ReplayKit's first screen — you register and manage the devices used for testing.
-  Devices are divided into <strong>primary devices</strong> and <strong>auxiliary devices</strong>.
+  The <strong>Device</strong> tab is the first screen of ReplayKit, where you register and manage devices for testing.
+  Devices are divided into <strong>Primary Devices</strong> and <strong>Auxiliary Devices</strong>,
+  and devices of the same type are <strong>grouped together</strong> for display.
 </p>
+<div class="callout callout-info">
+  <strong>&#x1F4A1; Device ID Convention</strong>
+  Each device is assigned a unique ID in the format <code>ModelName_Number</code>.
+  Example: <code>Connected_Wide_1</code>, <code>CAN_2</code>.
+  <strong>Drag-and-drop</strong> within a group to reorder; numbers are automatically reassigned.
+</div>
 
 <h3 id="device-primary">Primary Device</h3>
-<p>The primary device is the target for screen interactions and screenshot capture.</p>
+<p>The target device for screen interaction and screenshot capture.</p>
 
 <table>
   <tr><th>Type</th><th>Connection</th><th>Description</th></tr>
@@ -649,54 +716,55 @@ npm run dev</code></pre>
     <td><span class="badge badge-yellow">Vision Camera</span></td>
     <td>GigE Vision (UDP)</td>
     <td>
-      GigE Vision industrial camera. Automatically detected via GVCP protocol during scanning,
+      GigE Vision industrial camera. Automatically detected via GVCP protocol during scan,
       displaying MAC address, current IP, and subnet information.
-      Additional features available when Vimba X SDK is installed.
+      Additional features available with Vimba X SDK installed.
     </td>
   </tr>
 </table>
 
 <h4>Connecting a Device</h4>
 <ol class="numbered-steps">
-  <li>Click the <strong>Scan</strong> button — ADB, HKMC, and Vision Camera devices are detected simultaneously</li>
-  <li>Select the desired device from the detected list and click <strong>Connect</strong></li>
-  <li>If a device is not detected, you can manually enter the address in the <strong>Manual Connect</strong> tab</li>
+  <li>Click <strong>Add Primary Device</strong> or <strong>Add Auxiliary Device</strong> button</li>
+  <li>For primary devices, select <strong>Project</strong> and <strong>Equipment Model</strong>. The Device ID prefix is determined by the model (e.g., GVM &rarr; <code>GVM_1</code>)</li>
+  <li>Select a device auto-detected by <strong>Scan</strong>, or enter the address manually in the <strong>Manual Connect</strong> tab</li>
+  <li>For auxiliary devices, select a <strong>Module</strong>; the module name becomes the Device ID prefix (e.g., CAN &rarr; <code>CAN_1</code>)</li>
 </ol>
 
 <div class="callout callout-warning">
-  <strong>⚠️ ADB Device Preparation</strong>
-  <em>Settings → Developer Options → USB Debugging</em> must be enabled on the Android device.
-  For WiFi connection, the <code>adb tcpip 5555</code> command must be executed first.
+  <strong>&#x26A0;&#xFE0F; ADB Device Preparation</strong>
+  <em>Settings &rarr; Developer Options &rarr; USB Debugging</em> must be enabled on the Android device.
+  For WiFi connection, run <code>adb tcpip 5555</code> on the device first.
 </div>
 
 <h4>Vision Camera Connection (GigE Vision)</h4>
 <p>GigE Vision cameras connected to the network are automatically detected during scanning.
-The detection results show both the camera's current IP and the PC's network interface IP.</p>
+The scan results display the camera's current IP along with the PC network interface IP.</p>
 
 <ol class="numbered-steps">
-  <li>When a camera is detected during <strong>Scan</strong>, its MAC, model, and current IP are displayed</li>
-  <li>If the camera IP is on a <strong>different subnet</strong> than the PC, click the <strong>Change IP</strong> button</li>
-  <li>In the ForceIP dialog, an IP matching the PC's subnet is <strong>automatically suggested</strong></li>
-  <li>After confirming, the camera IP is changed and a rescan is performed automatically</li>
-  <li>Now click the <strong>Connect</strong> button — the values are populated in the Manual Connect tab, and click Connect to finish</li>
+  <li>When a camera is detected during <strong>Scan</strong>, the MAC, model, and current IP are shown</li>
+  <li>If the camera IP is on a <strong>different subnet</strong> from the PC, click the <strong>Change IP</strong> button</li>
+  <li>In the ForceIP dialog, an IP matching the PC subnet is <strong>automatically suggested</strong></li>
+  <li>Click OK to change the camera IP; the system rescans automatically</li>
+  <li>Now click <strong>Connect</strong> to populate the manual connection tab and complete the connection</li>
 </ol>
 
 <div class="callout callout-info">
-  <strong>💡 What is ForceIP?</strong>
-  ForceIP is a forced IP assignment feature defined in the GigE Vision standard. When a camera is on a different
-  subnet from the PC and cannot communicate, it changes the camera's IP to the same subnet as the PC to enable connection.
-  This setting may be reset when the camera reboots.
+  <strong>&#x1F4A1; What is ForceIP?</strong>
+  ForceIP is a GigE Vision standard feature for forcing IP configuration. When the camera is on a different
+  subnet from the PC and cannot communicate, it changes the camera's IP to match the PC's subnet.
+  This setting may reset when the camera is rebooted.
 </div>
 
-<h3 id="device-auxiliary">Auxiliary Devices</h3>
-<p>Auxiliary devices support the primary device. They are used for serial communication, module control, and more.</p>
+<h3 id="device-auxiliary">Auxiliary Device</h3>
+<p>External devices that support the primary device, used for serial communication, module control, etc.</p>
 
 <table>
   <tr><th>Type</th><th>Connection</th><th>Description</th></tr>
   <tr>
     <td><span class="badge badge-blue">Serial</span></td>
     <td>COM Port / USB</td>
-    <td>Serial communication device. Baudrate configurable (default 115200)</td>
+    <td>Serial communication device. Configurable baud rate (default 115200)</td>
   </tr>
   <tr>
     <td><span class="badge badge-green">Module</span></td>
@@ -711,62 +779,129 @@ The detection results show both the camera's current IP and the PC's network int
 </table>
 
 <h3 id="device-actions">Device Actions</h3>
+
+<h4>Connection Status Display</h4>
+<p>Each device displays its current connection status in real time:</p>
+<table>
+  <tr><th>Status</th><th>Color</th><th>Description</th></tr>
+  <tr><td><span class="badge badge-green">Connected</span></td><td>Green</td><td>Device is connected and ready to use</td></tr>
+  <tr><td><span class="badge badge-blue">Connecting</span></td><td>Blue (blinking)</td><td>Connection attempt in progress</td></tr>
+  <tr><td><span class="badge">Disconnected</span></td><td>Gray</td><td>Registered but not connected</td></tr>
+  <tr><td><span class="badge badge-red">Offline</span></td><td>Red</td><td>Device cannot be found</td></tr>
+  <tr><td><span class="badge badge-red">Error</span></td><td>Red</td><td>Error occurred during connection attempt</td></tr>
+</table>
+
+<h4>Group and Order Management</h4>
+<p>Devices are grouped by type (Device ID prefix) into group cards.
+  <strong>Drag-and-drop</strong> (using the left &#x2807; handle) within a group to reorder;
+  Device ID numbers are automatically reassigned.</p>
+<p>When a device is <strong>deleted</strong>, the remaining devices in the same group are automatically renumbered starting from 1.</p>
+
+<h4>Editing Device Information</h4>
+<p>Click the <strong>Edit</strong> button to open the edit modal:</p>
 <ul>
-  <li><strong>Rename</strong> — Edit the display name of a device</li>
-  <li><strong>Edit Info</strong> — Change address, baudrate, module assignment, etc.</li>
-  <li><strong>Disconnect</strong> — Unregister a device</li>
-  <li><strong>Restart ADB Server</strong> — Restart the ADB server when connection issues occur</li>
-  <li><strong>Reconnect</strong> — Attempt to reconnect a disconnected device</li>
+  <li><strong>Device ID (prefix)</strong> &mdash; Changeable via dropdown. Primary devices show project model list; auxiliary devices show module list. On change, automatically assigned to the next number in the new group.</li>
+  <li><strong>Name</strong> &mdash; Change the device display name</li>
+  <li><strong>Baudrate</strong> &mdash; Change the serial device communication speed</li>
+  <li><strong>Module</strong> &mdash; Change the auxiliary device's connected module</li>
 </ul>
+
+<h4>Per-Device Buttons</h4>
+<p>Buttons appear on the right side of each device entry based on its status:</p>
+<ul>
+  <li><strong>Connect</strong> &mdash; Shown for disconnected devices. Click to attempt connection</li>
+  <li><strong>Disconnect</strong> &mdash; Shown for connected devices. Click to disconnect while keeping the registration</li>
+  <li><strong>Edit</strong> &mdash; Modify the device's name, address, settings, etc.</li>
+  <li><strong>Delete</strong> &mdash; Completely remove the device registration (disconnects and renumbers automatically)</li>
+</ul>
+
+<h4>Batch Action Buttons</h4>
+<p>Batch action buttons are available at the top of the device list:</p>
+<ul>
+  <li><strong>Connect All</strong> &mdash; Attempt to connect all registered devices</li>
+  <li><strong>Connect Selected (N)</strong> &mdash; Connect only devices selected via checkbox</li>
+  <li><strong>Disconnect All</strong> &mdash; Disconnect all devices</li>
+  <li><strong>Disconnect Selected (N)</strong> &mdash; Disconnect only selected devices</li>
+</ul>
+
+<div class="callout callout-info">
+  <strong>&#x1F4A1; Default State on Server Start</strong>
+  When the server starts, all devices are in <strong>Disconnected</strong> state.
+  You must manually click <strong>Connect All</strong> or individual <strong>Connect</strong> buttons on the Device tab.
+  Disconnecting disables auto-reconnect. Click <strong>Connect</strong> again to re-enable auto-reconnect.
+</div>
 
 
 <!-- ============================== Recording ============================== -->
 <h2 id="record">Recording</h2>
 <p>
-  In the <strong>Recording</strong> tab, you watch the device's live screen and record user interactions
-  to create test scenarios. Each interaction is saved as a <strong>step</strong>.
+  The <strong>Recording</strong> tab lets you watch the device's live screen and record user interactions
+  to create test scenarios. Each interaction is saved as a <strong>Step</strong>.
 </p>
 
-<h3 id="record-start">Start Recording</h3>
+<h3 id="record-start">Starting a Recording</h3>
+
+<h4>Non-Recording State (Recording Control Card)</h4>
 <ol class="numbered-steps">
-  <li>Enter a <strong>scenario name</strong> (e.g., "Settings_WiFi_Connection_Test")</li>
-  <li>Optionally add a <strong>description</strong></li>
-  <li>Select a <strong>target device</strong> (from the primary device list)</li>
+  <li>In the recording control card, select an existing scenario from the <strong>Scenario dropdown</strong> or click <strong>Create New</strong> to create a new one</li>
+  <li>When clicking Create New, enter the scenario name in the modal. If a duplicate name exists, you can choose to overwrite or rename</li>
+  <li>Optionally enter a <strong>Description</strong></li>
   <li>Click the <strong>Start Recording</strong> button</li>
-  <li>The device screen streams in real time — click/drag on the screen to record interactions</li>
-  <li>When all interactions are done, click <strong>Stop Recording</strong> to save the scenario</li>
 </ol>
 
+<h4>Scenario Management Buttons</h4>
+<p>Management buttons appear next to the scenario dropdown (when a scenario is selected):</p>
+<ul>
+  <li><strong>Copy</strong> &mdash; Copy the current scenario with a new name</li>
+  <li><strong>Rename</strong> &mdash; Rename the scenario</li>
+  <li><strong>Delete</strong> &mdash; Delete the scenario (confirmation required)</li>
+</ul>
+
+<h4>Recording State</h4>
+<p>When recording starts, the layout changes:</p>
+<ul>
+  <li><strong>Top bar</strong>: Scenario name (read-only) + description input + <span class="badge badge-red">&#x25CF; Recording</span> tag and <strong>Stop Recording</strong> button on the right</li>
+  <li><strong>Manual step add card</strong>: Row 1 has target device + step type, Row 2 has parameter input + delay. <strong>+ Add Step</strong> button in the top-right</li>
+  <li><strong>Recorded step list</strong>: Steps are added in real time as they are recorded</li>
+</ul>
+<p>Click/drag on the device screen to automatically record steps. Even during recording, you can use all editing features including step reordering, Wait insertion, and expected image capture.</p>
+
+<div class="callout callout-warning">
+  <strong>&#x26A0;&#xFE0F; Save Confirmation</strong>
+  When navigating to another page or closing the browser after stopping recording, a <strong>save confirmation</strong> dialog appears.
+  Unsaved changes will be lost if you navigate away without saving.
+</div>
+
 <div class="callout callout-info">
-  <strong>💡 Continue Recording</strong>
-  You can load an already-saved scenario and add steps at the end.
-  <strong>Load Saved Scenario</strong> → Select scenario → <strong>Continue Recording</strong>
+  <strong>&#x1F4A1; Continue Recording</strong>
+  Selecting an already saved scenario from the dropdown loads its steps.
+  Use the <strong>Continue Recording</strong> button to append new steps after the existing ones.
 </div>
 
 <h3 id="record-gestures">Gesture Recording</h3>
-<p>Gestures are automatically recognized when you interact with the mouse on the device's live screen:</p>
+<p>Gestures are automatically recognized when you interact with the device's live screen using the mouse:</p>
 
 <table>
   <tr><th>Mouse Action</th><th>Recognized Gesture</th><th>Recorded Data</th></tr>
   <tr><td>Click</td><td><strong>Tap</strong></td><td>Click coordinates (x, y)</td></tr>
   <tr><td>Long click</td><td><strong>Long Press</strong></td><td>Coordinates + duration (ms)</td></tr>
-  <tr><td>Drag</td><td><strong>Swipe</strong></td><td>Start coordinates → End coordinates</td></tr>
+  <tr><td>Drag</td><td><strong>Swipe</strong></td><td>Start coordinates &rarr; End coordinates</td></tr>
 </table>
 
 <h3 id="record-steps">Step Types</h3>
 <p>In addition to gestures, various steps can be added manually:</p>
 
 <table>
-  <tr><th>Step Type</th><th>Description</th><th>Usage Example</th></tr>
+  <tr><th>Step Type</th><th>Description</th><th>Example Use</th></tr>
   <tr><td><code>tap</code></td><td>Touch a specific coordinate on screen</td><td>Button click</td></tr>
-  <tr><td><code>long_press</code></td><td>Long touch for a specified duration</td><td>Invoke long-press menu</td></tr>
+  <tr><td><code>long_press</code></td><td>Touch and hold for a specified duration</td><td>Long press menu</td></tr>
   <tr><td><code>swipe</code></td><td>Drag from start point to end point</td><td>Screen scroll, slider control</td></tr>
-  <tr><td><code>input_text</code></td><td>Text input</td><td>Enter text in a search field</td></tr>
-  <tr><td><code>key_event</code></td><td>Send hardware key</td><td>Back key (KEYCODE_BACK)</td></tr>
-  <tr><td><code>wait</code></td><td>Wait for specified duration (ms)</td><td>Wait for screen transition</td></tr>
-  <tr><td><code>adb_command</code></td><td>Execute ADB shell command</td><td>Force stop app, change settings</td></tr>
+  <tr><td><code>input_text</code></td><td>Enter text</td><td>Type in search field</td></tr>
+  <tr><td><code>key_event</code></td><td>Send a hardware key</td><td>Back button (KEYCODE_BACK)</td></tr>
+  <tr><td><code>wait</code></td><td>Wait for specified time (ms)</td><td>Wait for screen transition</td></tr>
+  <tr><td><code>adb_command</code></td><td>Execute ADB shell command</td><td>Force-stop app, change settings</td></tr>
   <tr><td><code>serial_command</code></td><td>Send serial data</td><td>Hardware control commands</td></tr>
-  <tr><td><code>module_command</code></td><td>Call module function</td><td>Send CAN message, power control</td></tr>
+  <tr><td><code>module_command</code></td><td>Call a module function</td><td>Send CAN message, power control</td></tr>
   <tr><td><code>hkmc_touch</code></td><td>HKMC IVI touch</td><td>Touch IVI screen</td></tr>
   <tr><td><code>hkmc_swipe</code></td><td>HKMC IVI swipe</td><td>Swipe IVI screen</td></tr>
   <tr><td><code>hkmc_key</code></td><td>HKMC hardware key</td><td>Physical button control</td></tr>
@@ -776,27 +911,36 @@ The detection results show both the camera's current IP and the PC's network int
 
 <h4>Adding Steps Manually</h4>
 <p>
-  Use the <strong>Add Step</strong> area at the bottom of the screen during recording or in edit mode.
-  Select the step type, enter the required values, and click the Add button.
+  During recording or edit mode, use the <strong>Add Step</strong> area at the bottom of the screen.
+  Select the step type, enter the required values, and click the add button.
 </p>
 
-<h3 id="record-expected">Expected Images</h3>
+<h3 id="record-expected">Expected Image</h3>
 <p>
-  To verify that each step executed correctly, set an <strong>expected image</strong>.
+  To verify that each step executed correctly, set an <strong>Expected Image</strong>.
   During playback, the actual screenshot is compared with the expected image to determine Pass/Fail.
 </p>
 
+<h4>Capturing an Expected Image</h4>
 <ol class="numbered-steps">
-  <li>Find the step you want to set an expected image for in the step list</li>
-  <li>Click the 📷 button to automatically capture the current device screen as the <strong>full-screen expected image</strong></li>
-  <li>The captured image appears as a thumbnail next to the step</li>
-  <li>If needed, click the image to enlarge it or change the comparison mode</li>
+  <li>Click the &#x1F4F7; <strong>camera icon</strong> on the right side of the step list</li>
+  <li>A comparison mode selection popup appears:
+    <ul>
+      <li><strong>Full Screen</strong> &mdash; Capture the current screen immediately</li>
+      <li><strong>Single Crop</strong> &mdash; Opens the crop editor modal</li>
+      <li><strong>Exclude Region</strong> &mdash; Opens the exclusion region editor modal</li>
+      <li><strong>Multi Crop</strong> &mdash; Opens the multi-crop editor modal</li>
+    </ul>
+  </li>
+  <li>After capture, a tag like <span class="badge badge-green">&#x1F4F7; FULL</span> or <span class="badge badge-green">&#x1F4F7; CROP</span> appears on the right side of the step's second row</li>
+  <li>Click the tag to preview the expected image (with box overlays for exclude/multi-crop modes)</li>
+  <li>Click the &#x2715; button next to the tag to clear the expected image</li>
 </ol>
 
-<div class="callout callout-success">
-  <strong>✅ Auto-Capture Feature</strong>
-  When a step without an expected image is executed, the resulting screenshot is automatically saved as the expected image.
-  This is convenient when creating a scenario for the first time.
+<div class="callout callout-info">
+  <strong>&#x1F4A1; Note When Changing Comparison Mode</strong>
+  Selecting a new comparison mode via the camera icon automatically resets the previous mode's data (crop regions, exclusion regions, etc.).
+  Example: Switching from CROP to FULL deletes the existing ROI information.
 </div>
 
 <h3 id="record-compare">Image Comparison Modes</h3>
@@ -813,7 +957,7 @@ The detection results show both the camera's current IP and the PC's network int
   <tr>
     <td><strong>Single Crop</strong></td>
     <td><code>SINGLE_CROP</code></td>
-    <td>Crop a specific area and use template matching</td>
+    <td>Crop a specific region and use template matching</td>
     <td>When checking only specific UI elements like status bar or notifications</td>
   </tr>
   <tr>
@@ -826,92 +970,233 @@ The detection results show both the camera's current IP and the PC's network int
     <td><strong>Multi Crop</strong></td>
     <td><code>MULTI_CROP</code></td>
     <td>Compare multiple regions individually (all must pass)</td>
-    <td>When checking multiple UI elements simultaneously</td>
+    <td>When verifying multiple UI elements simultaneously</td>
   </tr>
 </table>
 
 <h4>Editing Comparison Regions</h4>
 <ul>
-  <li><strong>Edit Exclude Regions</strong> (scissors icon) — Drag on the expected image to designate regions to exclude (shown in red)</li>
-  <li><strong>Edit Crop Regions</strong> — Drag to designate comparison regions (shown in green)</li>
-  <li><strong>ROI Settings</strong> — Designate only the target area for comparison in Full Screen mode</li>
+  <li><strong>Exclude Region Editor</strong> (scissors icon) &mdash; Drag on the expected image to designate exclusion areas (red)</li>
+  <li><strong>Crop Region Editor</strong> &mdash; Drag to designate comparison areas (green)</li>
+  <li><strong>ROI Settings</strong> &mdash; Specify the comparison target area in full screen mode</li>
   <li>Each region can be modified by clicking it in the list or deleted with the X button</li>
 </ul>
 
 <div class="callout callout-info">
-  <strong>💡 Similarity Threshold</strong>
-  The default similarity threshold is <strong>0.95 (95%)</strong>. Scores at or above this value result in Pass; below it results in Fail.
+  <strong>&#x1F4A1; Similarity Threshold</strong>
+  The default similarity threshold is <strong>0.95 (95%)</strong>. Scores at or above this value are Pass; below is Fail.
   In Multi Crop mode, individual thresholds can be set for each crop.
 </div>
 
 <h3 id="record-edit">Step Editing</h3>
-<p>Recorded steps can be modified at any time. From each step's menu (⋯):</p>
+<p>Recorded steps can be modified at any time. Each step displays two rows of information:</p>
 
+<h4>Row 1: Core Information</h4>
 <ul>
-  <li><strong>Edit Command</strong> — Change parameters such as coordinates, text, or commands</li>
-  <li><strong>Retake Expected Image</strong> — Replace the expected image with the current device screen</li>
-  <li><strong>Test This Step</strong> — Execute and verify only this step to check the result</li>
-  <li><strong>Insert Wait</strong> — Insert a wait time after this step</li>
-  <li><strong>Delete</strong> — Remove the step</li>
+  <li><strong>Index Number</strong> &mdash; Step order (starting from 1)</li>
+  <li><strong>Description (Remark)</strong> &mdash; Description of the step. Directly editable</li>
+  <li><strong>Function/Parameters</strong> &mdash; Step execution details (e.g., tap (70,69), {"x":65,"y":169})</li>
+  <li><strong>Delay (ms)</strong> &mdash; Wait time after step execution (right-aligned). Directly editable</li>
 </ul>
 
+<h4>Row 2: Additional Information</h4>
+<ul>
+  <li><strong>Device Tag</strong> &mdash; The device on which this step will execute</li>
+  <li><strong>Type Tag</strong> &mdash; tap, wait, module_command, etc.</li>
+  <li><strong>Jump Tag</strong> &mdash; Shown when conditional jump is set, e.g., P&rarr;#N, F&rarr;END</li>
+  <li><strong>Expected Image Tag</strong> &mdash; &#x1F4F7; FULL / CROP / EXCLUDE / MULTI (right-aligned). Click to preview</li>
+</ul>
+
+<h4>Right Icon Area (Row 2)</h4>
+<table>
+  <tr><th>Row 1</th><th>Function</th></tr>
+  <tr><td>&#x2191; &#x2193;</td><td>Reorder steps (move up/down)</td></tr>
+  <tr><td>&#x26A1;</td><td>Execute and verify this step only (disabled if device not connected)</td></tr>
+  <tr><td>&#x1F5D1;</td><td>Delete step (confirmation required)</td></tr>
+</table>
+<table>
+  <tr><th>Row 2</th><th>Function</th></tr>
+  <tr><td>&#x270F;&#xFE0F;</td><td>Edit command &mdash; Change coordinates, text, commands, and other parameters</td></tr>
+  <tr><td>&#x1F500;</td><td>Conditional jump &mdash; Set the step to jump to on Pass/Fail</td></tr>
+  <tr><td>W</td><td>Insert Wait &mdash; Add a wait step after this step (mode selection popup)</td></tr>
+  <tr><td>&#x1F4F7;</td><td>Capture expected image &mdash; Comparison mode selection popup</td></tr>
+</table>
+
+<h4>Batch Device Switch</h4>
+<p>Click the <strong>&#x21C4; Device Switch</strong> button at the top of the step card to display
+all Device IDs used in the scenario.
+Select the replacement device from the dropdown next to each ID and click <strong>Apply</strong>
+to batch-change <code>device_id</code> and <code>screenshot_device_id</code> for all steps.</p>
+<div class="callout callout-info">
+  <strong>&#x1F4A1; Usage Example</strong>
+  When importing a scenario created on another PC, or when replacing a device,
+  batch-change the Device ID to enable immediate playback.
+</div>
+
+<h4>Hard Key Long Press</h4>
+<p>When holding an HKMC device hard key button, a red gauge fills up.
+  After holding for 3+ seconds, the entire button turns red and is recognized as a <strong>Long Press</strong>.
+  Releasing before the gauge fills registers as a <strong>Short Press</strong>.</p>
+
+<h4>Automatic Screen Size Adjustment</h4>
+<p>Prevents the issue where the screen fills the entire card on portrait devices (smartphones, etc.), hiding the slider.
+  When <strong>Screen Region Crop</strong> or <strong>Hard Key Panel</strong> is activated,
+  the screen area automatically shrinks to provide control space at the bottom.
+  Coordinate conversion is calculated based on screen ratio, so accuracy is not affected.</p>
+
+<div class="callout callout-info">
+  <strong>&#x1F4A1; Striped Background</strong>
+  The step list alternates background colors on odd/even rows for easy visual distinction between steps.
+</div>
+
+<h3 id="record-wait">Wait Step</h3>
 <p>
-  For steps that require coordinate changes (tap, long_press, swipe), clicking/dragging on the device screen
-  in edit mode automatically applies the new coordinates.
+  A Wait step pauses execution for the specified duration before proceeding to the next step.
+  Clicking the W button or Wait add button presents 3 modes to choose from:
 </p>
+
+<table>
+  <tr><th>Mode</th><th>Description</th><th>Parameters</th><th>Example</th></tr>
+  <tr>
+    <td><strong>Basic</strong></td>
+    <td>Fixed wait for the specified time (ms)</td>
+    <td>Wait time (ms)</td>
+    <td>Wait 1 second after screen transition: <code>1000ms</code></td>
+  </tr>
+  <tr>
+    <td><strong>Cycle</strong></td>
+    <td>Wait time increases with each repeat cycle</td>
+    <td>Start (ms) + Interval (ms)</td>
+    <td>
+      Start 3000ms, interval 3000ms, 3 repeats:<br>
+      Cycle 1: 3000ms, Cycle 2: 6000ms, Cycle 3: 9000ms
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Random</strong></td>
+    <td>Wait a random time within the specified range</td>
+    <td>Min (ms) ~ Max (ms)</td>
+    <td>
+      Range 0~10000ms: Different wait time each execution
+    </td>
+  </tr>
+</table>
+
+<div class="callout callout-info">
+  <strong>&#x1F4A1; Cycle Mode Usage</strong>
+  Useful when you need to gradually increase wait times in repeated tests.
+  Example: Increasing request intervals in server load testing.
+</div>
 
 <h3 id="record-conditional">Conditional Jump</h3>
 <p>
   You can specify the next step to execute based on the verification result (Pass/Fail) of a step.
-  This allows you to branch the test flow or implement logic such as skipping on failure.
+  This allows branching test flows, skipping on failure, and other logic.
 </p>
 
 <table>
   <tr><th>Setting</th><th>Description</th></tr>
   <tr><td>Jump on Pass</td><td>Jump to the specified step on verification success (default: next step)</td></tr>
-  <tr><td>Jump on Fail</td><td>Jump to the specified step on verification failure, or terminate (END)</td></tr>
+  <tr><td>Jump on Fail</td><td>Jump to the specified step on verification failure, or end (END)</td></tr>
 </table>
 
 <div class="callout callout-warning">
-  <strong>⚠️ Infinite Loop Warning</strong>
-  When setting conditional jumps, be careful to avoid circular references that loop back to a previous step.
+  <strong>&#x26A0;&#xFE0F; Infinite Loop Warning</strong>
+  When setting conditional jumps, be careful not to create circular references that jump back to earlier steps.
 </div>
 
 
 <!-- ============================== Scenario ============================== -->
 <h2 id="scenario">Scenario Management</h2>
 <p>
-  In the <strong>Scenario</strong> tab, you can view, execute, and manage recorded scenarios.
+  The <strong>Scenario</strong> tab has a two-panel layout. The left panel shows the scenario list;
+  the right panel shows scenario details and playback results.
+  Panel sizes can be adjusted by dragging the center divider.
 </p>
 
-<h3 id="scenario-list">Scenario List</h3>
-<p>All saved scenarios are displayed in a list. Available actions for each scenario:</p>
+<h4>Top Toolbar Buttons (right-aligned)</h4>
 <ul>
-  <li><strong>Play</strong> — Execute the scenario on a device</li>
-  <li><strong>Copy</strong> — Duplicate with a different name</li>
-  <li><strong>Rename</strong> — Edit the scenario name</li>
-  <li><strong>Merge</strong> — Combine multiple scenarios into one</li>
-  <li><strong>Delete</strong> — Remove the scenario (confirmation required)</li>
+  <li><strong>Group Management</strong> &mdash; Create/edit scenario groups</li>
+  <li><strong>Merge Scenarios</strong> &mdash; Merge multiple scenarios into one</li>
+  <li><strong>Export Scenarios</strong> &mdash; Package as ZIP file</li>
+  <li><strong>Import Scenarios</strong> &mdash; Load from ZIP file</li>
+  <li><strong>Refresh</strong> &mdash; Refresh the list</li>
 </ul>
 
-<h3 id="scenario-play">Playback (Execution)</h3>
-<p>Execute a scenario to automatically control the device and verify results.</p>
+<h3 id="scenario-list">Scenario List (Left Panel)</h3>
+<p>All saved scenarios are displayed in a list. They can be viewed by group tabs or the All tab.</p>
+<p>Clicking a scenario displays its step details in the right panel.</p>
+
+<h3 id="scenario-detail">Scenario Details (Right Panel)</h3>
+<p>The selected scenario's step list is displayed as a table. Management and playback buttons are in the title area:</p>
+<ul>
+  <li><strong>Rename</strong> &mdash; Modify the scenario name</li>
+  <li><strong>Copy</strong> &mdash; Copy with a new name</li>
+  <li><strong>Repeat Count</strong> &mdash; Set playback repeat count (default: 1)</li>
+  <li><strong>Play</strong> &mdash; Run the scenario (error message shown if device not connected)</li>
+  <li><strong>Webcam Recording</strong> &mdash; Record webcam during playback</li>
+  <li><strong>Delete</strong> &mdash; Remove the scenario and its associated screenshots</li>
+  <li><strong>Add to Group</strong> &mdash; Assign the scenario to a specific group</li>
+</ul>
+
+<h4>Step Table Columns</h4>
+<table>
+  <tr><th>Column</th><th>Description</th></tr>
+  <tr><td>Checkbox</td><td>Select/deselect steps to skip during playback (unchecked = skipped)</td></tr>
+  <tr><td>#</td><td>Step index (starting from 1)</td></tr>
+  <tr><td>Type</td><td>Step type (tap, wait, module_command, etc.)</td></tr>
+  <tr><td>Device</td><td>Target device</td></tr>
+  <tr><td>Description</td><td>Step description</td></tr>
+  <tr><td>Delay</td><td>Wait time (ms). Directly editable</td></tr>
+  <tr><td>Compare</td><td>Expected image preview (if set)</td></tr>
+</table>
+
+<h3 id="scenario-play">Playback (Run)</h3>
+<p>Run a scenario to automatically operate the device and verify results.</p>
+
+<div class="callout callout-warning">
+  <strong>&#x26A0;&#xFE0F; Device Connection Required</strong>
+  All devices used in the scenario must be in <strong>Connected</strong> state before playback.
+  An error message is displayed and playback does not start if any device is not connected.
+  Connect them on the Device tab first.
+</div>
+
+<h4>Preflight Check and Device Mapping</h4>
+<p>Before playback starts, a <strong>preflight check</strong> automatically verifies that devices used in the scenario
+  match the currently connected devices.
+  If Device IDs differ or a device is not connected, a <strong>Device Mapping Change dialog</strong> appears:</p>
+<ul>
+  <li>Shows a comparison between scenario-recorded devices and currently connected devices</li>
+  <li>Allows <strong>remapping</strong> mismatched devices to other currently connected devices</li>
+  <li>Mapping changes apply only to that playback and do not modify the original scenario</li>
+</ul>
 
 <ol class="numbered-steps">
-  <li>Click the <strong>Play</strong> button next to the scenario</li>
-  <li>Confirm <strong>device mapping</strong> — Map the device the scenario was recorded on to the currently connected device.
-    You can change the mapping here if the devices differ</li>
-  <li>Set the <strong>repeat count</strong> if needed (default: 1)</li>
-  <li>Click <strong>Execute</strong> to start playback</li>
+  <li>Click the <strong>Play</strong> button in the scenario detail title</li>
+  <li>Device connection status is automatically verified</li>
+  <li>Set the <strong>Repeat Count</strong> if needed (default: 1)</li>
   <li>Results are displayed in real time as each step executes:
     <ul>
-      <li><span class="badge badge-green">Pass</span> — Similarity at or above threshold</li>
-      <li><span class="badge badge-yellow">Warning</span> — Borderline level</li>
-      <li><span class="badge badge-red">Fail</span> — Similarity below threshold</li>
-      <li><span class="badge badge-red">Error</span> — Execution error occurred</li>
+      <li><span class="badge badge-green">Pass</span> &mdash; Similarity at or above threshold</li>
+      <li><span class="badge badge-yellow">Warning</span> &mdash; Near the threshold boundary</li>
+      <li><span class="badge badge-red">Fail</span> &mdash; Similarity below threshold</li>
+      <li><span class="badge badge-red">Error</span> &mdash; Execution error occurred</li>
     </ul>
   </li>
 </ol>
+
+<h4>Sleep Mode Check Before Playback</h4>
+<p>The PC's sleep mode settings are automatically checked when playback starts.
+  If sleep mode is enabled, a warning dialog appears:</p>
+<ul>
+  <li><strong>Block Sleep and Play</strong> &mdash; Temporarily blocks sleep mode during playback. Automatically restored after playback completes.</li>
+  <li><strong>Cancel</strong> &mdash; Cancels playback. You can disable sleep mode manually in Windows Settings and try again.</li>
+</ul>
+<div class="callout callout-warning">
+  <strong>&#x26A0;&#xFE0F; Caution for Long Playback Sessions</strong>
+  If the PC enters sleep mode, network connections may drop, causing playback to terminate abnormally.
+  Use the <strong>Block Sleep</strong> option for long-running tasks like repeated playback.
+</div>
 
 <h4>Playback Controls</h4>
 <table>
@@ -921,44 +1206,59 @@ The detection results show both the camera's current IP and the PC's network int
   <tr><td><strong>Stop</strong></td><td>Immediately stop playback and save results up to the current point</td></tr>
 </table>
 
+<h4>Intermediate Result Saving During Repeated Playback</h4>
+<p>When repeat count is set to 2 or more, results are automatically saved after each cycle completes.
+  In case of abnormal termination (sleep, network disconnection, etc.), results from completed cycles
+  are preserved and viewable on the test results page.</p>
+
+<div class="callout callout-info">
+  <strong>&#x1F4A1; Auto-Stop on WebSocket Disconnect</strong>
+  If the WebSocket connection between the browser and server is lost, playback stops automatically.
+  Results from completed cycles are saved.
+</div>
+
 <h3 id="scenario-group">Group Management</h3>
 <p>
-  Multiple scenarios can be grouped together for sequential execution.
-  When executing as a group, conditional jumps between scenarios are also possible.
+  Multiple scenarios can be organized into <strong>groups</strong> for sequential execution.
+  Use the <strong>Group Management</strong> button at the top to create and manage groups.
 </p>
 
 <ol class="numbered-steps">
-  <li><strong>Create Group</strong> — Enter a group name and create it</li>
+  <li><strong>Create Group</strong> &mdash; Enter a group name and create</li>
   <li><strong>Add</strong> scenarios to the group (multiple allowed)</li>
-  <li><strong>Reorder</strong> scenarios by dragging</li>
-  <li>Set <strong>conditional jumps</strong> between scenarios if needed:
+  <li>Drag to <strong>reorder</strong> scenarios</li>
+  <li>Optionally set <strong>conditional jumps</strong> between scenarios:
     <ul>
-      <li>Scenario A Pass → Jump to Scenario C</li>
-      <li>Scenario A Fail → Terminate (END)</li>
+      <li>Scenario A Pass &rarr; Jump to Scenario C</li>
+      <li>Scenario A Fail &rarr; End (END)</li>
     </ul>
   </li>
-  <li>Click Group <strong>Play</strong> to execute the included scenarios sequentially</li>
+  <li>Click group <strong>Play</strong> to execute the included scenarios sequentially</li>
 </ol>
+
+<h4>Group Playback Result Storage Structure</h4>
+<p>During group playback, screenshots for each scenario are stored under <code>results/{result_folder}/{index}_{scenario_name}/screenshots/</code>.
+  The index represents the execution order within the group (starting from 0).</p>
 
 <h3 id="scenario-export">Export / Import</h3>
 
 <h4>Export</h4>
 <p>Package scenarios and groups as ZIP files for distribution to other PCs.</p>
 <ol>
+  <li>Click the <strong>Export Scenarios</strong> button at the top</li>
   <li>Select the scenarios/groups to export</li>
-  <li>Click <strong>Export</strong> → A ZIP file is generated</li>
-  <li>If a save path is configured in settings, the file is saved there; otherwise it downloads via the browser</li>
+  <li>Click <strong>Export</strong> &rarr; A ZIP file is generated</li>
 </ol>
 
 <h4>Import</h4>
 <ol>
-  <li>Click <strong>Import</strong> → Select a ZIP file</li>
-  <li>In the preview screen, review the included scenario list and check for <strong>conflicts</strong></li>
+  <li>Click the <strong>Import Scenarios</strong> button at the top &rarr; Select a ZIP file</li>
+  <li>Review the included scenario list and <strong>conflict status</strong> in the preview screen</li>
   <li>Choose how to handle conflicts:
     <ul>
-      <li><strong>Skip</strong> — Keep the existing scenario</li>
-      <li><strong>Overwrite</strong> — Replace with the imported scenario</li>
-      <li><strong>Rename</strong> — Add with a new name</li>
+      <li><strong>Skip</strong> &mdash; Keep the existing scenario</li>
+      <li><strong>Overwrite</strong> &mdash; Replace with the imported scenario</li>
+      <li><strong>Rename</strong> &mdash; Add with a new name</li>
     </ul>
   </li>
   <li>Click <strong>Apply</strong> to complete the import</li>
@@ -968,57 +1268,71 @@ The detection results show both the camera's current IP and the PC's network int
 <!-- ============================== Results ============================== -->
 <h2 id="results">Test Results</h2>
 <p>
-  In the <strong>Test Results</strong> tab, you can review scenario playback results and generate reports.
+  The <strong>Test Results</strong> tab lets you review scenario playback results and generate reports.
 </p>
 
-<h3 id="results-list">Result List</h3>
-<p>All playback results are listed in reverse chronological order. Each entry shows:</p>
+<h3 id="results-list">Results List</h3>
+<p>All playback results are listed in reverse chronological order. Each entry displays:</p>
 <ul>
   <li>Scenario name</li>
-  <li>Execution date and time</li>
-  <li>Total steps / Pass / Fail count</li>
+  <li>Execution date/time (24-hour format, date and time shown on two lines)</li>
+  <li>Total steps / Pass count / Fail count</li>
   <li>Status (overall result)</li>
 </ul>
-<p>You can <strong>filter</strong> by scenario name or <strong>bulk delete</strong> selected entries.</p>
+<p>You can <strong>filter</strong> by scenario name or <strong>batch delete</strong> selected results.</p>
+
+<h4>Screenshot Storage Structure</h4>
+<p>Screenshots generated during playback are stored directly under <code>results/{result_folder}/screenshots/</code>.
+  Expected images, actual captures, and diff images are managed per step.</p>
+
+<h4>Legacy Cleanup</h4>
+<p>If results from previous versions with a flat file structure remain, a <strong>Legacy Cleanup</strong> button appears.
+  Click it to clean up old result files and migrate to the new structure.</p>
 
 <h3 id="results-detail">Result Details</h3>
-<p>Click a result to view detailed information for each step:</p>
+<p>Clicking a result shows detailed information for each step.
+  Use the filters at the top to display only specific results:</p>
+<ul>
+  <li><strong>Status</strong> &mdash; Filter by Pass / Warning / Fail / Error</li>
+  <li><strong>Device</strong> &mdash; Show only steps for a specific device</li>
+  <li><strong>Repeat</strong> &mdash; Show only a specific repeat cycle</li>
+</ul>
 
 <table>
   <tr><th>Item</th><th>Content</th></tr>
-  <tr><td>Step Number</td><td>Execution order and repeat iteration</td></tr>
-  <tr><td>Executed Command</td><td>Which device performed which action</td></tr>
+  <tr><td>Step Number</td><td>Execution order and repeat cycle</td></tr>
+  <tr><td>Executed Command</td><td>What action was performed on which device</td></tr>
   <tr><td>Elapsed Time</td><td>Time taken to execute the step</td></tr>
   <tr><td>Status</td><td><span class="badge badge-green">Pass</span> / <span class="badge badge-yellow">Warning</span> / <span class="badge badge-red">Fail</span> / <span class="badge badge-red">Error</span></td></tr>
   <tr><td>Similarity</td><td>SSIM comparison score (0.0 ~ 1.0)</td></tr>
-  <tr><td>Image Comparison</td><td>Expected image / actual screenshot / difference heatmap displayed side by side</td></tr>
+  <tr><td>Image Comparison</td><td>Expected image / Actual screenshot / Diff heatmap shown side by side</td></tr>
 </table>
 
 <div class="callout callout-info">
-  <strong>💡 Difference Heatmap</strong>
-  In the diff image, bright areas represent matching regions, while dark areas represent differences.
-  This allows you to quickly identify what has changed at a glance.
+  <strong>&#x1F4A1; Diff Heatmap</strong>
+  In the diff image, bright areas indicate matching regions and dark areas indicate differences.
+  This lets you quickly identify what changed at a glance.
 </div>
 
 <h3 id="results-export">Excel Export</h3>
-<p>Results can be exported as an Excel (.xlsx) report. The report includes:</p>
+<p>Export results as an Excel (.xlsx) report. The report includes:</p>
 <ul>
   <li>Scenario summary information</li>
-  <li>Step-by-step execution result table</li>
+  <li>Per-step execution results table</li>
   <li>Expected/actual/diff screenshot images (embedded in Excel)</li>
   <li>Color-coded status indicators</li>
 </ul>
 <p>
-  If an <strong>Excel save path</strong> is specified in settings, the file is automatically saved there;
-  otherwise it downloads via the browser.
+  If an <strong>Excel save path</strong> is configured in Settings, the file is automatically saved there;
+  otherwise, it downloads through the browser.
 </p>
 
 <h3 id="results-webcam">Webcam Recording</h3>
 <p>
-  If webcam recording was active during playback, you can review the webcam footage from the results.
+  If webcam recording was enabled during playback, you can view the webcam footage in the results.
 </p>
 <ul>
-  <li>Individual videos are saved for each repeat iteration</li>
+  <li>Individual videos are saved for each repeat cycle</li>
   <li>Video <strong>playback</strong>, <strong>trimming</strong>, and <strong>deletion</strong> are available</li>
   <li>Step execution timestamps are linked with video timestamps for quick navigation</li>
 </ul>
@@ -1026,51 +1340,51 @@ The detection results show both the camera's current IP and the PC's network int
 
 <!-- ============================== Settings ============================== -->
 <h2 id="settings">Settings</h2>
-<p>Adjust the app's behavior and appearance in the <strong>Settings</strong> tab.</p>
+<p>The <strong>Settings</strong> tab adjusts the app's behavior and appearance.</p>
 
 <table>
   <tr><th>Setting</th><th>Description</th></tr>
   <tr>
     <td><strong>UI Theme</strong></td>
-    <td>Switch between light mode and dark mode</td>
+    <td>Switch between Light mode / Dark mode</td>
   </tr>
   <tr>
     <td><strong>Language</strong></td>
-    <td>Switch between Korean and English</td>
+    <td>Switch between Korean / English</td>
   </tr>
   <tr>
     <td><strong>Webcam Recording Save Path</strong></td>
-    <td>Auto-save location for webcam videos. Uses browser download if empty</td>
+    <td>Auto-save location for webcam videos. If empty, uses browser download</td>
   </tr>
   <tr>
     <td><strong>Excel Export Save Path</strong></td>
-    <td>Auto-save location for Excel reports. Uses browser download if empty</td>
+    <td>Auto-save location for Excel reports. If empty, uses browser download</td>
   </tr>
   <tr>
     <td><strong>Scenario Export Save Path</strong></td>
-    <td>Auto-save location for scenario/group ZIP files. Uses browser download if empty</td>
+    <td>Auto-save location for scenario/group ZIP files. If empty, uses browser download</td>
   </tr>
 </table>
 
 <div class="callout callout-info">
-  <strong>💡 Folder Selection</strong>
+  <strong>&#x1F4A1; Folder Selection</strong>
   Click the <strong>Browse</strong> button next to each path to open the system folder selection dialog.
-  You can also type the path directly.
+  You can also enter the path directly.
 </div>
 
 
 <!-- ============================== Webcam ============================== -->
 <h2 id="webcam">Webcam PiP (Picture-in-Picture)</h2>
 <p>
-  Activate the <strong>Webcam PiP window</strong> using the webcam toggle button in the left sidebar.
-  This is useful when you want to record the physical device appearance via webcam while simultaneously recording the device screen.
+  Use the webcam toggle button in the left sidebar to activate the <strong>Webcam PiP window</strong>.
+  Useful for simultaneously recording the physical device with a webcam while recording the device screen.
 </p>
 
 <h4>Webcam Settings</h4>
 <table>
   <tr><th>Item</th><th>Description</th></tr>
   <tr><td>Camera Selection</td><td>Select from webcams connected to the PC</td></tr>
-  <tr><td>Resolution</td><td>Selectable from QVGA (320×240) to 4K (3840×2160)</td></tr>
+  <tr><td>Resolution</td><td>Selectable from QVGA (320x240) to 4K (3840x2160)</td></tr>
   <tr><td>Brightness / Contrast / Sharpness / Exposure</td><td>Adjustable if supported by the webcam</td></tr>
 </table>
 
@@ -1078,48 +1392,48 @@ The detection results show both the camera's current IP and the PC's network int
 <ol>
   <li>Activate Webcam PiP and select a camera</li>
   <li>Webcam recording starts automatically when scenario <strong>playback</strong> begins</li>
-  <li>Webcam recording stops automatically when playback ends and is linked to the results</li>
-  <li>Alternatively, you can use the manual <strong>Record</strong> / <strong>Stop Recording</strong> buttons</li>
+  <li>Webcam recording automatically stops when playback ends and is linked to the results</li>
+  <li>Alternatively, you can manually use the <strong>Record</strong> / <strong>Stop Recording</strong> buttons</li>
 </ol>
 
 
 <!-- ============================== Tips & Troubleshooting ============================== -->
-<h2 id="tips">Tips & Troubleshooting</h2>
+<h2 id="tips">Tips &amp; Troubleshooting</h2>
 
 <h3 id="tips-faq">FAQ</h3>
 
-<h4>Q: My device doesn't appear in the scan</h4>
+<h4>Q: Device does not appear in scan</h4>
 <div class="callout callout-warning">
-  <strong>Check the following:</strong>
+  <strong>Checklist:</strong>
   <ul style="margin-bottom:0">
-    <li>Android: Verify that USB debugging is enabled</li>
-    <li>Android: Reconnect the USB cable and approve the authorization popup on the PC</li>
-    <li>HKMC: Verify they are on the same network and that the firewall is not blocking</li>
+    <li>Android: Check that USB debugging is enabled</li>
+    <li>Android: Reconnect the USB cable and approve the permission popup on the PC</li>
+    <li>HKMC: Verify they are on the same network and the firewall is not blocking</li>
     <li>Serial: Verify the driver is installed and no other program is occupying the COM port</li>
-    <li>Try <strong>Restart ADB Server</strong></li>
+    <li>Try <strong>restarting the ADB server</strong></li>
   </ul>
 </div>
 
-<h4>Q: Similarity scores are low during playback</h4>
+<h4>Q: Similarity score is low during playback</h4>
 <ul>
   <li>If there are time-varying areas (clock, battery, etc.), use <strong>Exclude Region</strong> mode</li>
-  <li>If you only want to check specific elements rather than the full screen, use <strong>Single Crop</strong> or <strong>Multi Crop</strong></li>
+  <li>To check only specific elements rather than the entire screen, use <strong>Single Crop</strong> or <strong>Multi Crop</strong></li>
   <li>You can adjust the similarity threshold (default 0.95)</li>
-  <li>Differences may occur if the device resolution differs from when the scenario was recorded</li>
+  <li>Differences may occur if the device resolution differs from when the recording was made</li>
 </ul>
 
-<h4>Q: I want to run a scenario on a different PC</h4>
+<h4>Q: I want to run scenarios on a different PC</h4>
 <ul>
-  <li><strong>Export</strong> the scenario as a ZIP file</li>
+  <li><strong>Export</strong> to package the scenario as a ZIP file</li>
   <li><strong>Import</strong> the ZIP file on the other PC</li>
-  <li>During playback, select the current PC's device in the <strong>device mapping</strong> step</li>
+  <li>During playback, select the current PC's device in the <strong>Device Mapping</strong> step</li>
 </ul>
 
-<h4>Q: The server connection was lost</h4>
+<h4>Q: Server connection was lost</h4>
 <ul>
   <li>A "Connecting to server..." message appears at the top of the screen</li>
-  <li>Auto-reconnect is attempted, and the connection recovers automatically once the server is running again</li>
-  <li>If unresolved, restart <code>server.py</code></li>
+  <li>Automatic reconnection is attempted; it recovers automatically when the server is back up</li>
+  <li>If unresolved, re-run <code>server.py</code></li>
 </ul>
 
 <h4>Q: I want to adjust the wait time between steps</h4>
@@ -1128,9 +1442,21 @@ The detection results show both the camera's current IP and the PC's network int
   The default is 1000ms (1 second); increase it if screen transitions are slow.
 </p>
 
+<h4>Q: "Server is already running" message appears</h4>
+<p>
+  ReplayKit automatically detects duplicate instance execution.
+  If an instance is already running, a dialog appears, allowing you to terminate the existing process and restart.
+</p>
+
+<h4>Automatic Server Management Features</h4>
+<ul>
+  <li><strong>Orphan result folder cleanup</strong> &mdash; On server startup, incomplete result folders without a <code>result.json</code> file are automatically deleted.</li>
+  <li><strong>Date-based log storage</strong> &mdash; Server logs are managed as date-based files; logs older than 7 days are automatically deleted.</li>
+</ul>
+
 <h3 id="tips-shortcuts">Shortcuts</h3>
 <table>
-  <tr><th>Shortcut</th><th>Location</th><th>Action</th></tr>
+  <tr><th>Shortcut</th><th>Context</th><th>Action</th></tr>
   <tr><td><kbd>Ctrl</kbd>+<kbd>Enter</kbd></td><td>Serial command input</td><td>Send serial data</td></tr>
   <tr><td>Screen click</td><td>Device screen during recording/editing</td><td>Record tap gesture</td></tr>
   <tr><td>Screen long click</td><td>Device screen during recording/editing</td><td>Record long press</td></tr>
@@ -1141,42 +1467,42 @@ The detection results show both the camera's current IP and the PC's network int
 <!-- ============================== Module Guide ============================== -->
 <h2 id="modules">Module Guide</h2>
 <p>
-  Modules are extensions that can be invoked from scenarios via <code>module_command</code> steps.
-  They can be added as auxiliary devices on the Device page, or inserted directly as steps during scenario editing.
+  Modules are extension features callable from scenarios via <code>module_command</code> steps.
+  They can be added as auxiliary devices on the Device page or inserted directly as steps during scenario editing.
 </p>
 
 <!-- CMD Module -->
-<h3 id="module-cmd">CMD — Command Execution Module</h3>
+<h3 id="module-cmd">CMD &mdash; Command Execution Module</h3>
 <p>
   A module that executes Windows system commands.
-  Used for launching apps, managing processes, and checking system status during tests.
+  Used for launching apps, process management, and system status checks during testing.
 </p>
 
-<h4>Connection Settings</h4>
-<p>No separate connection setup is needed. Simply select <code>CMD</code> when choosing a module and it's ready to use.</p>
+<h4>Connection Setup</h4>
+<p>No separate connection setup is required. Simply select <code>CMD</code> as the module to start using it.</p>
 
-<h4>Available Functions</h4>
+<h4>Functions</h4>
 <table>
   <tr><th>Function</th><th>Description</th><th>Parameters</th><th>Return Value</th></tr>
   <tr>
     <td><code>Run</code></td>
-    <td>Execute a command and wait for completion (blocking)</td>
+    <td>Execute command and wait for completion (blocking)</td>
     <td>
-      <code>command</code> — Command to execute<br>
-      <code>timeout</code> — Max wait time in seconds (default 300)
+      <code>command</code> &mdash; Command to execute<br>
+      <code>timeout</code> &mdash; Max wait time in seconds (default 300)
     </td>
     <td>Execution output (stdout + stderr)</td>
   </tr>
   <tr>
     <td><code>RunBackground</code></td>
-    <td>Execute in the background (non-blocking)</td>
-    <td><code>command</code> — Command to execute</td>
-    <td>Process ID in the form <code>PID:12345</code></td>
+    <td>Execute in background (non-blocking)</td>
+    <td><code>command</code> &mdash; Command to execute</td>
+    <td>Process ID in <code>PID:12345</code> format</td>
   </tr>
   <tr>
     <td><code>Kill</code></td>
     <td>Terminate a background process</td>
-    <td><code>pid</code> — PID of the process to terminate</td>
+    <td><code>pid</code> &mdash; Process PID to terminate</td>
     <td>Termination result message</td>
   </tr>
   <tr>
@@ -1189,15 +1515,15 @@ The detection results show both the camera's current IP and the PC's network int
 
 <h4>Usage in Scenarios</h4>
 <div class="callout callout-info">
-  <strong>Difference by step type:</strong>
+  <strong>Differences by step type:</strong>
   <ul style="margin-bottom:0">
-    <li><code>cmd_send</code> — Executes the command and ignores the result. Use for cases where only execution is needed, such as launching apps or copying files</li>
-    <li><code>cmd_check</code> — Executes the command and compares the output against an expected value. Set <code>expected</code> value and <code>match_type</code> (contains / exact / regex)</li>
-    <li><code>module_command</code> — Directly calls CMD module functions. Use for advanced features like <code>RunBackground</code> or <code>Kill</code></li>
+    <li><code>cmd_send</code> &mdash; Executes the command and ignores the result. For cases where only execution is needed, like launching apps or copying files</li>
+    <li><code>cmd_check</code> &mdash; Executes the command and compares the output with an expected value. Set <code>expected</code> and <code>match_type</code> (contains / exact / regex)</li>
+    <li><code>module_command</code> &mdash; Directly calls CMD module functions. For advanced features like <code>RunBackground</code> or <code>Kill</code></li>
   </ul>
 </div>
 
-<h4>Usage Examples</h4>
+<h4>Examples</h4>
 <table>
   <tr><th>Purpose</th><th>Step Type</th><th>Configuration</th></tr>
   <tr>
@@ -1216,20 +1542,21 @@ The detection results show both the camera's current IP and the PC's network int
     <td>module: CMD, function: <code>RunBackground</code><br>args: command=<code>python long_task.py</code></td>
   </tr>
   <tr>
-    <td>Terminate process</td>
+    <td>Kill process</td>
     <td><code>module_command</code></td>
     <td>module: CMD, function: <code>Kill</code><br>args: pid=<code>12345</code></td>
   </tr>
 </table>
 
 <!-- DLTViewer Module -->
-<h3 id="module-dlt">DLTViewer — DLT Log Receiving/Analysis Module</h3>
+<h3 id="module-dlt">DLTViewer &mdash; DLT Log Receiver/Analyzer Module</h3>
 <p>
-  A module that receives and analyzes ECU logs in real time using the AUTOSAR DLT (Diagnostic Log and Trace) protocol.
-  It also supports launching a GUI via the DltViewerSDK's <code>dlt-viewer.exe</code>.
+  A module that receives and analyzes ECU logs in real time using the AUTOSAR DLT
+  (Diagnostic Log and Trace) protocol.
+  Also supports launching the GUI via DltViewerSDK's <code>dlt-viewer.exe</code>.
 </p>
 
-<h4>Connection Settings</h4>
+<h4>Connection Setup</h4>
 <p>When adding an auxiliary device on the Device page:</p>
 <table>
   <tr><th>Item</th><th>Description</th><th>Default</th></tr>
@@ -1244,69 +1571,69 @@ The detection results show both the camera's current IP and the PC's network int
   <strong>Prerequisites:</strong>
   <ul style="margin-bottom:0">
     <li>The DLT daemon must be running on the target ECU (default port 3490)</li>
-    <li>The PC and ECU must be on the same network</li>
-    <li>To use the DLT Viewer GUI, the <code>DltViewerSDK_21.1.3_ver/</code> folder must be in the project root</li>
+    <li>PC and ECU must be on the same network</li>
+    <li>For DLT Viewer GUI, the <code>DltViewerSDK_21.1.3_ver/</code> folder must be in the project root</li>
   </ul>
 </div>
 
-<h4>Available Functions</h4>
+<h4>Functions</h4>
 <table>
   <tr><th>Function</th><th>Description</th><th>Parameters</th><th>Return Value</th></tr>
   <tr>
     <td><code>Connect</code></td>
     <td>Connect to DLT daemon via TCP and start receiving logs</td>
-    <td>(none — host/port automatically passed from device settings)</td>
+    <td>(none &mdash; host/port auto-passed from device settings)</td>
     <td>Connection result message</td>
   </tr>
   <tr>
     <td><code>Disconnect</code></td>
-    <td>Disconnect DLT connection and stop capture</td>
+    <td>Disconnect DLT and stop capture</td>
     <td>(none)</td>
     <td>Result message</td>
   </tr>
   <tr>
     <td><code>WaitLog</code></td>
-    <td>Wait until a keyword appears in logs (<strong>blocking</strong> — pauses step execution)</td>
+    <td>Wait until a keyword appears in logs (<strong>blocking</strong> &mdash; step execution paused)</td>
     <td>
-      <code>keyword</code> — Keyword to search (space-separated for AND condition)<br>
-      <code>timeout</code> — Max wait time in seconds (default 30)
+      <code>keyword</code> &mdash; Search keyword (space-separated for AND condition)<br>
+      <code>timeout</code> &mdash; Max wait time in seconds (default 30)
     </td>
     <td><code>PASS: &lt;matching log&gt;</code> or <code>FAIL: ...</code></td>
   </tr>
   <tr>
     <td><code>StartMonitor</code></td>
-    <td>Start background keyword monitoring (<strong>non-blocking</strong> — next step proceeds immediately)</td>
+    <td>Start background keyword monitoring (<strong>non-blocking</strong> &mdash; proceeds to next step immediately)</td>
     <td>
-      <code>keyword</code> — Keyword to search (space-separated for AND condition)<br>
-      <code>timeout</code> — Max monitoring time in seconds (default 60)
+      <code>keyword</code> &mdash; Search keyword (space-separated for AND condition)<br>
+      <code>timeout</code> &mdash; Max monitoring time in seconds (default 60)
     </td>
     <td>Monitor ID (e.g., <code>mon_1</code>)</td>
   </tr>
   <tr>
     <td><code>StopMonitor</code></td>
     <td>Stop background monitoring</td>
-    <td><code>monitor_id</code> — ID to stop (empty for all)</td>
+    <td><code>monitor_id</code> &mdash; ID to stop (empty for all)</td>
     <td>Result message</td>
   </tr>
   <tr>
     <td><code>GetMonitorResult</code></td>
     <td>Check background monitoring result</td>
-    <td><code>monitor_id</code> — ID to check (empty for all)</td>
+    <td><code>monitor_id</code> &mdash; ID to check (empty for all)</td>
     <td><code>PASS: &lt;log&gt;</code> / <code>FAIL: ...</code> / <code>RUNNING: ...</code></td>
   </tr>
   <tr>
     <td><code>SearchLog</code></td>
-    <td>Search current buffer for logs containing keyword</td>
+    <td>Search current buffer for keyword-matching logs</td>
     <td>
-      <code>keyword</code> — Search keyword<br>
-      <code>count</code> — Max result count (default 10)
+      <code>keyword</code> &mdash; Search keyword<br>
+      <code>count</code> &mdash; Max results (default 10)
     </td>
     <td>Matching log lines</td>
   </tr>
   <tr>
     <td><code>GetRecentLogs</code></td>
     <td>Retrieve recently received logs</td>
-    <td><code>count</code> — Number of lines (default 100)</td>
+    <td><code>count</code> &mdash; Number of lines (default 100)</td>
     <td>Recent log text</td>
   </tr>
   <tr>
@@ -1319,10 +1646,10 @@ The detection results show both the camera's current IP and the PC's network int
     <td><code>LaunchViewer</code></td>
     <td>Launch DLT Viewer GUI</td>
     <td>
-      <code>project_file</code> — .dlp project file (optional)<br>
-      <code>log_file</code> — .dlt log file (optional)
+      <code>project_file</code> &mdash; .dlp project file (optional)<br>
+      <code>log_file</code> &mdash; .dlt log file (optional)
     </td>
-    <td>Launch result (including PID)</td>
+    <td>Launch result (with PID)</td>
   </tr>
   <tr>
     <td><code>CloseViewer</code></td>
@@ -1332,11 +1659,11 @@ The detection results show both the camera's current IP and the PC's network int
   </tr>
   <tr>
     <td><code>CreateProject</code></td>
-    <td>Create a DLT Viewer project file (.dlp)</td>
+    <td>Create DLT Viewer project file (.dlp)</td>
     <td>
-      <code>file_path</code> — Save path<br>
-      <code>host</code> — ECU IP (optional, default: connected host)<br>
-      <code>port</code> — DLT port (optional, default: 3490)
+      <code>file_path</code> &mdash; Save path<br>
+      <code>host</code> &mdash; ECU IP (optional, default: connected host)<br>
+      <code>port</code> &mdash; DLT port (optional, default: 3490)
     </td>
     <td>Created file path</td>
   </tr>
@@ -1354,36 +1681,36 @@ The detection results show both the camera's current IP and the PC's network int
   The most common use case is <strong>DLT log keyword verification</strong>:
 </p>
 
-<h4>Usage Examples</h4>
+<h4>Examples</h4>
 <table>
   <tr><th>Purpose</th><th>Function</th><th>Configuration</th></tr>
   <tr>
     <td>Wait for log keyword (blocking)</td>
     <td><code>WaitLog</code></td>
-    <td>keyword: <code>BOOT_COMPLETE</code>, timeout: <code>60</code><br>→ PASS if keyword appears within 60 seconds; pauses step execution</td>
+    <td>keyword: <code>BOOT_COMPLETE</code>, timeout: <code>60</code><br>&rarr; PASS if keyword appears within 60s, step execution paused</td>
   </tr>
   <tr>
     <td>AND condition verification</td>
     <td><code>WaitLog</code></td>
-    <td>keyword: <code>APP_START navigation</code><br>→ Searches for a line containing both words</td>
+    <td>keyword: <code>APP_START navigation</code><br>&rarr; Searches for lines containing both words</td>
   </tr>
   <tr>
     <td>Background monitoring</td>
     <td><code>StartMonitor</code></td>
-    <td>keyword: <code>ERROR</code>, timeout: <code>120</code><br>→ Next step proceeds immediately; monitors in a separate thread for 120 seconds</td>
+    <td>keyword: <code>ERROR</code>, timeout: <code>120</code><br>&rarr; Proceeds to next step immediately, monitors in separate thread for 120s</td>
   </tr>
   <tr>
     <td>Check monitoring result</td>
     <td><code>GetMonitorResult</code></td>
-    <td>monitor_id: <code>mon_1</code><br>→ Returns PASS/FAIL/RUNNING</td>
+    <td>monitor_id: <code>mon_1</code><br>&rarr; Returns PASS/FAIL/RUNNING</td>
   </tr>
   <tr>
     <td>Clear logs</td>
     <td><code>ClearLogs</code></td>
-    <td>→ Clears previous logs to set a new verification starting point</td>
+    <td>&rarr; Clear previous logs to set a new verification starting point</td>
   </tr>
   <tr>
-    <td>Visualize logs with GUI</td>
+    <td>Visualize logs in GUI</td>
     <td><code>LaunchViewer</code></td>
     <td>project_file: <code>CCIC_DLT_VIEWER_PRJ.dlp</code></td>
   </tr>
@@ -1392,38 +1719,586 @@ The detection results show both the camera's current IP and the PC's network int
 <div class="callout callout-info">
   <strong>WaitLog vs StartMonitor:</strong>
   <ul style="margin-bottom:0">
-    <li><code>WaitLog</code> — <strong>Blocking</strong>: Pauses step execution until the keyword appears. Use for definitive verification.</li>
-    <li><code>StartMonitor</code> — <strong>Non-blocking</strong>: Proceeds to the next step immediately while monitoring in the background. Check later with <code>GetMonitorResult</code>.</li>
-    <li>In the step add UI, select <code>WaitLog</code> and check <strong>"Background monitoring"</strong> to automatically switch to <code>StartMonitor</code>.</li>
+    <li><code>WaitLog</code> &mdash; <strong>Blocking</strong>: Pauses step execution until the keyword appears. Use for definitive verification.</li>
+    <li><code>StartMonitor</code> &mdash; <strong>Non-blocking</strong>: Proceeds to the next step immediately while monitoring in the background. Check later with <code>GetMonitorResult</code>.</li>
+    <li>In the step add UI, selecting <code>WaitLog</code> and checking <strong>"Background monitoring"</strong> automatically switches to <code>StartMonitor</code>.</li>
   </ul>
 </div>
 
 <div class="callout callout-info">
-  <strong>Typical DLT Verification Scenario Flow:</strong>
+  <strong>Typical DLT verification scenario flow:</strong>
   <ol style="margin-bottom:0">
-    <li>Add DLTViewer module as an auxiliary device (set ECU IP)</li>
-    <li>Log receiving starts automatically on connection</li>
-    <li>Clear buffer with <code>ClearLogs</code></li>
+    <li>Add DLTViewer module as an auxiliary device (configure ECU IP)</li>
+    <li>Log reception starts automatically on connection</li>
+    <li><code>ClearLogs</code> to clear the buffer</li>
     <li>Perform test actions (screen touch, app launch, etc.)</li>
-    <li>Verify with <code>WaitLog</code> that the expected DLT log appears</li>
+    <li><code>WaitLog</code> to verify the expected DLT log appears</li>
   </ol>
 </div>
+
+
+<!-- ============================== Power Control Modules ============================== -->
+<h3 id="module-power">POWER &mdash; Power Supply Control</h3>
+<p>
+  A module for setting and measuring voltage/current on serial (RS-232) connected VUPOWER/K3010 power supply equipment.
+</p>
+<h4>Connection Setup</h4>
+<p>When adding an auxiliary device on the Device page, select module <code>POWER</code> and configure the COM port and communication speed.</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>SetOutput</code></td><td>Power output ON/OFF</td><td><code>status</code>: 'ON' or 'OFF'</td></tr>
+  <tr><td><code>SetValue</code></td><td>Set voltage or current</td><td><code>set_type</code>: 'VOLT'/'CURR', <code>value</code>: setting value</td></tr>
+  <tr><td><code>ReadValue</code></td><td>Measure current voltage/current</td><td><code>set_type</code>: 'VOLT'/'CURR'</td></tr>
+  <tr><td><code>SendCmd</code></td><td>Send raw command (advanced)</td><td><code>cmd</code>: command string</td></tr>
+</table>
+<h4>Examples</h4>
+<table>
+  <tr><th>Purpose</th><th>Function</th><th>Configuration</th></tr>
+  <tr><td>Set 14.4V</td><td><code>SetValue</code></td><td>set_type: <code>VOLT</code>, value: <code>14.4</code></td></tr>
+  <tr><td>Turn on output</td><td><code>SetOutput</code></td><td>status: <code>ON</code></td></tr>
+  <tr><td>Measure current</td><td><code>ReadValue</code></td><td>set_type: <code>CURR</code></td></tr>
+</table>
+
+<h3 id="module-riden">RIDEN &mdash; RIDEN Power Supply</h3>
+<p>
+  A module for controlling serial-connected RIDEN power supply equipment.
+  Simple structure that handles connection and voltage setting in a single <code>TurnOn</code> call.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>TurnOn</code></td><td>Turn on power supply + set voltage</td><td><code>port</code>: COM port, <code>voltage</code>: voltage (V)</td></tr>
+  <tr><td><code>Turnoff</code></td><td>Turn off power supply</td><td><code>port</code>: COM port</td></tr>
+</table>
+
+<h3 id="module-keysight">KeysightPower &mdash; Keysight Power Supply</h3>
+<p>
+  A module for voltage setting and waveform sequence control on Ethernet/GPIB-connected Keysight power supplies.
+  Beyond simple voltage setting, it can program complex waveform sequences including Step/Ramp/Pulse/Sine/Exp.
+</p>
+<h4>Basic Control Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>connectPowerSupply</code></td><td>Ethernet connection</td><td><code>eth</code>: interface (optional)</td></tr>
+  <tr><td><code>closePowerSupply</code></td><td>Disconnect</td><td>(none)</td></tr>
+  <tr><td><code>setVoltage</code></td><td>Set output voltage</td><td><code>volt</code>: voltage (V)</td></tr>
+  <tr><td><code>setMaxVoltage</code></td><td>Set maximum voltage limit</td><td><code>volt</code>: max voltage (V)</td></tr>
+  <tr><td><code>turnOnOutput</code></td><td>Turn on output</td><td>(none)</td></tr>
+  <tr><td><code>turnOffOutput</code></td><td>Turn off output</td><td>(none)</td></tr>
+  <tr><td><code>checkMeasCurrentLessThan</code></td><td>Check current below threshold</td><td><code>Threshold</code>: current (A)</td></tr>
+  <tr><td><code>powerSupply_ask</code></td><td>Send SCPI command</td><td><code>cmd</code>: SCPI command</td></tr>
+</table>
+<h4>Waveform Sequence Functions</h4>
+<p>Configure arbitrary waveforms for voltage transient testing.</p>
+<table>
+  <tr><th>Function</th><th>Waveform Type</th><th>Key Parameters</th></tr>
+  <tr><td><code>addToSeq_Step</code></td><td>Step</td><td>vStart, vEnd, tStart, tEnd</td></tr>
+  <tr><td><code>addToSeq_Ramp</code></td><td>Ramp</td><td>vStart, vEnd, tStart, tRamp, tEnd, repeat</td></tr>
+  <tr><td><code>addToSeq_Puls</code></td><td>Pulse</td><td>vStart, vTop, tStart, tTop, tEnd, repeat</td></tr>
+  <tr><td><code>addToSeq_Sine</code></td><td>Sine</td><td>ampl, offs, freq, repeat</td></tr>
+  <tr><td><code>addToSeq_Exp</code></td><td>Exponential</td><td>vStart, vEnd, tStart, tWave, tConst, repeat</td></tr>
+  <tr><td><code>addToSeq_Stair</code></td><td>Staircase</td><td>vStart, vEnd, tStart, tStep, tEnd, nStep, repeat</td></tr>
+  <tr><td><code>addToSeq_Trap</code></td><td>Trapezoid</td><td>vStart, vTop, tRise, tTop, tFall, repeat</td></tr>
+  <tr><td><code>setSeqArb</code></td><td colspan="2">Apply configured sequence to the instrument</td></tr>
+  <tr><td><code>runSeqArb</code></td><td colspan="2">Run the sequence (<code>repeat</code>: repeat count)</td></tr>
+</table>
+
+<!-- ============================== CAN Communication Modules ============================== -->
+<h3 id="module-can">CAN &mdash; CAN Bus Communication</h3>
+<p>
+  A module for sending/receiving vehicle CAN messages through PCAN/Vector/Kvaser and other CAN interfaces.
+  Based on the python-can library, it supports various CAN hardware.
+</p>
+<h4>Connection Setup</h4>
+<p>
+  When adding an auxiliary device on the Device page, select module <code>CAN</code>.
+  The <code>Bus</code> function is automatically called to connect to the CAN interface.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>send_msg</code></td><td>Send CAN message (single or periodic)</td><td>
+    <code>message_id</code>: ID (hex, e.g., '0x123')<br>
+    <code>cycle_time</code>: period (ms), 0 for single<br>
+    <code>can_message</code>: data (e.g., '00 11 22 33')<br>
+    <code>bus_channel</code>: channel<br>
+    <code>message_type</code>: 'FD' or 'Classic'
+  </td></tr>
+  <tr><td><code>stop_all_periodic_tasks</code></td><td>Stop all periodic transmissions</td><td>(none)</td></tr>
+  <tr><td><code>start_log_save</code></td><td>Start CAN log file saving</td><td><code>logpath</code>: save path</td></tr>
+  <tr><td><code>stop_log_save</code></td><td>Stop CAN log saving</td><td>(none)</td></tr>
+  <tr><td><code>shutdown</code></td><td>Disconnect CAN device</td><td>(none)</td></tr>
+</table>
+
+<h3 id="module-canoe">CANoe &mdash; CANoe Simulation Control</h3>
+<p>
+  A module for controlling Vector CANoe software simulation start/stop and environment/system variable settings.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>open_simulation</code></td><td>Open simulation (load .cfg)</td><td><code>cfgname</code>: .cfg file path</td></tr>
+  <tr><td><code>close_simulation</code></td><td>Close/exit simulation</td><td>(none)</td></tr>
+  <tr><td><code>start_Measurement</code></td><td>Start measurement</td><td>(none)</td></tr>
+  <tr><td><code>stop_Measurement</code></td><td>Stop measurement</td><td>(none)</td></tr>
+  <tr><td><code>get_EnvVar</code></td><td>Read environment variable</td><td><code>var</code>: variable name</td></tr>
+  <tr><td><code>set_EnvVar</code></td><td>Set environment variable</td><td><code>var</code>: variable name, <code>value</code>: value</td></tr>
+</table>
+
+<h3 id="module-canat">CANat &mdash; CANat Device</h3>
+<p>
+  A module for sending/receiving CAN bus messages through CANat hardware.
+  CAN FD / Classic modes can be individually configured per channel.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>init</code></td><td>Initialize and connect</td><td><code>comport</code>, <code>log_path</code>, <code>ch1_fd</code>, <code>ch2_fd</code></td></tr>
+  <tr><td><code>disconnect</code></td><td>Disconnect</td><td>(none)</td></tr>
+  <tr><td><code>send_can_message</code></td><td>Send CAN message</td><td><code>message_id</code>, <code>cycle_time</code>, <code>can_message</code>, <code>bus_channel</code>, <code>message_type</code></td></tr>
+  <tr><td><code>stop_can_message</code></td><td>Stop specific message transmission</td><td><code>message_id</code>, <code>bus_channel</code></td></tr>
+  <tr><td><code>send_cam_message_all_stop</code></td><td>Stop all transmissions</td><td>(none)</td></tr>
+  <tr><td><code>can_message_save_start</code></td><td>Start log saving</td><td><code>save_path</code></td></tr>
+  <tr><td><code>can_message_save_stop</code></td><td>Stop log saving</td><td>(none)</td></tr>
+</table>
+
+<h3 id="module-pcan">PCANClient &mdash; Peak CAN Client</h3>
+<p>
+  A module for sending/receiving CAN messages through Peak CAN devices.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>send_msg</code></td><td>Send CAN message</td><td><code>channel</code>, <code>msg_id</code>, <code>type</code>, <code>length</code>, <code>cycle_time</code>, <code>msg_data</code></td></tr>
+  <tr><td><code>stop</code></td><td>Stop specific message transmission</td><td><code>channel</code>, <code>msg_id</code></td></tr>
+  <tr><td><code>stop_all</code></td><td>Stop all transmissions</td><td>(none)</td></tr>
+</table>
+
+<!-- ============================== Bench Equipment Modules ============================== -->
+<h3 id="module-bench">BENCH &mdash; Bench Socket Communication</h3>
+<p>
+  A module for exchanging data with bench equipment via TCP socket and measuring current.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>socket_connect</code></td><td>Socket connection to bench equipment</td><td><code>host</code>: IP address</td></tr>
+  <tr><td><code>socket_close</code></td><td>Close socket connection</td><td>(none)</td></tr>
+  <tr><td><code>SendData</code></td><td>Send data</td><td><code>data</code>: data to send</td></tr>
+  <tr><td><code>check_current</code></td><td>Check current range</td><td><code>min_current</code>, <code>max_current</code> (A), <code>meas_time</code> (seconds)</td></tr>
+</table>
+
+<h3 id="module-ivi-bench">IVIQEBenchIOClient &mdash; IVI QE Bench</h3>
+<p>
+  A comprehensive module for controlling relays, power, sensors, audio, LCD, buttons, USB, and more
+  on a serial-connected QE test bench.
+  A large-scale module capable of controlling most signals needed for vehicle simulation.
+</p>
+<h4>Connection Setup</h4>
+<p>When adding an auxiliary device on the Device page, select module <code>IVIQEBenchIOClient</code>. The serial port connects automatically.</p>
+
+<h4>Power / Ignition Control</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>ACCOnOff</code></td><td>ACC power ON/OFF</td><td><code>state</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>BatteryOnOff</code></td><td>Battery power ON/OFF</td><td><code>nState</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>IGNControl</code></td><td>Ignition power control</td><td><code>status</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>IGN3Control</code></td><td>Ignition 3 power control</td><td><code>nStatus</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>ALTControl</code></td><td>Alternator signal control</td><td><code>status</code>: 0=OFF, 1=ON</td></tr>
+</table>
+
+<h4>Vehicle Signal Simulation</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>ReverseControl</code></td><td>Reverse gear signal</td><td><code>nStatus</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>ParkingControl</code></td><td>Parking signal</td><td><code>nStatus</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>SpeedControl</code></td><td>Vehicle speed signal</td><td><code>nStatus</code>: 0=Stopped, 1=Moving</td></tr>
+  <tr><td><code>DoorControl</code></td><td>Door open/close</td><td><code>nStatus</code>: 0=Closed, 1=Open</td></tr>
+  <tr><td><code>ILLControl</code></td><td>Illumination (lighting link)</td><td><code>nStatus</code>: 0=OFF, 1=ON</td></tr>
+</table>
+
+<h4>USB / Relay Control</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>USB1Control</code></td><td>USB 1 port relay</td><td><code>Status</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>USBSelectorControl</code></td><td>USB selector port selection</td><td><code>nOnPortNum</code>: port number</td></tr>
+  <tr><td><code>ShieldBoxControl</code></td><td>Shield box open/close</td><td><code>nStatus</code>: 0=Close, 1=Open</td></tr>
+  <tr><td><code>Relay_10</code> ~ <code>Relay_14</code></td><td>Individual relay control</td><td><code>nStatus</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>RelayInitialization</code></td><td>Initialize all relays</td><td><code>init_value</code>: initialization value</td></tr>
+</table>
+
+<h4>Measurement / Sensors</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>CheckVoltage</code></td><td>Check voltage range</td><td><code>nMin</code>, <code>nMax</code> (V)</td></tr>
+  <tr><td><code>CheckCurrent</code></td><td>Check current range</td><td><code>nMin</code>, <code>nMax</code> (A)</td></tr>
+  <tr><td><code>EXT_CURRENT</code></td><td>External current check with delay</td><td><code>min_current</code>, <code>max_current</code>, <code>check_delay</code></td></tr>
+  <tr><td><code>CheckSound</code></td><td>Check audio output status</td><td><code>nStatus</code>: status value</td></tr>
+  <tr><td><code>CheckLCD</code></td><td>Check LCD display status</td><td><code>nStatus</code>: status value</td></tr>
+</table>
+
+<h4>Button Control</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>TenButton</code></td><td>10-button panel</td><td><code>nButton</code>: number (0~9), <code>nDelay</code>: duration (ms)</td></tr>
+  <tr><td><code>ThreeButton</code></td><td>3-button panel</td><td><code>nButton</code>: number (0~2), <code>nDelay</code>: duration (ms)</td></tr>
+  <tr><td><code>TwoButton</code></td><td>2-button panel</td><td><code>nButton</code>: number (0~1), <code>nDelay</code>: duration (ms)</td></tr>
+</table>
+
+<div class="callout callout-info">
+  <strong>IVIQEBenchIOClient Full Function List:</strong>
+  In addition to the above, over 80 functions are provided, including <code>ACCSinglePulse</code>, <code>BatterySinglePulse</code>, <code>FileToSD</code>, <code>SystemReset</code>,
+  <code>RequestAudioFrequency</code>, <code>RequestLightSensorControl</code>, and more.
+  The full list can be found in the <strong>Module Guide panel</strong> on the Settings screen.
+</div>
+
+<h3 id="module-sp25">SP25Bench &mdash; SP25 Test Bench</h3>
+<p>A module for controlling the SP25 test bench. Supports eCall, reboot, and factory reset.</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>eCall</code></td><td>Execute eCall (emergency call)</td><td>(none)</td></tr>
+  <tr><td><code>factory_reset</code></td><td>Factory reset</td><td>(none)</td></tr>
+  <tr><td><code>reboot</code></td><td>Reboot equipment</td><td>(none)</td></tr>
+</table>
+
+<h3 id="module-smartbench">SmartBench &mdash; Smart Bench TCP Control</h3>
+<p>
+  A module for controlling Smart Bench equipment power, buttons, current, and LEDs via TCP socket.
+</p>
+<h4>Connection Setup</h4>
+<p>When adding an auxiliary device on the Device page, select module <code>SmartBench</code>. Configure the IP address.</p>
+<h4>Power Relay Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>Battery</code></td><td>Battery (+B) relay</td><td><code>status</code>: 'on'/'off'</td></tr>
+  <tr><td><code>ACC</code></td><td>ACC relay</td><td><code>status</code>: 'on'/'off'</td></tr>
+  <tr><td><code>IGN</code></td><td>IGN relay</td><td><code>status</code>: 'on'/'off'</td></tr>
+  <tr><td><code>IGN3</code></td><td>IGN3 relay</td><td><code>status</code>: 'on'/'off'</td></tr>
+  <tr><td><code>USB</code></td><td>USB relay</td><td><code>status</code>: 'on'/'off'</td></tr>
+</table>
+<h4>Verification / Control Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>CheckCurrent</code></td><td>Wait for current to enter range (3 consecutive PASS)</td><td><code>min_current</code>, <code>max_current</code> (A), <code>check_delay</code> (ms)</td></tr>
+  <tr><td><code>CheckCurrentMoment</code></td><td>Momentary current range check</td><td><code>min_current</code>, <code>max_current</code> (A)</td></tr>
+  <tr><td><code>CheckCurrentMaintain</code></td><td>Verify current stays within range</td><td><code>min_current</code>, <code>max_current</code> (A), <code>check_delay</code> (ms)</td></tr>
+  <tr><td><code>ButtonPress</code></td><td>Press button</td><td><code>button_num</code>: number, <code>press_time</code>: time (ms)</td></tr>
+  <tr><td><code>LEDCheck</code></td><td>Verify LED status</td><td><code>data</code>: verification data string</td></tr>
+  <tr><td><code>Relay</code></td><td>Direct relay control</td><td><code>relay_num</code>: number, <code>status</code>: 'on'/'off'</td></tr>
+  <tr><td><code>SendRaw</code></td><td>Send raw command (advanced)</td><td><code>command</code>: command</td></tr>
+</table>
+
+<h3 id="module-ccic-bench">CCIC_BENCH &mdash; CCIC Bench</h3>
+<p>
+  A test bench equipment that controls vehicle power (IGN/ACC/Battery) via UDP communication.
+  Provides control (set) and read (status check) function pairs for each relay.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>IGN1</code> / <code>IGN1_Read</code></td><td>Ignition 1 control / status read</td><td><code>on_off</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>IGN2</code> / <code>IGN2_Read</code></td><td>Ignition 2 control / status read</td><td><code>on_off</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>ACC</code> / <code>ACC_Read</code></td><td>ACC power control / status read</td><td><code>on_off</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>BATTERY</code> / <code>BATTERY_Read</code></td><td>Battery relay control / status read</td><td><code>on_off</code>: 0=OFF, 1=ON</td></tr>
+  <tr><td><code>BatterySet</code></td><td>Set battery output voltage</td><td><code>voltage</code>: voltage (V), default 14.4</td></tr>
+  <tr><td><code>BatteryCheck</code></td><td>Measure current battery voltage</td><td>(none)</td></tr>
+  <tr><td><code>AmpereCheck</code></td><td>Measure current consumption</td><td>(none)</td></tr>
+  <tr><td><code>SendCommand</code></td><td>Send raw UDP command</td><td><code>cmd1</code>, <code>cmd2</code>, <code>data_hex</code></td></tr>
+</table>
+
+<!-- ============================== Serial/UART Modules ============================== -->
+<h3 id="module-uart">Uart &mdash; UART Communication</h3>
+<p>
+  A module for performing UART communication via serial port and saving logs.
+  Used for Linux console access, etc.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>connect</code></td><td>Connect UART port (no logging)</td><td><code>port</code>, <code>bps</code>, <code>endline</code></td></tr>
+  <tr><td><code>add_uart_port</code></td><td>Connect + start log saving</td><td><code>port</code>, <code>bps</code>, <code>logFilePath</code>, <code>endline</code></td></tr>
+  <tr><td><code>close</code></td><td>Disconnect</td><td>(none)</td></tr>
+  <tr><td><code>send_string</code></td><td>Send string command</td><td><code>command</code>: e.g., 'ls -al'</td></tr>
+  <tr><td><code>send_char</code></td><td>Send single character</td><td><code>char</code>: single character</td></tr>
+  <tr><td><code>send_control_character</code></td><td>Send control character (Ctrl+C, etc.)</td><td><code>control_character</code>: e.g., 'ETX'</td></tr>
+  <tr><td><code>start_save_file</code></td><td>Start log file saving</td><td><code>path_log</code>: save path</td></tr>
+  <tr><td><code>stop_save_file</code></td><td>Stop log file saving</td><td>(none)</td></tr>
+</table>
+
+<h3 id="module-serial-plugin">SerialPlugin &mdash; General-Purpose Serial Communication</h3>
+<p>
+  A general-purpose plugin for sending/receiving data via RS-232 serial port.
+  Supports text/HEX transmission, response reading, and keyword wait (blocking/non-blocking).
+</p>
+<h4>Connection Setup</h4>
+<p>When adding an auxiliary device on the Device page, select <code>Serial</code> type. Configure the COM port and Baud Rate.</p>
+<h4>Send/Receive Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>SendCommand</code></td><td>Send text command</td><td><code>command</code>, <code>encoding</code> (default utf-8), <code>append_newline</code> (default True)</td></tr>
+  <tr><td><code>SendHex</code></td><td>Send hexadecimal bytes</td><td><code>hex_string</code>: e.g., 'FF 01 A0'</td></tr>
+  <tr><td><code>ReadLine</code></td><td>Read one line</td><td><code>timeout</code>: wait time (seconds)</td></tr>
+  <tr><td><code>ReadAll</code></td><td>Read entire buffer</td><td><code>timeout</code>: wait time (seconds)</td></tr>
+  <tr><td><code>SendAndRead</code></td><td>Send and read response</td><td><code>command</code>, <code>timeout</code>, <code>encoding</code></td></tr>
+  <tr><td><code>ReadHex</code></td><td>Read specified bytes (HEX)</td><td><code>count</code>: byte count, <code>timeout</code></td></tr>
+  <tr><td><code>SetBaudrate</code></td><td>Change communication speed</td><td><code>baudrate</code>: e.g., 115200</td></tr>
+</table>
+<h4>Keyword Monitoring Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>LOG_SERIAL</code></td><td>Wait for keyword (<strong>blocking</strong>)</td><td><code>keyword</code>: keyword (space=AND), <code>timeout</code>: seconds</td></tr>
+  <tr><td><code>StartMonitor</code></td><td>Background monitoring (<strong>non-blocking</strong>)</td><td><code>keyword</code>, <code>timeout</code></td></tr>
+  <tr><td><code>StopMonitor</code></td><td>Stop monitoring</td><td><code>monitor_id</code></td></tr>
+  <tr><td><code>GetMonitorResult</code></td><td>Check monitoring result</td><td><code>monitor_id</code></td></tr>
+</table>
+<div class="callout callout-info">
+  <strong>LOG_SERIAL vs StartMonitor:</strong>
+  <code>LOG_SERIAL</code> is a <strong>blocking</strong> method that pauses step execution until the keyword appears.
+  <code>StartMonitor</code> is a <strong>non-blocking</strong> method that proceeds to the next step immediately; check later with <code>GetMonitorResult</code>.
+</div>
+
+<h3 id="module-serial-logging">SerialLogging &mdash; Serial Logging</h3>
+<p>
+  A module that connects to a serial port to capture and save logs and perform keyword PASS/FAIL determination.
+  Provides the same interface as DLTLogging (StartSave/StopSave/MarkStep/Search) for serial environments.
+</p>
+<h4>Connection Setup</h4>
+<p>When adding an auxiliary device on the Device page, select module <code>SerialLogging</code>. Configure the COM port and Baud Rate.</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>StartSave</code></td><td>Connect + capture + start saving</td><td><code>save_path</code>: save path (auto if empty)</td></tr>
+  <tr><td><code>StopSave</code></td><td>Stop saving + disconnect</td><td>(none)</td></tr>
+  <tr><td><code>MarkStep</code></td><td>Mark step boundary</td><td><code>step_index</code>: step index</td></tr>
+  <tr><td><code>SearchAll</code></td><td>Search all logs for keyword</td><td><code>keyword</code>: keyword (space=AND), <code>count</code></td></tr>
+  <tr><td><code>SearchRange</code></td><td>Search within step range</td><td><code>keyword</code>, <code>from_step</code>, <code>to_step</code>, <code>count</code></td></tr>
+  <tr><td><code>WaitLog</code></td><td>Wait for keyword (blocking)</td><td><code>keyword</code>, <code>timeout</code></td></tr>
+  <tr><td><code>SendCommand</code></td><td>Send serial command</td><td><code>command</code>, <code>encoding</code>, <code>append_newline</code></td></tr>
+  <tr><td><code>SendHex</code></td><td>Send HEX bytes</td><td><code>hex_string</code>: e.g., 'FF 01 A0'</td></tr>
+  <tr><td><code>SendAndWait</code></td><td>Send command + wait for keyword response</td><td><code>command</code>, <code>keyword</code>, <code>timeout</code></td></tr>
+  <tr><td><code>ClearLogs</code></td><td>Clear log buffer/step markings</td><td>(none)</td></tr>
+</table>
+<div class="callout callout-info">
+  <strong>Typical serial log verification flow:</strong>
+  <ol style="margin-bottom:0">
+    <li><code>StartSave</code> to connect + start log saving</li>
+    <li><code>ClearLogs</code> to clear the buffer</li>
+    <li><code>SendCommand</code> to send a command (e.g., reboot)</li>
+    <li><code>WaitLog</code> to wait for the expected log to appear</li>
+    <li>Or use <code>SendAndWait</code> to send a command and wait for a response in one step</li>
+  </ol>
+</div>
+
+<!-- ============================== Logging/Monitoring Modules ============================== -->
+<h3 id="module-dlt-logging">DLTLogging &mdash; DLT Logging (No GUI Required)</h3>
+<p>
+  A module that connects directly to the DLT daemon via TCP to capture and save logs and perform keyword PASS/FAIL determination.
+  Unlike DLTViewer, it provides lightweight log saving and searching without a GUI.
+  Use <code>MarkStep</code> to mark step boundaries for range-based searching.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>StartSave</code></td><td>DLT connection + capture + start saving</td><td><code>save_path</code>: save path (auto if empty)</td></tr>
+  <tr><td><code>StopSave</code></td><td>Stop saving + disconnect</td><td>(none)</td></tr>
+  <tr><td><code>MarkStep</code></td><td>Mark step boundary (for range search)</td><td><code>step_index</code>: step index</td></tr>
+  <tr><td><code>SearchAll</code></td><td>Search all logs for keyword &rarr; PASS/FAIL</td><td><code>keyword</code> (space=AND), <code>count</code></td></tr>
+  <tr><td><code>SearchRange</code></td><td>Search within step range &rarr; PASS/FAIL</td><td><code>keyword</code>, <code>from_step</code>, <code>to_step</code>, <code>count</code></td></tr>
+  <tr><td><code>WaitLog</code></td><td>Wait for keyword (blocking)</td><td><code>keyword</code>, <code>timeout</code> (seconds)</td></tr>
+  <tr><td><code>ClearLogs</code></td><td>Clear log buffer/step markings</td><td>(none)</td></tr>
+</table>
+<div class="callout callout-info">
+  <strong>DLTViewer vs DLTLogging:</strong>
+  <ul style="margin-bottom:0">
+    <li><code>DLTViewer</code> &mdash; Can launch GUI viewer, real-time log search/monitoring, project file management</li>
+    <li><code>DLTLogging</code> &mdash; Lightweight, no GUI, optimized for log saving + step-based PASS/FAIL determination</li>
+  </ul>
+</div>
+
+<h3 id="module-mlp">MLP &mdash; MLP Logging</h3>
+<p>
+  A module that receives and saves real-time logs from IVI/SAFE systems using MIB Log Protocol (MLP).
+  Supports ICAS3EU/ICAS3CN/MIB3OI models.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>set_config</code></td><td>Configure MLP settings</td><td>
+    <code>model</code>: 'ICAS3EU'/'ICAS3CN'/'MIB3OI'<br>
+    <code>mlp_ivi_file_path</code>: IVI log path<br>
+    <code>mlp_safe_file_path</code>: SAFE log path (optional)
+  </td></tr>
+  <tr><td><code>logging_start</code></td><td>Start log saving</td><td>(none, call set_config first)</td></tr>
+  <tr><td><code>logging_stop</code></td><td>Stop log saving</td><td>(none)</td></tr>
+</table>
+
+<!-- ============================== Remote/Network Modules ============================== -->
+<h3 id="module-ssh">SSHManager &mdash; SSH Access</h3>
+<p>
+  A module for executing commands and transferring files (SFTP) on remote equipment via SSH.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>create_ssh_client</code></td><td>Create SSH connection</td><td><code>hostname</code>, <code>username</code>, <code>password</code>, <code>key_filePath</code> (optional)</td></tr>
+  <tr><td><code>close_ssh_client</code></td><td>Close SSH connection</td><td>(none)</td></tr>
+  <tr><td><code>send_command</code></td><td>Execute remote command</td><td><code>command</code>: e.g., 'ls -al'</td></tr>
+  <tr><td><code>send_file</code></td><td>Transfer file local &rarr; remote</td><td><code>local_path</code>, <code>remote_path</code></td></tr>
+  <tr><td><code>get_file</code></td><td>Get file remote &rarr; local</td><td><code>remote_path</code>, <code>local_path</code></td></tr>
+  <tr><td><code>get_file_list_in_dir</code></td><td>List files in remote directory</td><td><code>path</code>, <code>_filter</code> (e.g., '*.log')</td></tr>
+</table>
+
+<h3 id="module-ignition">Ignition &mdash; Ignition Control</h3>
+<p>
+  A module for controlling ICAS3/MIB3 equipment ignition via TCP socket.
+  Default address: <code>192.168.1.4:15500</code>. testiface must be running on the target device.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>connect</code></td><td>TCP connection</td><td><code>host</code> (default 192.168.1.4), <code>port</code> (default 15500)</td></tr>
+  <tr><td><code>close</code></td><td>Disconnect</td><td>(none)</td></tr>
+  <tr><td><code>send_packet</code></td><td>Send ignition command packet</td><td><code>cmd</code>: hex string (e.g., '02 2c 01 09')</td></tr>
+  <tr><td><code>compare_packet</code></td><td>Compare received packet</td><td><code>expected</code>: expected hex string</td></tr>
+</table>
+
+<!-- ============================== Android/Device Modules ============================== -->
+<h3 id="module-android">Android &mdash; ADB Control</h3>
+<p>
+  A module for controlling Android devices via ADB.
+  Supports touch, swipe, app install/uninstall, screen capture, shell commands, and more.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>adb_tap</code></td><td>Screen touch</td><td><code>x</code>, <code>y</code>, <code>serial</code> (optional)</td></tr>
+  <tr><td><code>adb_swipe</code></td><td>Swipe</td><td><code>x1</code>, <code>y1</code>, <code>x2</code>, <code>y2</code>, <code>duration</code> (ms)</td></tr>
+  <tr><td><code>key_event</code></td><td>Send key event</td><td><code>keycode</code> (e.g., 'KEYCODE_HOME'), <code>long_press</code></td></tr>
+  <tr><td><code>TypingtoScrenn</code></td><td>Input text</td><td><code>text</code>: input string</td></tr>
+  <tr><td><code>adb_shell</code></td><td>Execute shell command</td><td><code>cmd</code>: e.g., 'getprop ro.build.version.release'</td></tr>
+  <tr><td><code>adb_screencap</code></td><td>Screen capture</td><td><code>img_path</code>: PC save path</td></tr>
+  <tr><td><code>adb_push</code></td><td>Transfer file PC &rarr; device</td><td><code>src</code>, <code>dest</code></td></tr>
+  <tr><td><code>adb_pull</code></td><td>Get file device &rarr; PC</td><td><code>src</code>, <code>dest</code></td></tr>
+  <tr><td><code>install_apk</code></td><td>Install APK</td><td><code>apk_path</code></td></tr>
+  <tr><td><code>uninstall_apk</code></td><td>Uninstall app</td><td><code>apk_package</code>: package name</td></tr>
+  <tr><td><code>adb_reboot</code></td><td>Reboot device</td><td><code>serial</code> (optional)</td></tr>
+  <tr><td><code>start_logcat</code></td><td>Start logcat saving</td><td><code>logpath</code></td></tr>
+  <tr><td><code>stop_logcat</code></td><td>Stop logcat saving</td><td>(none)</td></tr>
+</table>
+
+<!-- ============================== Image/Camera/Audio Modules ============================== -->
+<h3 id="module-image">ImageProcessing &mdash; Image Processing</h3>
+<p>
+  A module for image analysis including OCR (text recognition), image comparison, and template matching.
+</p>
+<div class="callout callout-warning">
+  <strong>Prerequisite:</strong> Tesseract-OCR must be installed for OCR functionality.
+</div>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>image_compare</code></td><td>Compare two images (match rate)</td><td><code>origin</code>, <code>expected</code>: image paths</td></tr>
+  <tr><td><code>imagesearch</code></td><td>Search for template in image</td><td><code>origin</code>, <code>expected</code>, <code>threshold</code> (0~100)</td></tr>
+  <tr><td><code>image_cut</code></td><td>Crop image region</td><td><code>origin</code>, <code>cut_img</code>, <code>x1</code>, <code>y1</code>, <code>x2</code>, <code>y2</code></td></tr>
+  <tr><td><code>image_valid</code></td><td>Check image validity</td><td><code>image</code>: image path</td></tr>
+  <tr><td><code>ocr</code></td><td>OCR text recognition</td><td><code>img_path</code>, <code>language</code> ('eng'/'kor'), <code>psm</code></td></tr>
+  <tr><td><code>ocr_coordinate</code></td><td>Find coordinates of specific text</td><td><code>img_path</code>, <code>string</code>, <code>language</code></td></tr>
+  <tr><td><code>ocr_sentence</code></td><td>Find sentence coordinates</td><td><code>img_path</code>, <code>string</code>, <code>language</code></td></tr>
+  <tr><td><code>is_similar</code></td><td>Compare text similarity</td><td><code>text1</code>, <code>text2</code>, <code>tolerance</code></td></tr>
+</table>
+
+<h3 id="module-audio">AudioLibrary &mdash; Audio Analysis</h3>
+<p>
+  A module for audio recording and mute detection.
+  Checks whether audio sources (music/radio) are silent (based on 25dB signal-to-noise ratio).
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>select_channels</code></td><td>Select audio input device</td><td><code>audio_device_s</code>: partial device name (e.g., 'USB')</td></tr>
+  <tr><td><code>start_recording</code></td><td>Start recording</td><td><code>record_seconds</code>: duration (seconds), <code>rate</code>, <code>chunk</code></td></tr>
+  <tr><td><code>stop_recording</code></td><td>Stop recording</td><td>(none)</td></tr>
+  <tr><td><code>isMute</code></td><td>Determine mute status</td><td>(none) &rarr; TRUE=muted / FALSE=sound present</td></tr>
+  <tr><td><code>get_max_value</code></td><td>Maximum amplitude value</td><td>(none)</td></tr>
+  <tr><td><code>close</code></td><td>Release resources</td><td>(none)</td></tr>
+</table>
+<div class="callout callout-warning">
+  <strong>isMute Accuracy:</strong> Optimized for music/radio sources.
+  May not be accurate for single tones (beeps) or white noise.
+</div>
+
+<h3 id="module-vision">VisionCamera &mdash; Vision Camera</h3>
+<p>
+  A module for capturing screens using GigE Vision industrial cameras.
+  Used when photographing the actual display with an external camera instead of ADB screen capture.
+</p>
+<h4>Connection Setup</h4>
+<p>When adding an auxiliary device on the Device page, select module <code>VisionCamera</code>. Configure the camera IP.</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>Connect</code></td><td>Connect camera</td><td>(none)</td></tr>
+  <tr><td><code>Disconnect</code></td><td>Disconnect</td><td>(none)</td></tr>
+  <tr><td><code>Capture</code></td><td>Capture &rarr; save to file</td><td><code>save_path</code>: save path</td></tr>
+  <tr><td><code>CaptureBytes</code></td><td>Capture &rarr; return bytes</td><td><code>fmt</code>: 'png' or 'jpeg'</td></tr>
+  <tr><td><code>CropCapture</code></td><td>Crop and capture specific region</td><td><code>save_path</code>, <code>left</code>, <code>top</code>, <code>right</code>, <code>bottom</code></td></tr>
+  <tr><td><code>GetInfo</code></td><td>Query camera info</td><td>(none)</td></tr>
+</table>
+
+<!-- ============================== Analysis/Utility Modules ============================== -->
+<h3 id="module-trace">Trace &mdash; Trace Analysis</h3>
+<p>
+  A module for analyzing function call traces by comparing expected call order with actual call order.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>initialize</code></td><td>Initialize analyzer</td><td>(none)</td></tr>
+  <tr><td><code>append_expected</code></td><td>Add expected call pair</td><td><code>caller</code>: caller, <code>callee</code>: callee</td></tr>
+  <tr><td><code>set_actual</code></td><td>Set actual trace file</td><td><code>path</code>: trace directory path</td></tr>
+  <tr><td><code>compare</code></td><td>Compare expected vs actual</td><td>(none) &rarr; Returns match status for each call pair</td></tr>
+  <tr><td><code>timeliness</code></td><td>Check call within time limit</td><td><code>time_diff</code>: allowed time (ms)</td></tr>
+</table>
+
+<h3 id="module-tigris">TigrisCheck &mdash; Tigris Check</h3>
+<p>
+  A module for running Tigris test suites on a specific ADB device and checking results.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>checkTigris</code></td><td>Run Tigris check</td><td><code>ADBID</code>: device serial, <code>TIGRIS_FOLDER</code>: folder path, <code>SUITE_NAME</code>: test suite</td></tr>
+</table>
+
+<h3 id="module-winutil">COMMON_WINDOWS &mdash; Windows Utilities</h3>
+<p>
+  A utility module for saving Windows command output to files.
+</p>
+<h4>Main Functions</h4>
+<table>
+  <tr><th>Function</th><th>Description</th><th>Parameters</th></tr>
+  <tr><td><code>start_save_file_from_command</code></td><td>Execute command + save output log</td><td><code>command</code>: command, <code>path_dir_log</code>: save directory</td></tr>
+  <tr><td><code>stop_save_file</code></td><td>Stop log saving</td><td>(none)</td></tr>
+  <tr><td><code>get_file_path</code></td><td>Get current log file path</td><td>(none)</td></tr>
+</table>
 
 
 <!-- ============================== Appendix ============================== -->
 <h2 id="appendix">Appendix</h2>
 
-<h3 id="appendix-steps">Step Type Reference</h3>
+<h3 id="appendix-steps">Step Types Reference</h3>
 <table>
   <tr><th>Type</th><th>Target Device</th><th>Key Parameters</th></tr>
   <tr><td><code>tap</code></td><td>ADB / HKMC</td><td><code>x</code>, <code>y</code></td></tr>
-  <tr><td><code>long_press</code></td><td>ADB</td><td><code>x</code>, <code>y</code>, <code>duration</code>(ms)</td></tr>
+  <tr><td><code>long_press</code></td><td>ADB</td><td><code>x</code>, <code>y</code>, <code>duration</code> (ms)</td></tr>
   <tr><td><code>swipe</code></td><td>ADB / HKMC</td><td><code>x1</code>, <code>y1</code>, <code>x2</code>, <code>y2</code>, <code>duration</code></td></tr>
   <tr><td><code>input_text</code></td><td>ADB</td><td><code>text</code></td></tr>
   <tr><td><code>key_event</code></td><td>ADB</td><td><code>keycode</code> (e.g., KEYCODE_BACK)</td></tr>
-  <tr><td><code>wait</code></td><td>-</td><td><code>duration</code>(ms)</td></tr>
+  <tr><td><code>wait</code></td><td>-</td><td><code>duration</code> (ms)</td></tr>
   <tr><td><code>adb_command</code></td><td>ADB</td><td><code>command</code> (shell command)</td></tr>
-  <tr><td><code>serial_command</code></td><td>Serial</td><td><code>data</code> (data to send)</td></tr>
+  <tr><td><code>serial_command</code></td><td>Serial</td><td><code>data</code> (send data)</td></tr>
   <tr><td><code>module_command</code></td><td>Module</td><td><code>function</code>, <code>args</code></td></tr>
   <tr><td><code>hkmc_touch</code></td><td>HKMC</td><td><code>x</code>, <code>y</code>, <code>screen_type</code></td></tr>
   <tr><td><code>hkmc_swipe</code></td><td>HKMC</td><td><code>x1</code>, <code>y1</code>, <code>x2</code>, <code>y2</code>, <code>screen_type</code></td></tr>
@@ -1432,28 +2307,28 @@ The detection results show both the camera's current IP and the PC's network int
   <tr><td><code>cmd_check</code></td><td>PC (Windows)</td><td><code>command</code>, <code>expected</code>, <code>match_type</code></td></tr>
 </table>
 
-<h3 id="appendix-compare">Image Comparison Mode Reference</h3>
+<h3 id="appendix-compare">Image Comparison Modes Reference</h3>
 <table>
   <tr><th>Mode</th><th>Comparison Method</th><th>Pass Criteria</th></tr>
   <tr>
     <td><code>FULL</code></td>
     <td>Full screen SSIM (Structural Similarity)</td>
-    <td>Overall similarity ≥ threshold → Pass</td>
+    <td>Overall similarity &ge; threshold &rarr; Pass</td>
   </tr>
   <tr>
     <td><code>SINGLE_CROP</code></td>
-    <td>Search for cropped image in actual screen (template matching) → SSIM on matched area</td>
-    <td>Matching similarity ≥ threshold → Pass</td>
+    <td>Search for crop image in actual screen (template matching) &rarr; SSIM on matched region</td>
+    <td>Matching similarity &ge; threshold &rarr; Pass</td>
   </tr>
   <tr>
     <td><code>FULL_EXCLUDE</code></td>
     <td>Full screen SSIM excluding specified regions</td>
-    <td>Remaining area similarity after exclusion ≥ threshold → Pass</td>
+    <td>Remaining region similarity &ge; threshold &rarr; Pass</td>
   </tr>
   <tr>
     <td><code>MULTI_CROP</code></td>
-    <td>Independent comparison of multiple crops</td>
-    <td>All crops' similarity ≥ their respective thresholds → Pass</td>
+    <td>Independent comparison for each of multiple crops</td>
+    <td>All crops' similarity &ge; their respective thresholds &rarr; Pass</td>
   </tr>
 </table>
 
@@ -1462,13 +2337,13 @@ The detection results show both the camera's current IP and the PC's network int
   <tr><th>Status</th><th>Meaning</th><th>Condition</th></tr>
   <tr>
     <td><span class="badge badge-green">Pass</span></td>
-    <td>Verification succeeded</td>
+    <td>Verification successful</td>
     <td>Similarity at or above the Pass threshold</td>
   </tr>
   <tr>
     <td><span class="badge badge-yellow">Warning</span></td>
     <td>Warning (attention needed)</td>
-    <td>Similarity between the Warning threshold and Pass threshold</td>
+    <td>Similarity between Warning threshold and Pass threshold</td>
   </tr>
   <tr>
     <td><span class="badge badge-red">Fail</span></td>
@@ -1485,7 +2360,7 @@ The detection results show both the camera's current IP and the PC's network int
 <br>
 <hr style="border:none; border-top:1px solid var(--border); margin: 40px 0;">
 <p style="text-align:center; color:var(--text-muted); font-size:13px;">
-  ReplayKit User Guide v1.0 &mdash; For inquiries, please contact Sejin Choi, Senior Researcher (VS TC Design / Verification Automation Team).
+  ReplayKit User Guide v1.0 &mdash; For questions, contact Sejin Choi (VS TC Design/Verification Automation Team)
 </p>
 
 </main>
