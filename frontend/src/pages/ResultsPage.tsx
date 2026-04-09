@@ -695,6 +695,12 @@ export default function ResultsPage() {
   ];
 
   const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 11, color: '#888' }}>{ko}</span></div>;
+  // 필터용: 현재 표시 데이터에서 고유값 추출
+  const _allSteps: StepResultDetail[] = detail?.step_results || (groupDetail ? groupDetail.flatMap(d => d.step_results || []) : []);
+  const _uniqueStatuses = [...new Set(_allSteps.map(s => s.status).filter(Boolean))].sort();
+  const _uniqueDevices = [...new Set(_allSteps.map(s => s.device_id).filter(Boolean))].sort();
+  const _uniqueRepeats = [...new Set(_allSteps.map(s => s.repeat_index ?? 1))].sort((a, b) => a - b);
+
   const stepColumns = ([
     {
       title: _colTitle('Time Stamp', t('results.timestamp')),
@@ -708,6 +714,8 @@ export default function ResultsPage() {
       title: _colTitle('Repeat', t('results.repeat')),
       key: 'repeat',
       align: 'center' as const,
+      filters: _uniqueRepeats.map(r => ({ text: `#${r}`, value: r })),
+      onFilter: (value: any, record: any) => (record.repeat_index ?? 1) === value,
       render: (_: any, r: StepResultDetail) => {
         const total = detail?.total_repeat || (groupDetail ? Math.max(...groupDetail.map(d => d.total_repeat || 1)) : 1);
         return `${r.repeat_index ?? 1}/${total}`;
@@ -727,6 +735,8 @@ export default function ResultsPage() {
       dataIndex: 'device_id',
       key: 'device_id',
       align: 'center' as const,
+      filters: _uniqueDevices.map(d => ({ text: d, value: d })),
+      onFilter: (value: any, record: any) => (record.device_id || '') === value,
       render: (v: string) => v || '-',
       _hide: false,
     },
@@ -764,6 +774,9 @@ export default function ResultsPage() {
       dataIndex: 'status',
       key: 'status',
       align: 'center' as const,
+      filters: _uniqueStatuses.map(s => ({ text: s.toUpperCase(), value: s })),
+      onFilter: (value: any, record: any) => record.status === value,
+      defaultFilteredValue: null,
       render: (s: string) => <Tag color={statusColor(s)} style={{ margin: 0 }}>{s.toUpperCase()}</Tag>,
       _hide: false,
     },
