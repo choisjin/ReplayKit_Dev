@@ -15,6 +15,7 @@ from pathlib import Path
 from html import escape
 
 GUIDES_PATH = Path(__file__).resolve().parent.parent / "backend" / "app" / "services" / "module_guides.json"
+GUIDES_PATH_EN = Path(__file__).resolve().parent.parent / "backend" / "app" / "services" / "module_guides_en.json"
 OUTPUT_PATH = Path(__file__).resolve().parent / "module-guide.html"
 OUTPUT_PATH_EN = Path(__file__).resolve().parent / "module-guide-en.html"
 
@@ -388,11 +389,18 @@ def main():
     with open(GUIDES_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
 
+    # 영어용 데이터 로드
+    data_en = data
+    if GUIDES_PATH_EN.exists():
+        with open(GUIDES_PATH_EN, "r", encoding="utf-8") as f:
+            data_en = json.load(f)
+
     langs_to_gen = [target_lang] if target_lang else ["ko", "en"]
     output_map = {"ko": OUTPUT_PATH, "en": OUTPUT_PATH_EN}
+    data_map = {"ko": data, "en": data_en}
 
     for lang in langs_to_gen:
-        html = generate_html(data, lang=lang)
+        html = generate_html(data_map[lang], lang=lang)
         out = output_map[lang]
         with open(out, "w", encoding="utf-8") as f:
             f.write(html)
@@ -400,7 +408,6 @@ def main():
 
     modules = {k: v for k, v in data.items() if k != "_meta"}
     total = sum(len(v.get("functions", {})) for v in modules.values())
-    print(f"  {len(modules)} modules, {total} functions")
     print(f"  {len(modules)} modules, {total} functions")
 
 

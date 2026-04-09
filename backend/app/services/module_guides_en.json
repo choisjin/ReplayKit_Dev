@@ -1,0 +1,2314 @@
+{
+  "_meta": {
+    "version": "2.0",
+    "description": "Module function guide — Contains descriptions and parameter details for each function. Changes take effect without server restart."
+  },
+
+  "POWER": {
+    "_description": "Power Supply Control — Controls voltage/current settings and measurements for VUPOWER/K3010 power supplies connected via serial (RS-232)",
+    "functions": {
+      "Connect": {
+        "description": "Connects to the power supply via serial port. Automatically called when adding the device.",
+        "params": {
+          "port": "COM port. e.g. 'COM1', 'COM3'",
+          "bps": "Baud rate. e.g. 115200"
+        }
+      },
+      "DisConnect": {
+        "description": "Disconnects from the power supply.",
+        "params": {}
+      },
+      "SetOutput": {
+        "description": "Turns the power supply output on or off.",
+        "params": {
+          "status": "'ON' = enable output, 'OFF' = disable output"
+        }
+      },
+      "SetValue": {
+        "description": "Sets the voltage or current value of the power supply.",
+        "params": {
+          "set_type": "'VOLT' = set voltage, 'CURR' = set current",
+          "value": "Value to set. Voltage in V (e.g. 14.4), current in A (e.g. 3.0)"
+        }
+      },
+      "ReadValue": {
+        "description": "Measures the current voltage or current from the power supply.",
+        "params": {
+          "set_type": "'VOLT' = measure voltage, 'CURR' = measure current"
+        }
+      },
+      "SendCmd": {
+        "description": "Sends a raw command to the power supply. For advanced users.",
+        "params": {
+          "cmd": "Command string to send"
+        }
+      }
+    }
+  },
+
+  "RIDEN": {
+    "_description": "RIDEN Power Supply — Controls RIDEN power supply devices connected via serial",
+    "functions": {
+      "TurnOn": {
+        "description": "Turns on the RIDEN power supply and sets the specified voltage.",
+        "params": {
+          "port": "COM port. e.g. 'COM1'",
+          "voltage": "Voltage to set (V). e.g. 14.4"
+        }
+      },
+      "Turnoff": {
+        "description": "Turns off the RIDEN power supply.",
+        "params": {
+          "port": "COM port. e.g. 'COM1'"
+        }
+      }
+    }
+  },
+
+  "CAN": {
+    "_description": "CAN Bus Communication — Sends and receives vehicle CAN messages via PCAN/Vector/Kvaser CAN interfaces",
+    "functions": {
+      "Bus": {
+        "description": "Connects to the CAN device. Automatically called when adding the device.",
+        "params": {
+          "kwargs": "Connection settings (interface, channel, bitrate, fd, etc.)"
+        }
+      },
+      "send_msg": {
+        "description": "Sends a CAN message. Supports periodic or one-shot transmission.",
+        "params": {
+          "message_id": "CAN message ID (hex). e.g. '0x123'",
+          "cycle_time": "Transmission interval (ms). 0 for one-shot",
+          "can_message": "Message data (hex). e.g. '00 11 22 33 44 55 66 77'",
+          "bus_channel": "CAN channel. e.g. 'PCAN_USBBUS1'",
+          "message_type": "Message type. 'FD' = CAN FD (default), 'Classic' = CAN 2.0"
+        }
+      },
+      "stop_all_periodic_tasks": {
+        "description": "Stops all periodic CAN message transmissions.",
+        "params": {}
+      },
+      "start_log_save": {
+        "description": "Starts saving CAN logs to a file.",
+        "params": {
+          "logpath": "Log file save path"
+        }
+      },
+      "stop_log_save": {
+        "description": "Stops CAN log saving.",
+        "params": {}
+      },
+      "status": {
+        "description": "Returns the current status of the CAN device.",
+        "params": {}
+      },
+      "status_is_ok": {
+        "description": "Checks whether the CAN device status is OK.",
+        "params": {}
+      },
+      "status_string": {
+        "description": "Returns the CAN device status as a string.",
+        "params": {}
+      },
+      "shutdown": {
+        "description": "Disconnects from the CAN device.",
+        "params": {}
+      },
+      "flush_tx_buffer": {
+        "description": "Flushes the transmit buffer.",
+        "params": {}
+      },
+      "get_device_number": {
+        "description": "Returns the connected CAN device number.",
+        "params": {}
+      },
+      "read_thread": {
+        "description": "Starts the CAN receive thread.",
+        "params": {
+          "bus": "CAN bus object",
+          "logpath": "Log file path"
+        }
+      }
+    }
+  },
+
+  "CANOE": {
+    "_description": "CANoe Control — Controls Vector CANoe simulation software: start/stop, environment variables, and system variables",
+    "functions": {
+      "open_simulation": {
+        "description": "Opens a CANoe simulation (loads a .cfg file).",
+        "params": {
+          "cfgname": "CANoe configuration file (.cfg) path. e.g. 'C:/canoe/project.cfg'"
+        }
+      },
+      "close_simulation": {
+        "description": "Closes the CANoe simulation and exits the program.",
+        "params": {}
+      },
+      "start_Measurement": {
+        "description": "Starts CANoe measurement.",
+        "params": {}
+      },
+      "stop_Measurement": {
+        "description": "Stops CANoe measurement.",
+        "params": {}
+      },
+      "get_EnvVar": {
+        "description": "Reads a CANoe environment variable value.",
+        "params": {
+          "var": "Environment variable name"
+        }
+      },
+      "set_EnvVar": {
+        "description": "Sets a CANoe environment variable value.",
+        "params": {
+          "var": "Environment variable name",
+          "value": "Value to set (numeric)"
+        }
+      }
+    }
+  },
+
+  "CANAT": {
+    "_description": "CANat Device — Sends and receives CAN bus messages via CANat hardware",
+    "functions": {
+      "init": {
+        "description": "Initializes and connects the CANat device.",
+        "params": {
+          "comport": "COM port. e.g. 'COM3'",
+          "log_path": "Log file save path",
+          "ch1_fd": "Channel 1 CAN FD mode. True (default) = FD, False = Classic",
+          "ch2_fd": "Channel 2 CAN FD mode. True = FD, False (default) = Classic"
+        }
+      },
+      "disconnect": {
+        "description": "Disconnects from the CANat device.",
+        "params": {}
+      },
+      "send_can_message": {
+        "description": "Sends a CAN message.",
+        "params": {
+          "message_id": "CAN message ID",
+          "cycle_time": "Transmission interval (ms). 0 for one-shot",
+          "can_message": "Message data (hex)",
+          "bus_channel": "CAN channel",
+          "message_type": "'FD' (default) or 'Classic'"
+        }
+      },
+      "stop_can_message": {
+        "description": "Stops periodic transmission of a specific CAN message.",
+        "params": {
+          "message_id": "Message ID to stop",
+          "cycle_time": "Cycle time",
+          "can_message": "Message data",
+          "bus_channel": "CAN channel",
+          "message_type": "'FD' or 'Classic'"
+        }
+      },
+      "send_cam_message_all_stop": {
+        "description": "Stops all CAN message transmissions.",
+        "params": {}
+      },
+      "can_message_save_start": {
+        "description": "Starts saving CAN messages to a file.",
+        "params": {
+          "save_path": "Save path. Uses default path if empty"
+        }
+      },
+      "can_message_save_stop": {
+        "description": "Stops CAN message saving.",
+        "params": {}
+      }
+    }
+  },
+
+  "BENCH": {
+    "_description": "Bench Socket Communication — Sends/receives data and measures current via TCP socket with bench equipment",
+    "functions": {
+      "socket_connect": {
+        "description": "Connects to the bench equipment via socket.",
+        "params": {
+          "host": "Bench equipment IP address. e.g. '192.168.1.100'"
+        }
+      },
+      "socket_close": {
+        "description": "Disconnects the socket connection from the bench equipment.",
+        "params": {}
+      },
+      "SendData": {
+        "description": "Sends data to the bench equipment.",
+        "params": {
+          "data": "Data string to send. Default: 'Test'"
+        }
+      },
+      "check_current": {
+        "description": "Checks whether current stays within the specified range during the measurement period.",
+        "params": {
+          "min_current": "Minimum current (A)",
+          "max_current": "Maximum current (A)",
+          "meas_time": "Measurement duration (seconds)"
+        }
+      }
+    }
+  },
+
+  "IVIQEBenchIOClient": {
+    "_description": "IVI QE Bench — Comprehensive control of relays, power, sensors, audio, LCD, buttons, and USB on the serial-connected QE test bench",
+    "functions": {
+      "Connect": {
+        "description": "Connects to the bench via serial. Automatically called when adding the device.",
+        "params": {}
+      },
+      "Disconnect": {
+        "description": "Disconnects from the bench.",
+        "params": {}
+      },
+      "ACCOnOff": {
+        "description": "Turns ACC (Accessory) power on or off.",
+        "params": {
+          "state": "0 = OFF, 1 = ON",
+          "bench_info": "Bench type. 'OLD_BENCH' (default) or 'NEW_BENCH'"
+        }
+      },
+      "ACCSinglePulse": {
+        "description": "Generates a single pulse on ACC power. Used for momentary voltage fluctuation testing.",
+        "params": {
+          "nVoltage": "Pulse voltage (V)",
+          "nDelay": "Delay between pulses (ms)",
+          "nCnt": "Number of pulse repetitions"
+        }
+      },
+      "AccControl": {
+        "description": "Controls the ACC relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON",
+          "bench_info": "Bench type"
+        }
+      },
+      "AccVoltage": {
+        "description": "Sets the ACC voltage state.",
+        "params": {
+          "nState": "Voltage state value"
+        }
+      },
+      "BatteryOnOff": {
+        "description": "Turns battery power on or off.",
+        "params": {
+          "nState": "0 = OFF (disconnect battery), 1 = ON (connect battery)",
+          "bench_info": "Bench type. 'OLD_BENCH' (default) or 'NEW_BENCH'"
+        }
+      },
+      "BatteryControl": {
+        "description": "Controls the battery relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON",
+          "bench_info": "Bench type"
+        }
+      },
+      "BatteryMinusControl": {
+        "description": "Controls the battery negative (-) terminal relay.",
+        "params": {
+          "nStatus": "0 = OFF (connected), 1 = ON (disconnected)"
+        }
+      },
+      "BatteryVoltage": {
+        "description": "Sets the battery voltage state.",
+        "params": {
+          "nState": "Voltage state value"
+        }
+      },
+      "BatterySinglePulse": {
+        "description": "Generates a single pulse on the battery.",
+        "params": {
+          "nVoltage": "Pulse voltage (V)",
+          "nDelay": "Delay between pulses (ms)",
+          "nCnt": "Number of pulse repetitions"
+        }
+      },
+      "IGNControl": {
+        "description": "Controls the ignition (IGN) power.",
+        "params": {
+          "status": "0 = OFF, 1 = ON"
+        }
+      },
+      "IGN3Control": {
+        "description": "Controls the ignition 3 (IGN3) power.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "ALTControl": {
+        "description": "Controls the alternator signal.",
+        "params": {
+          "status": "0 = OFF, 1 = ON"
+        }
+      },
+      "ILLControl": {
+        "description": "Controls the illumination signal (vehicle lighting interlock).",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "ILLControlMinus": {
+        "description": "Controls the illumination negative signal.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "ReverseControl": {
+        "description": "Controls the reverse gear signal.",
+        "params": {
+          "nStatus": "0 = OFF (forward), 1 = ON (reverse)"
+        }
+      },
+      "ReverseActiveHigh": {
+        "description": "Controls the reverse signal as Active High.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "ReverseActiveLow": {
+        "description": "Controls the reverse signal as Active Low.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "ParkingControl": {
+        "description": "Controls the parking signal.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "PPositonControl": {
+        "description": "Controls the P (Park) gear position signal.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "NPositionControl": {
+        "description": "Controls the N (Neutral) gear position signal.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "SpeedControl": {
+        "description": "Controls the vehicle speed signal.",
+        "params": {
+          "nStatus": "0 = OFF (stopped), 1 = ON (driving)"
+        }
+      },
+      "DoorControl": {
+        "description": "Controls the door open/close signal.",
+        "params": {
+          "nStatus": "0 = OFF (closed), 1 = ON (open)"
+        }
+      },
+      "DoorUnLockControl": {
+        "description": "Controls the door unlock signal.",
+        "params": {
+          "nStatus": "0 = OFF (locked), 1 = ON (unlocked)"
+        }
+      },
+      "TransDetectControl": {
+        "description": "Controls the transmission detection signal.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "FUELControl": {
+        "description": "Controls the fuel-related signal.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "KeylessBootingControl": {
+        "description": "Controls the keyless (smart key) boot signal.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "AutolightControl": {
+        "description": "Controls the auto-light signal.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "AlarmDetectControl": {
+        "description": "Controls the alarm detection signal.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "AirbagCrashDetection": {
+        "description": "Controls the airbag crash detection signal.",
+        "params": {
+          "model": "Vehicle model name",
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "ShieldBoxControl": {
+        "description": "Controls the shield box (RF shielding box) open/close.",
+        "params": {
+          "nStatus": "0 = OFF (close), 1 = ON (open)"
+        }
+      },
+      "ANTControl": {
+        "description": "Controls the antenna relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "AmpControl": {
+        "description": "Controls the external audio amplifier power.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "MICControl": {
+        "description": "Controls the microphone relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "AUXControl": {
+        "description": "Controls the AUX input relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "CDControl": {
+        "description": "Controls the CD drive relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "IPODControl": {
+        "description": "Controls the iPod connection relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "RcInControl": {
+        "description": "Controls the RC input relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "ComEnableControl": {
+        "description": "Controls the COM (communication) enable.",
+        "params": {
+          "nStatus": "0 = OFF (disabled), 1 = ON (enabled)"
+        }
+      },
+      "Detent": {
+        "description": "Controls the detent (rotary encoder for volume knob, etc.) signal.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "AVNSDDetect": {
+        "description": "Controls the AVN SD card detection signal.",
+        "params": {
+          "nStatus": "0 = OFF (not inserted), 1 = ON (inserted)"
+        }
+      },
+      "USB1Control": {
+        "description": "Controls the USB 1 port relay.",
+        "params": {
+          "Status": "0 = OFF, 1 = ON"
+        }
+      },
+      "USBFrontSwitchControl": {
+        "description": "Controls the front USB switch relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "USBRearSwitchControl": {
+        "description": "Controls the rear USB switch relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "USBSelectorControl": {
+        "description": "Selects a USB selector port.",
+        "params": {
+          "nOnPortNum": "USB port number to activate"
+        }
+      },
+      "USBSelector10CHSwitch5CH": {
+        "description": "Controls the USB selector 10-channel/5-channel switch.",
+        "params": {
+          "nType": "Switch type",
+          "nPortNum": "Port number",
+          "nOnOffStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "Telltale": {
+        "description": "Controls the telltale (dashboard warning indicator) relay.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON"
+        }
+      },
+      "TelltaleLED": {
+        "description": "Sets the telltale LED blink period.",
+        "params": {
+          "nPeriod": "Blink period (ms)"
+        }
+      },
+      "CheckTelltale": {
+        "description": "Checks the telltale (warning indicator) status.",
+        "params": {}
+      },
+      "LEDPulse": {
+        "description": "Sets the LED blink period.",
+        "params": {
+          "nPeriod": "Blink period (ms)"
+        }
+      },
+      "LedTCU4": {
+        "description": "Sets the TCU4 LED blink period.",
+        "params": {
+          "nPeriod": "Blink period (ms)"
+        }
+      },
+      "CheckLedTCU4": {
+        "description": "Checks the TCU4 LED status.",
+        "params": {}
+      },
+      "GetLEDPulse": {
+        "description": "Reads the current LED pulse value.",
+        "params": {}
+      },
+      "CheckLCD": {
+        "description": "Checks the LCD display status.",
+        "params": {
+          "nStatus": "Status value to check"
+        }
+      },
+      "CheckLCDDimming": {
+        "description": "Checks the LCD dimming (brightness control) status.",
+        "params": {
+          "nStatus": "Status value to check"
+        }
+      },
+      "SetLCDValue": {
+        "description": "Sets the LCD value.",
+        "params": {
+          "nLCDValue": "LCD value to set"
+        }
+      },
+      "GetLCDValue": {
+        "description": "Reads the current LCD value.",
+        "params": {}
+      },
+      "CheckVoltage": {
+        "description": "Checks whether voltage is within the specified range.",
+        "params": {
+          "nMin": "Minimum voltage (V)",
+          "nMax": "Maximum voltage (V)"
+        }
+      },
+      "CheckCurrent": {
+        "description": "Checks whether current is within the specified range.",
+        "params": {
+          "nMin": "Minimum current (A)",
+          "nMax": "Maximum current (A)"
+        }
+      },
+      "ExtCheckCurrent": {
+        "description": "Checks whether external current is within the specified range.",
+        "params": {
+          "fMin": "Minimum current (A)",
+          "fMax": "Maximum current (A)"
+        }
+      },
+      "EXT_CURRENT": {
+        "description": "Checks external current within range after a delay.",
+        "params": {
+          "min_current": "Minimum current (A)",
+          "max_current": "Maximum current (A)",
+          "check_delay": "Delay before check (seconds)"
+        }
+      },
+      "GetEXTCurrent": {
+        "description": "Reads the current external current value.",
+        "params": {}
+      },
+      "CheckEXTCurrentList": {
+        "description": "Checks whether collected external current values are within range.",
+        "params": {
+          "nMin": "Minimum current (A)",
+          "nMax": "Maximum current (A)"
+        }
+      },
+      "ClearEXTCurrentList": {
+        "description": "Clears the collected external current list.",
+        "params": {}
+      },
+      "CheckKeyOutVoltage": {
+        "description": "Checks whether key output voltage is within range.",
+        "params": {
+          "nMin": "Minimum voltage (V)",
+          "nMax": "Maximum voltage (V)"
+        }
+      },
+      "ClearKeyOutVoltageList": {
+        "description": "Clears the key output voltage list.",
+        "params": {}
+      },
+      "CheckSound": {
+        "description": "Checks the audio output status.",
+        "params": {
+          "nStatus": "Status value to check"
+        }
+      },
+      "PlaySound": {
+        "description": "Plays a sound file on the bench.",
+        "params": {
+          "strFileName": "File name to play",
+          "nFileNameLen": "File name length"
+        }
+      },
+      "InitSoundUpdate": {
+        "description": "Initializes the sound update.",
+        "params": {}
+      },
+      "WaitSoundUpdate": {
+        "description": "Waits until the sound update completes.",
+        "params": {
+          "timeout": "Max wait time in seconds"
+        }
+      },
+      "RequestLightSensorControl": {
+        "description": "Controls the light sensor.",
+        "params": {
+          "nStatus": "0 = OFF, 1 = ON",
+          "pbData": "PB data",
+          "twData": "TW data"
+        }
+      },
+      "GetLightSensorData": {
+        "description": "Reads light sensor data.",
+        "params": {}
+      },
+      "CheckLightSensorResult": {
+        "description": "Checks the light sensor result.",
+        "params": {}
+      },
+      "TenButton": {
+        "description": "Presses a button on the 10-button panel.",
+        "params": {
+          "nButton": "Button number (0-9)",
+          "nDelay": "Button press duration (ms)"
+        }
+      },
+      "ThreeButton": {
+        "description": "Presses a button on the 3-button panel.",
+        "params": {
+          "nButton": "Button number (0-2)",
+          "nDelay": "Button press duration (ms)"
+        }
+      },
+      "ThreeButton_Front": {
+        "description": "Presses a button on the front 3-button panel.",
+        "params": {
+          "nButton": "Button number (0-2)",
+          "nDelay": "Button press duration (ms)"
+        }
+      },
+      "ThreeButton_Rear": {
+        "description": "Presses a button on the rear 3-button panel.",
+        "params": {
+          "nButton": "Button number (0-2)",
+          "nDelay": "Button press duration (ms)"
+        }
+      },
+      "TwoButton": {
+        "description": "Presses a button on the 2-button panel.",
+        "params": {
+          "nButton": "Button number (0-1)",
+          "nDelay": "Button press duration (ms)"
+        }
+      },
+      "rf_btn_press": {
+        "description": "Presses an RF button.",
+        "params": {
+          "btnNum": "Button number",
+          "delay": "Press duration (ms)"
+        }
+      },
+      "FileToSD": {
+        "description": "Copies a file to the SD card.",
+        "params": {
+          "userFilePath": "Source file path on PC",
+          "sdCardFileName": "File name to save on SD card"
+        }
+      },
+      "Relay_10": {
+        "description": "Controls relay 10.",
+        "params": { "nStatus": "0 = OFF, 1 = ON" }
+      },
+      "Relay_11": {
+        "description": "Controls relay 11.",
+        "params": { "nStatus": "0 = OFF, 1 = ON" }
+      },
+      "Relay_12": {
+        "description": "Controls relay 12.",
+        "params": { "nStatus": "0 = OFF, 1 = ON" }
+      },
+      "Relay_13": {
+        "description": "Controls relay 13.",
+        "params": { "nStatus": "0 = OFF, 1 = ON" }
+      },
+      "Relay_14": {
+        "description": "Controls relay 14.",
+        "params": { "nStatus": "0 = OFF, 1 = ON" }
+      },
+      "RelayInitialization": {
+        "description": "Resets all relays to their default values.",
+        "params": {
+          "init_value": "Initialization value"
+        }
+      },
+      "SetRelayConfig": {
+        "description": "Sets the relay configuration.",
+        "params": {
+          "nRelayCfg": "Relay configuration value"
+        }
+      },
+      "CallRelayFunc": {
+        "description": "Calls a relay function by index.",
+        "params": {
+          "func_index": "Function index number",
+          "data": "Data to pass"
+        }
+      },
+      "RequestRelayInitialStatus": {
+        "description": "Requests the initial relay status.",
+        "params": {}
+      },
+      "RequestRelaySet": {
+        "description": "Sets relays using a command list.",
+        "params": {
+          "nCmdList": "Relay command list"
+        }
+      },
+      "SystemReset": {
+        "description": "Resets the bench system.",
+        "params": {
+          "nMs": "Wait time after reset (ms). Default: 1000"
+        }
+      },
+      "SetSystemTime": {
+        "description": "Sets the bench system time to the current PC time.",
+        "params": {}
+      },
+      "RequestSystemVersion": {
+        "description": "Requests the bench system version information.",
+        "params": {}
+      },
+      "CalcCRC16": {
+        "description": "Calculates a CRC-16 checksum. Used for communication data verification.",
+        "params": {
+          "listData": "Data list",
+          "nLen": "Data length"
+        }
+      },
+      "CalibrationStartOrStop": {
+        "description": "Starts or stops calibration.",
+        "params": {
+          "sensitivity": "Sensitivity value",
+          "threshold": "Threshold value"
+        }
+      },
+      "AnnouncesAutoTestStartOrEnd": {
+        "description": "Announces the start/end of an automated test.",
+        "params": {
+          "bisStart": "True = test start, False = test end"
+        }
+      },
+      "BATSwitchSETtoPC": {
+        "description": "Switches the battery switch from SET to PC.",
+        "params": {}
+      },
+      "BATSwitchUSBtoPC": {
+        "description": "Switches the battery switch from USB to PC.",
+        "params": {}
+      },
+      "RequestAudioFrequency": {
+        "description": "Requests audio frequency measurement.",
+        "params": {
+          "bStart": "True = start, False = stop",
+          "nMs": "Measurement interval (ms)"
+        }
+      },
+      "RequestAudioStatusAndADCValue": {
+        "description": "Requests audio status and ADC value.",
+        "params": {
+          "nMs": "Response wait time (ms)"
+        }
+      },
+      "RequestAudioStatusAndADCValuePeriodicallyNoti": {
+        "description": "Receives periodic notifications of audio status and ADC value.",
+        "params": {
+          "bStart": "True = start, False = stop",
+          "nPeriodMs": "Notification interval (ms)"
+        }
+      },
+      "RequestAudioStatusPeriodicallyNoti": {
+        "description": "Receives periodic notifications of audio status.",
+        "params": {
+          "bStart": "True = start, False = stop",
+          "nPeriodMs": "Notification interval (ms)"
+        }
+      },
+      "RequestCurrentPeriodicallyNoti": {
+        "description": "Receives periodic notifications of current value.",
+        "params": {
+          "bStart": "True = start, False = stop",
+          "nPeriodMs": "Notification interval (ms)"
+        }
+      },
+      "RequestExtCurrentPeriodicallyNoti": {
+        "description": "Receives periodic notifications of external current value.",
+        "params": {
+          "bStart": "True = start, False = stop",
+          "nPeriodMs": "Notification interval (ms)"
+        }
+      },
+      "RequestVoltagePeriodicallyNoti": {
+        "description": "Receives periodic notifications of voltage value.",
+        "params": {
+          "bStart": "True = start, False = stop",
+          "nPeriodMs": "Notification interval (ms)"
+        }
+      },
+      "RequestKeyOutVoltagePeriodicallyNoti": {
+        "description": "Receives periodic notifications of key output voltage.",
+        "params": {
+          "bStart": "True = start, False = stop",
+          "nPeriodMs": "Notification interval (ms)"
+        }
+      },
+      "RequestLCDStatus": {
+        "description": "Requests LCD status.",
+        "params": {
+          "bStart": "True = start, False = stop",
+          "nMs": "Response wait time (ms)"
+        }
+      },
+      "RequestLCDIllumiSensorValue": {
+        "description": "Requests LCD illumination sensor value.",
+        "params": {
+          "bStart": "True = start, False = stop",
+          "nMs": "Response wait time (ms)"
+        }
+      },
+      "RequestLCDStatusAndIllumiSensorValuePeriodicallyNoti": {
+        "description": "Receives periodic notifications of LCD status and illumination sensor value.",
+        "params": {
+          "bStart": "True = start, False = stop",
+          "nPeriodMs": "Notification interval (ms)"
+        }
+      },
+      "RequestSoundFileInfo": {
+        "description": "Requests sound file information.",
+        "params": {
+          "nSoundType": "Sound type"
+        }
+      },
+      "RequestSoundFileList": {
+        "description": "Requests the sound file list.",
+        "params": {
+          "nSoundType": "Sound type"
+        }
+      },
+      "Read": {
+        "description": "Reads data from the bench.",
+        "params": {}
+      },
+      "Send": {
+        "description": "Sends raw byte data to the bench.",
+        "params": {
+          "listData": "Data list to send",
+          "nLen": "Data length"
+        }
+      },
+      "WriteRawString": {
+        "description": "Sends a raw string to the bench.",
+        "params": {
+          "string": "String to send"
+        }
+      },
+      "ReceiveStart": {
+        "description": "Starts or stops bench data reception.",
+        "params": {
+          "bStart": "True = start receiving, False = stop receiving",
+          "queue": "Queue to store received data (optional)"
+        }
+      },
+      "timer_compare": {
+        "description": "Compares timer values.",
+        "params": {
+          "Time_Init": "Start time",
+          "Time_Check": "Time to compare"
+        }
+      }
+    }
+  },
+
+  "SP25Bench": {
+    "_description": "SP25 Bench — Controls SP25 test bench (eCall, reboot, factory reset)",
+    "functions": {
+      "eCall": {
+        "description": "Executes an eCall (emergency call).",
+        "params": {}
+      },
+      "factory_reset": {
+        "description": "Performs a factory reset on the device.",
+        "params": {}
+      },
+      "reboot": {
+        "description": "Reboots the device.",
+        "params": {}
+      }
+    }
+  },
+
+  "Uart": {
+    "_description": "UART Communication — Performs UART serial communication and saves logs. Used for Linux console access, etc.",
+    "functions": {
+      "connect": {
+        "description": "Connects to a UART port (without log saving).",
+        "params": {
+          "port": "Serial port. e.g. 'COM1', '/dev/ttyUSB0'",
+          "bps": "Baud rate. e.g. 115200",
+          "endline": "Line ending character. Default: '\\r'"
+        }
+      },
+      "close": {
+        "description": "Disconnects from the UART port.",
+        "params": {}
+      },
+      "add_uart_port": {
+        "description": "Connects to a UART port and starts log file saving simultaneously.",
+        "params": {
+          "port": "Serial port. e.g. 'COM1'",
+          "bps": "Baud rate. e.g. 115200",
+          "logFilePath": "Log file save path",
+          "endline": "Line ending character. Default: '\\r'"
+        }
+      },
+      "send_string": {
+        "description": "Sends a string command via UART.",
+        "params": {
+          "command": "Command to send. e.g. 'ls -al', 'reboot'"
+        }
+      },
+      "send_char": {
+        "description": "Sends a single character. No newline is appended.",
+        "params": {
+          "char": "Character to send (single character)"
+        }
+      },
+      "send_control_character": {
+        "description": "Sends a control character. Used for special key inputs like Ctrl+C.",
+        "params": {
+          "control_character": "Control character. e.g. 'ETX' (Ctrl+C)"
+        }
+      },
+      "start_save_file": {
+        "description": "Starts saving UART received data to a file.",
+        "params": {
+          "path_log": "Log file save path"
+        }
+      },
+      "stop_save_file": {
+        "description": "Stops UART log file saving.",
+        "params": {}
+      },
+      "get_file_path": {
+        "description": "Returns the current log file path.",
+        "params": {}
+      },
+      "read_thread": {
+        "description": "Starts the UART receive thread. Called automatically internally.",
+        "params": {
+          "connect": "Connection object",
+          "logfilepath": "Log file path"
+        }
+      }
+    }
+  },
+
+  "Ignition": {
+    "_description": "Ignition Control — Controls ICAS3/MIB3 device ignition via TCP socket (default: 192.168.1.4:15500)",
+    "functions": {
+      "connect": {
+        "description": "Connects to the ignition device via TCP socket. Note: testiface must be running.",
+        "params": {
+          "host": "Device IP address. Default: '192.168.1.4'",
+          "port": "TCP port. Default: 15500"
+        }
+      },
+      "close": {
+        "description": "Disconnects from the ignition device.",
+        "params": {}
+      },
+      "send_packet": {
+        "description": "Sends an ignition command packet to the HU (Head Unit).",
+        "params": {
+          "cmd": "Hex command string. e.g. '02 2c 01 09'"
+        }
+      },
+      "compare_packet": {
+        "description": "Checks whether the last received packet contains the expected data.",
+        "params": {
+          "expected": "Expected hex string. e.g. '00 65'. Returns True if found, False otherwise"
+        }
+      }
+    }
+  },
+
+  "KeysightPower": {
+    "_description": "Keysight Power Supply — Controls voltage settings and waveform sequences for Keysight power supplies connected via Ethernet/GPIB",
+    "functions": {
+      "connectPowerSupply": {
+        "description": "Connects to the Keysight power supply via Ethernet.",
+        "params": {
+          "eth": "Ethernet interface. Default: None (auto-detect)"
+        }
+      },
+      "closePowerSupply": {
+        "description": "Disconnects from the power supply.",
+        "params": {}
+      },
+      "setVoltage": {
+        "description": "Sets the output voltage.",
+        "params": {
+          "volt": "Voltage (V). e.g. 14.4"
+        }
+      },
+      "setMaxVoltage": {
+        "description": "Sets the maximum voltage limit.",
+        "params": {
+          "volt": "Maximum voltage (V)"
+        }
+      },
+      "turnOnOutput": {
+        "description": "Turns on the power output.",
+        "params": {}
+      },
+      "turnOffOutput": {
+        "description": "Turns off the power output.",
+        "params": {}
+      },
+      "getCurrentStatus": {
+        "description": "Returns the current power supply status.",
+        "params": {}
+      },
+      "getPort": {
+        "description": "Returns port information.",
+        "params": {}
+      },
+      "setCurrentRangeAuto": {
+        "description": "Sets the current measurement range to auto.",
+        "params": {}
+      },
+      "setInterface": {
+        "description": "Selects the communication interface.",
+        "params": {
+          "inf_sel": "Interface selection value"
+        }
+      },
+      "checkMeasCurrentLessThan": {
+        "description": "Checks whether the measured current is below the threshold.",
+        "params": {
+          "Threshold": "Current threshold (A)"
+        }
+      },
+      "powerSupply_ask": {
+        "description": "Sends a SCPI command to the power supply and receives a response.",
+        "params": {
+          "cmd": "SCPI command string"
+        }
+      },
+      "addToSeq_Step": {
+        "description": "Adds a step waveform to the sequence. Produces an abrupt voltage change at a specific time.",
+        "params": {
+          "step": "Sequence step number",
+          "vStart": "Start voltage (V)",
+          "vEnd": "End voltage (V)",
+          "tStart": "Start time (s)",
+          "tEnd": "End time (s)"
+        }
+      },
+      "addToSeq_Ramp": {
+        "description": "Adds a ramp waveform to the sequence. Gradually changes the voltage.",
+        "params": {
+          "step": "Sequence step number",
+          "vStart": "Start voltage (V)",
+          "vEnd": "End voltage (V)",
+          "tStart": "Start time (s)",
+          "tRamp": "Ramp time (s)",
+          "tEnd": "End time (s)",
+          "repeat": "Number of repetitions"
+        }
+      },
+      "addToSeq_Puls": {
+        "description": "Adds a pulse waveform to the sequence.",
+        "params": {
+          "step": "Sequence step number",
+          "vStart": "Base voltage (V)",
+          "vTop": "Pulse top voltage (V)",
+          "tStart": "Start time (s)",
+          "tTop": "Top hold time (s)",
+          "tEnd": "End time (s)",
+          "repeat": "Number of repetitions"
+        }
+      },
+      "addToSeq_Sine": {
+        "description": "Adds a sine waveform to the sequence.",
+        "params": {
+          "step": "Sequence step number",
+          "ampl": "Amplitude (V)",
+          "offs": "Offset voltage (V)",
+          "freq": "Frequency (Hz)",
+          "repeat": "Number of repetitions"
+        }
+      },
+      "addToSeq_Exp": {
+        "description": "Adds an exponential waveform to the sequence.",
+        "params": {
+          "step": "Sequence step number",
+          "vStart": "Start voltage (V)",
+          "vEnd": "End voltage (V)",
+          "tStart": "Start time (s)",
+          "tWave": "Waveform time (s)",
+          "tConst": "Time constant (s)",
+          "repeat": "Number of repetitions"
+        }
+      },
+      "addToSeq_Stair": {
+        "description": "Adds a staircase waveform to the sequence. Voltage changes in discrete steps.",
+        "params": {
+          "step": "Sequence step number",
+          "vStart": "Start voltage (V)",
+          "vEnd": "End voltage (V)",
+          "tStart": "Start time (s)",
+          "tStep": "Time per step (s)",
+          "tEnd": "End time (s)",
+          "nStep": "Number of steps",
+          "repeat": "Number of repetitions"
+        }
+      },
+      "addToSeq_Trap": {
+        "description": "Adds a trapezoidal waveform to the sequence.",
+        "params": {
+          "step": "Sequence step number",
+          "vStart": "Base voltage (V)",
+          "vTop": "Top voltage (V)",
+          "tStart": "Start time (s)",
+          "tRise": "Rise time (s)",
+          "tTop": "Top hold time (s)",
+          "tFall": "Fall time (s)",
+          "tEnd": "End time (s)",
+          "repeat": "Number of repetitions"
+        }
+      },
+      "setSeqArb": {
+        "description": "Uploads the arbitrary waveform sequence to the power supply.",
+        "params": {}
+      },
+      "runSeqArb": {
+        "description": "Runs the configured arbitrary waveform sequence.",
+        "params": {
+          "repeat": "Number of repetitions"
+        }
+      },
+      "isArbSeqStillRun": {
+        "description": "Checks whether the arbitrary waveform sequence is still running.",
+        "params": {}
+      }
+    }
+  },
+
+  "SSHManager": {
+    "_description": "SSH Connection — Connects to remote devices via SSH for command execution and file transfer",
+    "functions": {
+      "create_ssh_client": {
+        "description": "Creates an SSH connection.",
+        "params": {
+          "hostname": "Remote device IP or hostname. e.g. '192.168.1.100'",
+          "username": "SSH username. e.g. 'root'",
+          "password": "SSH password",
+          "key_filePath": "SSH key file path (alternative to password). Default: None"
+        }
+      },
+      "close_ssh_client": {
+        "description": "Closes the SSH connection.",
+        "params": {}
+      },
+      "send_command": {
+        "description": "Executes a command via SSH.",
+        "params": {
+          "command": "Command to execute. e.g. 'ls -al', 'cat /etc/version'"
+        }
+      },
+      "send_file": {
+        "description": "Transfers a local file to the remote device.",
+        "params": {
+          "local_path": "File path on PC",
+          "remote_path": "Destination path on remote device"
+        }
+      },
+      "get_file": {
+        "description": "Downloads a file from the remote device to the PC.",
+        "params": {
+          "remote_path": "File path on remote device",
+          "local_path": "Destination path on PC"
+        }
+      },
+      "get_file_list_in_dir": {
+        "description": "Lists files in a directory on the remote device.",
+        "params": {
+          "path": "Directory path to list",
+          "_filter": "File filter pattern. Default: '*' (all). e.g. '*.log'"
+        }
+      }
+    }
+  },
+
+  "AudioLibrary": {
+    "_description": "Audio Analysis — Performs audio recording and mute detection. Checks for silence from music/radio sources",
+    "functions": {
+      "select_channels": {
+        "description": "Selects the audio input device.",
+        "params": {
+          "audio_device_s": "Partial audio device name. e.g. 'USB', 'PnP', 'pulse'. Default: 'pulse'"
+        }
+      },
+      "start_recording": {
+        "description": "Starts audio recording.",
+        "params": {
+          "record_seconds": "Recording duration (seconds). e.g. 5 = 5 sec, 0.5 = 500ms. Default: 5",
+          "rate": "Sample rate. Default: 44100",
+          "chunk": "Buffer size. Default: 1024",
+          "format": "Audio format. Default: 8"
+        }
+      },
+      "stop_recording": {
+        "description": "Stops audio recording.",
+        "params": {}
+      },
+      "isMute": {
+        "description": "Checks whether audio is currently muted. Designed for music/radio sources (not accurate for single tones or white noise). Returns TRUE (muted) if signal-to-noise ratio is 25dB or below.",
+        "params": {}
+      },
+      "get_max_value": {
+        "description": "Returns the maximum amplitude value of the recorded audio.",
+        "params": {}
+      },
+      "get_min_max_local_maxima": {
+        "description": "Returns the local min/max values of the recorded audio.",
+        "params": {}
+      },
+      "close": {
+        "description": "Closes AudioLibrary and releases resources.",
+        "params": {}
+      }
+    }
+  },
+
+  "ImageProcessing": {
+    "_description": "Image Processing — Performs OCR (text recognition), image comparison, and template matching. Requires Tesseract-OCR",
+    "functions": {
+      "image_compare": {
+        "description": "Compares two image files. Returns match status and match percentage.",
+        "params": {
+          "origin": "Source image path (jpg)",
+          "expected": "Expected image path (jpg)"
+        }
+      },
+      "imagesearch": {
+        "description": "Searches for a target image within the source image (template matching). Returns position and match percentage.",
+        "params": {
+          "origin": "Source image path (captured screen)",
+          "expected": "Target image path (icon, button, etc.)",
+          "threshold": "Match threshold (0-100). Default: 99"
+        }
+      },
+      "image_cut": {
+        "description": "Crops a specific region from an image.",
+        "params": {
+          "origin": "Source image path",
+          "cut_img": "Cropped image save path",
+          "x1": "Top-left X coordinate",
+          "y1": "Top-left Y coordinate",
+          "x2": "Bottom-right X coordinate",
+          "y2": "Bottom-right Y coordinate"
+        }
+      },
+      "image_valid": {
+        "description": "Checks whether a captured image is valid (readable by OpenCV).",
+        "params": {
+          "image": "Image path to check (jpg)"
+        }
+      },
+      "ocr": {
+        "description": "Recognizes text in an image (OCR). Requires Tesseract-OCR to be installed.",
+        "params": {
+          "img_path": "Image path (jpg)",
+          "language": "Recognition language. Default: 'eng'. Korean: 'kor'",
+          "psm": "Page segmentation mode. Default: 6 (single block)"
+        }
+      },
+      "ocr_coordinate": {
+        "description": "Finds the coordinates of a specific text string in an image.",
+        "params": {
+          "img_path": "Image path",
+          "string": "Text string to find",
+          "language": "Recognition language. Default: 'eng'",
+          "rect_size": "Recognition area size. Default: 15",
+          "full_screen_check": "Full screen search. Default: True"
+        }
+      },
+      "ocr_sentence": {
+        "description": "Finds a sentence in an image and returns its coordinates.",
+        "params": {
+          "img_path": "Image path",
+          "string": "Sentence to find",
+          "output_suffix": "Output file suffix",
+          "language": "Recognition language. Default: 'eng'",
+          "rect_size": "Recognition area size. Default: 15",
+          "full_screen_check": "Full screen search. Default: True"
+        }
+      },
+      "is_similar": {
+        "description": "Compares whether two text strings are similar.",
+        "params": {
+          "text1": "Text 1 to compare",
+          "text2": "Text 2 to compare",
+          "tolerance": "Tolerance. Default: 0 (exact match)"
+        }
+      },
+      "calculate_coordinate": {
+        "description": "Calculates coordinates from OCR results.",
+        "params": {
+          "boxes": "OCR box data",
+          "height": "Image height",
+          "string": "Text string to find"
+        }
+      },
+      "calculate_sentence": {
+        "description": "Calculates sentence position from OCR results.",
+        "params": {
+          "boxes": "OCR box data",
+          "height": "Image height",
+          "string": "Sentence to find",
+          "image": "Image object"
+        }
+      },
+      "preprocess_image": {
+        "description": "Preprocesses an image to improve OCR recognition accuracy.",
+        "params": {
+          "image": "Image object to preprocess"
+        }
+      }
+    }
+  },
+
+  "DLTLogging": {
+    "_description": "DLT Logging — Captures and saves logs via direct TCP connection to the DLT daemon, with keyword-based PASS/FAIL evaluation (no GUI required)",
+    "functions": {
+      "StartSave": {
+        "description": "Connects to the DLT daemon and starts log capture + file saving in one step (connect -> capture -> save).",
+        "params": {
+          "save_path": "Save file path. Auto-generates in backend/logs/ if empty"
+        }
+      },
+      "StopSave": {
+        "description": "Stops log file saving and disconnects from the DLT daemon.",
+        "params": {}
+      },
+      "MarkStep": {
+        "description": "Marks a step boundary at the current log position. Used with SearchRange for range-based searching.",
+        "params": {
+          "step_index": "Step index number"
+        }
+      },
+      "SearchAll": {
+        "description": "Searches the entire log from the beginning to the current position for a keyword, returning PASS/FAIL.",
+        "params": {
+          "keyword": "Search keyword (space-separated = AND condition). e.g. 'BootComplete', 'ERROR crash'",
+          "count": "Maximum number of matching results (default: 5)"
+        }
+      },
+      "SearchRange": {
+        "description": "Searches for a keyword within the step range marked by MarkStep, returning PASS/FAIL.",
+        "params": {
+          "keyword": "Search keyword (space-separated = AND condition)",
+          "from_step": "Start step index",
+          "to_step": "End step index",
+          "count": "Maximum number of matching results (default: 5)"
+        }
+      },
+      "WaitLog": {
+        "description": "Waits (blocking) until a log containing the keyword appears. Returns FAIL on timeout.",
+        "params": {
+          "keyword": "Search keyword (space-separated = AND condition)",
+          "timeout": "Max wait time in seconds (default: 30)"
+        }
+      },
+      "ExpectFound": {
+        "description": "Periodically searches the entire log until the keyword is found. Searches immediately, then retries at intervals (timeout / max_retries). Returns PASS if found, FAIL if not found after all retries.",
+        "params": {
+          "keyword": "Search keyword (space-separated = AND condition)",
+          "timeout": "Total wait time in seconds (default: 60)",
+          "max_retries": "Maximum retry count (default: 5). Interval = timeout / max_retries"
+        }
+      },
+      "ExpectNotFound": {
+        "description": "Periodically checks the entire log to confirm the keyword is absent. Returns FAIL immediately if found. Rechecks at intervals (timeout / max_retries). Returns PASS if not found after all checks.",
+        "params": {
+          "keyword": "Search keyword (space-separated = AND condition)",
+          "timeout": "Total check time in seconds (default: 60)",
+          "max_retries": "Maximum check count (default: 5). Interval = timeout / max_retries"
+        }
+      },
+      "GetStatus": {
+        "description": "Returns the current module status (connection, capture, save, step marks, etc.).",
+        "params": {}
+      },
+      "ClearLogs": {
+        "description": "Clears the log buffer and step markings.",
+        "params": {}
+      }
+    }
+  },
+
+  "SerialLogging": {
+    "_description": "Serial Logging — Captures and saves logs via serial port connection, with keyword-based PASS/FAIL evaluation",
+    "functions": {
+      "StartSave": {
+        "description": "Connects to the serial port and starts log capture + file saving in one step (connect -> capture -> save).",
+        "params": {
+          "save_path": "Save file path. Auto-generates in backend/logs/ if empty"
+        }
+      },
+      "StopSave": {
+        "description": "Stops log file saving and disconnects from the serial port.",
+        "params": {}
+      },
+      "MarkStep": {
+        "description": "Marks a step boundary at the current log position. Used with SearchRange for range-based searching.",
+        "params": {
+          "step_index": "Step index number"
+        }
+      },
+      "SearchAll": {
+        "description": "Searches the entire log from the beginning to the current position for a keyword, returning PASS/FAIL.",
+        "params": {
+          "keyword": "Search keyword (space-separated = AND condition). e.g. 'BootComplete', 'ERROR'",
+          "count": "Maximum number of matching results (default: 5)"
+        }
+      },
+      "SearchRange": {
+        "description": "Searches for a keyword within the step range marked by MarkStep, returning PASS/FAIL.",
+        "params": {
+          "keyword": "Search keyword (space-separated = AND condition)",
+          "from_step": "Start step index",
+          "to_step": "End step index",
+          "count": "Maximum number of matching results (default: 5)"
+        }
+      },
+      "WaitLog": {
+        "description": "Waits (blocking) until a log containing the keyword appears. Returns FAIL on timeout.",
+        "params": {
+          "keyword": "Search keyword (space-separated = AND condition)",
+          "timeout": "Max wait time in seconds (default: 30)"
+        }
+      },
+      "SendCommand": {
+        "description": "Sends a text command via the serial port.",
+        "params": {
+          "command": "Command to send. e.g. 'reboot', 'cat /proc/version'",
+          "encoding": "Encoding (default: utf-8)",
+          "append_newline": "Auto-append newline. true/false (default: true)"
+        }
+      },
+      "SendHex": {
+        "description": "Sends HEX bytes via the serial port.",
+        "params": {
+          "hex_string": "HEX string to send. e.g. 'FF 01 A0'"
+        }
+      },
+      "SendAndWait": {
+        "description": "Sends a command and waits (blocking) for a response containing the keyword.",
+        "params": {
+          "command": "Command to send",
+          "keyword": "Keyword to search in the response (space-separated = AND condition)",
+          "timeout": "Max wait time in seconds (default: 10)"
+        }
+      },
+      "GetStatus": {
+        "description": "Returns the current module status (port, capture, save, step marks, etc.).",
+        "params": {}
+      },
+      "ClearLogs": {
+        "description": "Clears the log buffer and step markings.",
+        "params": {}
+      }
+    }
+  },
+
+  "SmartBench": {
+    "_description": "Smart Bench TCP Control — Controls power, buttons, current, and LEDs on Smart Bench equipment via TCP socket",
+    "functions": {
+      "Connect": {
+        "description": "Connects to the Smart Bench via TCP.",
+        "params": {}
+      },
+      "Disconnect": {
+        "description": "Disconnects from the Smart Bench.",
+        "params": {}
+      },
+      "Battery": {
+        "description": "Controls the Battery (+B) relay.",
+        "params": { "status": "'on' or 'off'" }
+      },
+      "ACC": {
+        "description": "Controls the ACC relay.",
+        "params": { "status": "'on' or 'off'" }
+      },
+      "IGN": {
+        "description": "Controls the IGN relay.",
+        "params": { "status": "'on' or 'off'" }
+      },
+      "IGN3": {
+        "description": "Controls the IGN3 relay.",
+        "params": { "status": "'on' or 'off'" }
+      },
+      "USB": {
+        "description": "Controls the USB relay.",
+        "params": { "status": "'on' or 'off'" }
+      },
+      "CheckCurrent": {
+        "description": "Measures current and returns PASS if within range for 3 consecutive readings, FAIL on timeout.",
+        "params": {
+          "min_current": "Minimum current (A). e.g. 0.5",
+          "max_current": "Maximum current (A). e.g. 2.0",
+          "check_delay": "Timeout (ms). e.g. 10000"
+        }
+      },
+      "CheckCurrentMoment": {
+        "description": "Measures instantaneous current and returns PASS if within range, FAIL if out of range for 3 consecutive readings.",
+        "params": {
+          "min_current": "Minimum current (A)",
+          "max_current": "Maximum current (A)"
+        }
+      },
+      "CheckCurrentMaintain": {
+        "description": "Verifies that current stays within range for the specified duration.",
+        "params": {
+          "min_current": "Minimum current (A)",
+          "max_current": "Maximum current (A)",
+          "check_delay": "Maintenance duration (ms)"
+        }
+      },
+      "ButtonPress": {
+        "description": "Presses a button.",
+        "params": {
+          "button_num": "Button number (0=ECALL, etc.)",
+          "press_time": "Press duration (ms). e.g. 3000"
+        }
+      },
+      "LEDCheck": {
+        "description": "Verifies the LED status.",
+        "params": {
+          "data": "LED verification data. e.g. 'honda;4.0;GREEN;BLINK;RED;ON'"
+        }
+      },
+      "Relay": {
+        "description": "Directly controls a relay.",
+        "params": {
+          "relay_num": "Relay number",
+          "status": "'on' or 'off'"
+        }
+      },
+      "SendRaw": {
+        "description": "Sends a raw text command directly.",
+        "params": {
+          "command": "Command string to send"
+        }
+      },
+      "GetStatus": {
+        "description": "Returns the current module status.",
+        "params": {}
+      }
+    }
+  },
+
+  "MLP": {
+    "_description": "MLP Logging — Receives and saves real-time logs from IVI/SAFE systems via MIB Log Protocol. Supports ICAS3/MIB3OI",
+    "functions": {
+      "set_config": {
+        "description": "Configures MLP settings. Sets the model and log save paths.",
+        "params": {
+          "model": "Vehicle model. Choose from 'ICAS3EU', 'ICAS3CN', 'MIB3OI'",
+          "mlp_ivi_file_path": "IVI log save path (required)",
+          "mlp_safe_file_path": "SAFE log save path (ICAS3 only, optional)"
+        }
+      },
+      "logging_start": {
+        "description": "Starts MLP log saving. Must call set_config first.",
+        "params": {}
+      },
+      "logging_stop": {
+        "description": "Stops MLP log saving.",
+        "params": {}
+      },
+      "MLP_IVI_READ_THREAD": {
+        "description": "Starts the IVI MLP receive thread. Called automatically internally.",
+        "params": {
+          "mlp_ivi_file_path": "Log save path",
+          "host": "Host IP to connect",
+          "port": "Port to connect"
+        }
+      },
+      "MLP_SAFE_READ_THREAD": {
+        "description": "Starts the SAFE MLP receive thread. Called automatically internally.",
+        "params": {
+          "mlp_safe_file_path": "Log save path",
+          "host": "Host IP to connect",
+          "port": "Port to connect"
+        }
+      }
+    }
+  },
+
+  "PCANClient": {
+    "_description": "PCAN Client — Sends and receives CAN messages via Peak CAN devices",
+    "functions": {
+      "send_msg": {
+        "description": "Sends a CAN message.",
+        "params": {
+          "channel": "CAN channel",
+          "msg_id": "Message ID",
+          "type": "Message type",
+          "length": "Data length",
+          "cycle_time": "Transmission interval (ms). 0 for one-shot",
+          "msg_data": "Message data"
+        }
+      },
+      "stop": {
+        "description": "Stops transmission of a specific CAN message.",
+        "params": {
+          "channel": "CAN channel",
+          "msg_id": "Message ID to stop"
+        }
+      },
+      "stop_all": {
+        "description": "Stops all CAN message transmissions.",
+        "params": {}
+      }
+    }
+  },
+
+  "TigrisCheck": {
+    "_description": "Tigris Check — Runs the Tigris test suite on a specific ADB device and checks results",
+    "functions": {
+      "checkTigris": {
+        "description": "Runs the Tigris check.",
+        "params": {
+          "ADBID": "ADB device serial number",
+          "TIGRIS_FOLDER": "Tigris folder path",
+          "SUITE_NAME": "Test suite name to run"
+        }
+      }
+    }
+  },
+
+  "Trace": {
+    "_description": "Trace Analysis — Analyzes function call traces by comparing expected vs. actual call sequences",
+    "functions": {
+      "initialize": {
+        "description": "Initializes the trace analyzer. Deletes all previous data.",
+        "params": {}
+      },
+      "append_expected": {
+        "description": "Adds an expected function call pair (caller -> callee).",
+        "params": {
+          "caller": "Caller function name",
+          "callee": "Callee function name"
+        }
+      },
+      "set_actual": {
+        "description": "Sets the directory containing actual trace files. Parses files and sorts by timestamp.",
+        "params": {
+          "path": "PC directory path containing trace files"
+        }
+      },
+      "set_start_timestamp": {
+        "description": "Sets the trace start timestamp.",
+        "params": {
+          "timestamp": "Start time (epoch seconds)"
+        }
+      },
+      "compare": {
+        "description": "Compares expected calls with actual calls. Returns match status for each call pair.",
+        "params": {}
+      },
+      "timeliness": {
+        "description": "Checks whether the last expected result was called within the time limit. Must be called after compare().",
+        "params": {
+          "time_diff": "Allowed time difference (ms)"
+        }
+      },
+      "get_basename": {
+        "description": "Returns the base name of a trace file.",
+        "params": {
+          "trace_file": "Trace file path"
+        }
+      }
+    }
+  },
+
+  "COMMON_WINDOWS": {
+    "_description": "Windows Utility — Utility module for saving Windows command output to files",
+    "functions": {
+      "start_save_file_from_command": {
+        "description": "Executes a command and saves the output to a log file.",
+        "params": {
+          "command": "Command to execute",
+          "path_dir_log": "Log save directory path"
+        }
+      },
+      "stop_save_file": {
+        "description": "Stops log file saving.",
+        "params": {}
+      },
+      "get_file_path": {
+        "description": "Returns the current log file path.",
+        "params": {}
+      }
+    }
+  },
+
+  "Android": {
+    "_description": "Android ADB Control — Controls Android devices via ADB: touch, swipe, app install, screen capture, etc.",
+    "functions": {
+      "connect_adb_server": {
+        "description": "Connects to the ADB server. Equivalent to 'adb start-server'.",
+        "params": {
+          "host": "ADB server host. Default: '127.0.0.1'",
+          "port": "ADB server port. Default: 5037"
+        }
+      },
+      "adb_devices": {
+        "description": "Returns the list of connected ADB devices. Equivalent to 'adb devices'.",
+        "params": {}
+      },
+      "select_adb_device": {
+        "description": "Selects the target device for commands. Equivalent to 'adb -s' option.",
+        "params": {
+          "serial": "Device serial number"
+        }
+      },
+      "adb_tap": {
+        "description": "Taps at a specific coordinate on the screen.",
+        "params": {
+          "x": "X coordinate to tap",
+          "y": "Y coordinate to tap",
+          "serial": "Device serial (optional). Uses default device if empty"
+        }
+      },
+      "adb_swipe": {
+        "description": "Swipes (drags) on the screen.",
+        "params": {
+          "x1": "Start X coordinate",
+          "y1": "Start Y coordinate",
+          "x2": "End X coordinate",
+          "y2": "End Y coordinate",
+          "duration": "Swipe duration (ms). Default: 300",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "key_event": {
+        "description": "Sends a key event. Controls hardware keys such as Home, Back, Volume, etc.",
+        "params": {
+          "keycode": "Key code. e.g. 'KEYCODE_HOME', 'KEYCODE_BACK', 'KEYCODE_VOLUME_UP'",
+          "long_press": "Long press. Default: False",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "TypingtoScrenn": {
+        "description": "Types text on the screen.",
+        "params": {
+          "text": "Text to input",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "adb_shell": {
+        "description": "Executes an ADB shell command. Returns the result.",
+        "params": {
+          "cmd": "Shell command. e.g. 'getprop ro.build.version.release', 'pm list packages'",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "adb_screencap": {
+        "description": "Captures the screen and saves it as an image file on the PC.",
+        "params": {
+          "img_path": "Image save path on PC",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "adb_push": {
+        "description": "Pushes a file from the PC to the device.",
+        "params": {
+          "src": "File path on PC",
+          "dest": "Destination path on device",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "adb_pull": {
+        "description": "Pulls a file from the device to the PC.",
+        "params": {
+          "src": "File path on device",
+          "dest": "Destination path on PC",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "install_apk": {
+        "description": "Installs an APK file on the device.",
+        "params": {
+          "apk_path": "APK file path",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "uninstall_apk": {
+        "description": "Uninstalls an app from the device.",
+        "params": {
+          "apk_package": "App package name. e.g. 'com.example.app'",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "adb_reboot": {
+        "description": "Reboots the device.",
+        "params": {
+          "serial": "Device serial (optional)"
+        }
+      },
+      "IncomingCall": {
+        "description": "Simulates an incoming call.",
+        "params": {
+          "number": "Phone number",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "start_logcat": {
+        "description": "Starts saving logcat output to a file.",
+        "params": {
+          "logpath": "Log file save path",
+          "serial": "Device serial (optional)"
+        }
+      },
+      "stop_logcat": {
+        "description": "Stops logcat saving.",
+        "params": {}
+      },
+      "read_thread": {
+        "description": "Starts the device log receive thread.",
+        "params": {
+          "device": "Device object",
+          "logpath": "Log file path"
+        }
+      }
+    }
+  },
+
+  "CCIC_BENCH": {
+    "_description": "CCIC Bench — Test bench equipment that controls vehicle power (IGN/ACC/Battery) via UDP communication",
+    "functions": {
+      "Connect": {
+        "description": "Establishes a UDP network connection to the bench equipment. Automatically called when adding the device, so manual invocation is usually unnecessary.",
+        "params": {}
+      },
+      "Disconnect": {
+        "description": "Disconnects the UDP network connection from the bench equipment.",
+        "params": {}
+      },
+      "IsConnected": {
+        "description": "Checks whether the bench equipment is currently connected.",
+        "params": {}
+      },
+      "IGN1": {
+        "description": "Turns IGN1 (Ignition 1) power on or off. Corresponds to the vehicle's ignition power.",
+        "params": {
+          "on_off": "0 = OFF, 1 = ON. Default: 1 (ON)"
+        }
+      },
+      "IGN1_Read": {
+        "description": "Reads the current IGN1 power state. Returns: 0=OFF, 1=ON, -1=read failure",
+        "params": {}
+      },
+      "IGN2": {
+        "description": "Turns IGN2 (Ignition 2) power on or off. Corresponds to auxiliary ignition power.",
+        "params": {
+          "on_off": "0 = OFF, 1 = ON. Default: 1 (ON)"
+        }
+      },
+      "IGN2_Read": {
+        "description": "Reads the current IGN2 power state. Returns: 0=OFF, 1=ON, -1=read failure",
+        "params": {}
+      },
+      "ACC": {
+        "description": "Turns ACC (Accessory) power on or off. Corresponds to the vehicle's accessory power (radio, navigation, etc.).",
+        "params": {
+          "on_off": "0 = OFF, 1 = ON. Default: 1 (ON)"
+        }
+      },
+      "ACC_Read": {
+        "description": "Reads the current ACC power state. Returns: 0=OFF, 1=ON, -1=read failure",
+        "params": {}
+      },
+      "BATTERY": {
+        "description": "Turns the battery relay on or off. When OFF, battery power is completely cut from the vehicle.",
+        "params": {
+          "on_off": "0 = OFF (disconnect battery), 1 = ON (connect battery). Default: 1 (ON)"
+        }
+      },
+      "BATTERY_Read": {
+        "description": "Reads the current battery relay state. Returns: 0=OFF, 1=ON, -1=read failure",
+        "params": {}
+      },
+      "BatterySet": {
+        "description": "Sets the battery output voltage. Used for voltage fluctuation testing.",
+        "params": {
+          "voltage": "Voltage to set (V, decimal allowed). e.g. 12.0, 14.4, 9.0. Default: 14.4V"
+        }
+      },
+      "BatteryCheck": {
+        "description": "Measures the current battery output voltage. Returns: voltage (V), -1.0 on failure",
+        "params": {}
+      },
+      "AmpereCheck": {
+        "description": "Measures the current power consumption. Returns: current (A), -1.0 on failure",
+        "params": {}
+      },
+      "SendCommand": {
+        "description": "Sends a raw UDP command to the bench. For advanced users; using the individual functions above is recommended.",
+        "params": {
+          "cmd1": "Command code 1 (integer, e.g. 0x24 = 36)",
+          "cmd2": "Command code 2 (integer, e.g. 0x21 = 33)",
+          "data_hex": "Additional data (space-separated hex string). e.g. 'FF 01'. Default: empty string"
+        }
+      },
+      "GetInfo": {
+        "description": "Returns the bench's current connection information (IP, port, connection state).",
+        "params": {}
+      }
+    }
+  },
+
+  "SerialPlugin": {
+    "_description": "Generic Serial Communication — General-purpose plugin for sending and receiving data via RS-232 serial port",
+    "functions": {
+      "Connect": {
+        "description": "Opens the serial port. Automatically called when adding the device.",
+        "params": {}
+      },
+      "Disconnect": {
+        "description": "Closes the serial port.",
+        "params": {}
+      },
+      "IsConnected": {
+        "description": "Checks whether the serial port is currently open.",
+        "params": {}
+      },
+      "SendCommand": {
+        "description": "Sends a text command via the serial port. A newline is appended by default.",
+        "params": {
+          "command": "Command text to send. e.g. 'AT+VERSION', 'RESET'",
+          "encoding": "Character encoding. Default: 'utf-8'. Use 'ascii' for special equipment",
+          "append_newline": "Append newline at end of command. True = append (default), False = do not append"
+        }
+      },
+      "ReadLine": {
+        "description": "Reads a single line from the serial port.",
+        "params": {
+          "timeout": "Max wait time in seconds. Default: 1.0"
+        }
+      },
+      "ReadAll": {
+        "description": "Reads all data from the serial port receive buffer.",
+        "params": {
+          "timeout": "Max wait time in seconds. Default: 1.0"
+        }
+      },
+      "SendAndRead": {
+        "description": "Sends a command and reads one line of the response.",
+        "params": {
+          "command": "Command text to send",
+          "timeout": "Response wait time in seconds. Default: 1.0",
+          "encoding": "Character encoding. Default: 'utf-8'"
+        }
+      },
+      "SendHex": {
+        "description": "Sends raw hex bytes directly.",
+        "params": {
+          "hex_string": "Hex string to send. e.g. 'FF 01 A0'"
+        }
+      },
+      "ReadHex": {
+        "description": "Reads the specified number of bytes and returns them as a hex string.",
+        "params": {
+          "count": "Number of bytes to read. Default: 1",
+          "timeout": "Max wait time in seconds. Default: 1.0"
+        }
+      },
+      "SetBaudrate": {
+        "description": "Changes the serial communication baud rate.",
+        "params": {
+          "baudrate": "Baud rate. e.g. 9600, 115200"
+        }
+      },
+      "GetPortInfo": {
+        "description": "Returns the current serial port information.",
+        "params": {}
+      },
+      "LOG_SERIAL": {
+        "description": "Waits (blocking) until a keyword appears in serial received data. Returns all collected logs. Space-separated keywords use AND condition.",
+        "params": {
+          "keyword": "Keyword to search. e.g. 'Pass', 'TTI_PASS'. Space-separated = AND condition",
+          "timeout": "Max wait time in seconds. Default: 30"
+        }
+      },
+      "StartMonitor": {
+        "description": "Monitors serial for a keyword in the background (non-blocking). Proceeds to the next step immediately; check result with GetMonitorResult.",
+        "params": {
+          "keyword": "Keyword to monitor. Space-separated = AND condition",
+          "timeout": "Max monitoring time in seconds. Default: 60"
+        }
+      },
+      "StopMonitor": {
+        "description": "Stops background monitoring.",
+        "params": {
+          "monitor_id": "Monitor ID (e.g. 'mon_1'). Stops all if empty"
+        }
+      },
+      "GetMonitorResult": {
+        "description": "Checks the background monitoring result. Returns PASS/FAIL/RUNNING status and collected logs.",
+        "params": {
+          "monitor_id": "Monitor ID. Returns all results if empty"
+        }
+      }
+    }
+  },
+
+  "CMD": {
+    "_description": "Command Execution — Executes Windows command prompt (CMD) commands. Used for running external programs or system commands",
+    "functions": {
+      "Run": {
+        "description": "Executes a command and waits for completion (blocking). Returns the result.",
+        "params": {
+          "command": "Command to execute. e.g. 'ping 127.0.0.1 -n 3', 'ipconfig'",
+          "timeout": "Max wait time in seconds. Default: 300"
+        }
+      },
+      "RunBackground": {
+        "description": "Executes a command in the background (non-blocking). Returns the PID.",
+        "params": {
+          "command": "Command to execute. e.g. 'notepad', 'python script.py'"
+        }
+      },
+      "Kill": {
+        "description": "Terminates a background process.",
+        "params": {
+          "pid": "PID of the process to terminate"
+        }
+      },
+      "ListBackground": {
+        "description": "Returns the list of running background processes.",
+        "params": {}
+      }
+    }
+  },
+
+  "DLTViewer": {
+    "_description": "DLT Log Viewer — Receives and analyzes real-time DLT logs from vehicle ECUs via direct TCP connection",
+    "functions": {
+      "Connect": {
+        "description": "Connects to the DLT daemon (ECU) via TCP and starts real-time log capture.",
+        "params": {}
+      },
+      "Disconnect": {
+        "description": "Disconnects from the DLT daemon and stops log capture.",
+        "params": {}
+      },
+      "IsConnected": {
+        "description": "Checks whether currently connected to the DLT daemon.",
+        "params": {}
+      },
+      "WaitLog": {
+        "description": "Waits (blocking) until a log containing the keyword appears. Space-separated keywords use AND condition.",
+        "params": {
+          "keyword": "Keyword to search. e.g. 'BootComplete', 'ERROR crash'",
+          "timeout": "Max wait time in seconds. Default: 30"
+        }
+      },
+      "StartMonitor": {
+        "description": "Monitors for a keyword in the background (non-blocking). Check result with GetMonitorResult.",
+        "params": {
+          "keyword": "Keyword to monitor",
+          "timeout": "Max monitoring time in seconds. Default: 60"
+        }
+      },
+      "StopMonitor": {
+        "description": "Stops background monitoring.",
+        "params": {
+          "monitor_id": "Monitor ID. Stops all if empty"
+        }
+      },
+      "GetMonitorResult": {
+        "description": "Checks the monitoring result. Returns PASS/FAIL/RUNNING.",
+        "params": {
+          "monitor_id": "Monitor ID. Returns all results if empty"
+        }
+      },
+      "SearchLog": {
+        "description": "Searches the log buffer for a keyword.",
+        "params": {
+          "keyword": "Keyword to search",
+          "count": "Maximum number of results. Default: 10"
+        }
+      },
+      "GetRecentLogs": {
+        "description": "Retrieves recently received logs.",
+        "params": {
+          "count": "Number of lines to retrieve. Default: 100"
+        }
+      },
+      "GetLogCount": {
+        "description": "Returns the total number of received logs.",
+        "params": {}
+      },
+      "ClearLogs": {
+        "description": "Clears the log buffer.",
+        "params": {}
+      },
+      "LaunchViewer": {
+        "description": "Launches the DLT Viewer GUI application.",
+        "params": {
+          "project_file": ".dlp project file path (optional)",
+          "log_file": ".dlt log file path (optional)"
+        }
+      },
+      "CloseViewer": {
+        "description": "Closes the DLT Viewer GUI.",
+        "params": {}
+      },
+      "CreateProject": {
+        "description": "Creates a DLT Viewer project file (.dlp).",
+        "params": {
+          "file_path": ".dlp file save path",
+          "host": "ECU IP address (optional)",
+          "port": "DLT port. Default: 3490"
+        }
+      },
+      "GetStatus": {
+        "description": "Returns the comprehensive current status of the DLT module.",
+        "params": {}
+      }
+    }
+  },
+
+  "VisionCamera": {
+    "_description": "Vision Camera — Captures screens using a GigE Vision industrial camera",
+    "functions": {
+      "Connect": {
+        "description": "Connects to the vision camera.",
+        "params": {}
+      },
+      "Disconnect": {
+        "description": "Disconnects from the vision camera.",
+        "params": {}
+      },
+      "IsConnected": {
+        "description": "Checks the connection status.",
+        "params": {}
+      },
+      "Capture": {
+        "description": "Captures the screen and saves it as an image file.",
+        "params": {
+          "save_path": "Image save path. Saves to temp folder if empty"
+        }
+      },
+      "CaptureBytes": {
+        "description": "Captures the screen and returns it as byte data.",
+        "params": {
+          "fmt": "'png' (high quality) or 'jpeg' (fast). Default: 'png'"
+        }
+      },
+      "CaptureToFile": {
+        "description": "Captures a PNG image to the specified path.",
+        "params": {
+          "save_path": "Save path (required)"
+        }
+      },
+      "CropCapture": {
+        "description": "Captures only a specific region (cropped).",
+        "params": {
+          "save_path": "Save path (required)",
+          "left": "Left coordinate (px)",
+          "top": "Top coordinate (px)",
+          "right": "Right coordinate (px)",
+          "bottom": "Bottom coordinate (px)"
+        }
+      },
+      "GetInfo": {
+        "description": "Returns camera information.",
+        "params": {}
+      }
+    }
+  },
+
+  "VisionCameraClient": {
+    "_description": "Vision Camera Client — Low-level camera control module used internally by VisionCamera",
+    "functions": {
+      "md_VisionConnect": {
+        "description": "Performs a low-level connection to the vision camera. Use VisionCamera.Connect() instead for normal usage.",
+        "params": {}
+      },
+      "md_VisionDisconnect": {
+        "description": "Disconnects from the vision camera.",
+        "params": {}
+      },
+      "md_IsConnect": {
+        "description": "Checks the connection status.",
+        "params": {}
+      },
+      "md_VisionCapture": {
+        "description": "Captures an image and saves it to a file.",
+        "params": {
+          "szPath": "Save path (required)",
+          "left": "Crop left coordinate. -1 for full image. Default: -1",
+          "top": "Crop top coordinate. Default: -1",
+          "right": "Crop right coordinate. Default: -1",
+          "bottom": "Crop bottom coordinate. Default: -1"
+        }
+      },
+      "md_CaptureBytes": {
+        "description": "Returns the captured image as byte data.",
+        "params": {
+          "fmt": "'png' or 'jpeg'. Default: 'jpeg'"
+        }
+      },
+      "dispose": {
+        "description": "Releases camera resources.",
+        "params": {}
+      }
+    }
+  }
+}
