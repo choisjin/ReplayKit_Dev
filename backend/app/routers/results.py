@@ -184,6 +184,7 @@ def _build_excel_workbook(data: dict, filepath: Path = None):
         delay_str = f"{delay_ms}ms" if delay_ms and delay_ms >= 1000 else (f"{delay_ms}ms" if delay_ms else "-")
 
         ws.cell(row=ri, column=1, value=ts_str).border = thin_border
+        ws.cell(row=ri, column=1).alignment = center
         ws.cell(row=ri, column=2, value=total_repeat).border = thin_border
         ws.cell(row=ri, column=2).alignment = center
         ws.cell(row=ri, column=3, value=sr.get("repeat_index", 1)).border = thin_border
@@ -191,8 +192,11 @@ def _build_excel_workbook(data: dict, filepath: Path = None):
         ws.cell(row=ri, column=4, value=sr.get("step_id", "")).border = thin_border
         ws.cell(row=ri, column=4).alignment = center
         ws.cell(row=ri, column=5, value=sr.get("device_id", "")).border = thin_border
+        ws.cell(row=ri, column=5).alignment = center
         ws.cell(row=ri, column=6, value=command).border = thin_border
+        ws.cell(row=ri, column=6).alignment = vcenter_wrap
         ws.cell(row=ri, column=7, value=sr.get("description", "")).border = thin_border
+        ws.cell(row=ri, column=7).alignment = vcenter_wrap
         status_cell = ws.cell(row=ri, column=8, value=status.upper())
         status_cell.border = thin_border
         status_cell.alignment = center
@@ -211,6 +215,7 @@ def _build_excel_workbook(data: dict, filepath: Path = None):
 
         exp_path = _resolve_image_path(sr.get("expected_image"))
         ws.cell(row=ri, column=11).border = thin_border
+        ws.cell(row=ri, column=11).alignment = center
         if exp_path:
             try:
                 img = XlImage(str(exp_path))
@@ -224,6 +229,7 @@ def _build_excel_workbook(data: dict, filepath: Path = None):
         act_img_path = sr.get("actual_annotated_image") or sr.get("actual_image")
         act_path = _resolve_image_path(act_img_path)
         ws.cell(row=ri, column=12).border = thin_border
+        ws.cell(row=ri, column=12).alignment = center
         if act_path:
             try:
                 img = XlImage(str(act_path))

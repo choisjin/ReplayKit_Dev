@@ -1,12 +1,24 @@
 @echo off
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
 :: Git PATH 확보
 set "PATH=C:\Program Files\Git\cmd;C:\Program Files (x86)\Git\cmd;%PATH%"
 
+:: --home 옵션: git_remote_home.txt 사용
+set "GIT_REMOTE_FILE=git_remote.txt"
+if "%~1"=="--home" (
+    if exist "git_remote_home.txt" (
+        set "GIT_REMOTE_FILE=git_remote_home.txt"
+        echo [GIT] Using home remote: git_remote_home.txt
+    ) else (
+        echo [GIT] git_remote_home.txt not found - using default.
+    )
+)
+
 :: Git 초기화 또는 업데이트
 if not exist ".git" (
-    if exist "git_remote.txt" (
+    if exist "%GIT_REMOTE_FILE%" (
         where git.exe >nul 2>nul
         if not errorlevel 1 (
             call :git_init
@@ -24,7 +36,7 @@ goto :after_git
 
 :git_init
 echo [GIT] Initializing repository...
-set /p GIT_REMOTE=<git_remote.txt
+set /p GIT_REMOTE=<%GIT_REMOTE_FILE%
 set "SAFE_DIR=%CD:\=/%"
 git init -b main
 git config --global --add safe.directory "%SAFE_DIR%"
@@ -42,6 +54,15 @@ goto :eof
 
 :git_pull
 set "SAFE_DIR=%CD:\=/%"
+:: --home 시 remote URL 갱신
+if "%~1"=="--home" (
+    set /p GIT_REMOTE=<%GIT_REMOTE_FILE%
+    for /f "delims=" %%u in ('git -c safe.directory="%SAFE_DIR%" remote get-url origin') do set "CUR_REMOTE=%%u"
+    if not "!CUR_REMOTE!"=="!GIT_REMOTE!" (
+        git -c safe.directory="%SAFE_DIR%" remote set-url origin "!GIT_REMOTE!"
+        echo [GIT] Remote updated to: !GIT_REMOTE!
+    )
+)
 git -c safe.directory="%SAFE_DIR%" fetch origin main
 git -c safe.directory="%SAFE_DIR%" reset --hard origin/main
 echo [GIT] Updated.
