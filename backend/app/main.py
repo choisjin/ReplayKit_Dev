@@ -27,7 +27,23 @@ def _result_filename(result_path: str) -> str:
     except ValueError:
         return Path(result_path).name
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+import os as _os
+from logging.handlers import TimedRotatingFileHandler as _TRFH
+
+_log_fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+_log_dir = Path(_os.environ.get("RECORDING_PROJECT_ROOT", str(Path(__file__).resolve().parent.parent.parent))) / "logs"
+_log_dir.mkdir(exist_ok=True)
+
+_file_handler = _TRFH(
+    str(_log_dir / "backend.log"),
+    when="midnight", backupCount=7, encoding="utf-8",
+)
+_file_handler.setFormatter(logging.Formatter(_log_fmt))
+
+logging.basicConfig(level=logging.INFO, format=_log_fmt, handlers=[
+    logging.StreamHandler(),  # 콘솔 (런처가 캡처)
+    _file_handler,            # 파일 (날짜별 자동 로테이션)
+])
 logger = logging.getLogger(__name__)
 
 

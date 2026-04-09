@@ -58,9 +58,11 @@ function AppContent() {
   const [launcherLog, setLauncherLog] = useState<string[]>([]);
   const [logDates, setLogDates] = useState<string[]>([]);
   const [logSelectedDate, setLogSelectedDate] = useState('');
+  const [logSource, setLogSource] = useState<'launcher' | 'backend'>('backend');
 
-  const loadLog = (date?: string) => {
-    serverApi.launcherLog(1000, date).then(res => {
+  const loadLog = (date?: string, source?: string) => {
+    const src = source ?? logSource;
+    serverApi.launcherLog(1000, date, src).then(res => {
       setLauncherLog(res.data.lines || []);
       setLogDates(res.data.dates || []);
       if (!date && res.data.dates?.length > 0) setLogSelectedDate(res.data.dates[0]);
@@ -383,8 +385,16 @@ function AppContent() {
 
       <Modal
         title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span>Launcher Log</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>Log</span>
+            <select
+              value={logSource}
+              onChange={(e) => { const s = e.target.value as 'launcher' | 'backend'; setLogSource(s); setLogSelectedDate(''); loadLog('', s); }}
+              style={{ fontSize: 12, padding: '2px 6px', borderRadius: 4, border: '1px solid #d9d9d9' }}
+            >
+              <option value="backend">Backend</option>
+              <option value="launcher">Launcher</option>
+            </select>
             {logDates.length > 0 && (
               <select
                 value={logSelectedDate}

@@ -359,25 +359,43 @@ async def power_status():
 
 
 @router.get("/launcher-log")
-async def get_launcher_log(lines: int = 200, date: str = ""):
-    """런처 로그 읽기 (날짜별 로그 파일)."""
+async def get_launcher_log(lines: int = 200, date: str = "", source: str = ""):
+    """런처/백엔드 로그 읽기 (날짜별 로그 파일).
+    source: '' = 런처(날짜별), 'backend' = 백엔드(backend.log + 로테이션)
+    """
     from datetime import datetime as _dt
     log_dir = _PROJECT_ROOT / "logs"
     if not log_dir.is_dir():
-        return {"lines": [], "dates": []}
-    # 사용 가능한 날짜 목록
-    dates = sorted([f.stem for f in log_dir.glob("*.log")], reverse=True)
-    # 요청 날짜 없으면 오늘
-    target_date = date or _dt.now().strftime("%Y-%m-%d")
-    log_file = log_dir / f"{target_date}.log"
+        return {"lines": [], "dates": [], "sources": ["launcher", "backend"]}
+
+    if source == "backend":
+        # 백엔드 로그: backend.log + backend.log.2026-04-09 등
+        files = sorted(log_dir.glob("backend.log*"), reverse=True)
+        dates = []
+        for f in files:
+            if f.name == "backend.log":
+                dates.append("today")
+            else:
+                dates.append(f.name.replace("backend.log.", ""))
+        target = date or "today"
+        if target == "today":
+            log_file = log_dir / "backend.log"
+        else:
+            log_file = log_dir / f"backend.log.{target}"
+    else:
+        # 런처 로그: 날짜별
+        dates = sorted([f.stem for f in log_dir.glob("*.log") if not f.name.startswith("backend")], reverse=True)
+        target = date or _dt.now().strftime("%Y-%m-%d")
+        log_file = log_dir / f"{target}.log"
+
     if not log_file.exists():
-        return {"lines": [], "dates": dates}
+        return {"lines": [], "dates": dates, "sources": ["launcher", "backend"]}
     try:
         content = log_file.read_text(encoding="utf-8", errors="replace")
         all_lines = content.strip().split("\n") if content.strip() else []
-        return {"lines": all_lines[-lines:], "dates": dates}
+        return {"lines": all_lines[-lines:], "dates": dates, "sources": ["launcher", "backend"]}
     except Exception:
-        return {"lines": [], "dates": dates}
+        return {"lines": [], "dates": dates, "sources": ["launcher", "backend"]}
 
 
 @router.post("/update-and-restart")
