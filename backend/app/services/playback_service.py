@@ -146,6 +146,7 @@ class PlaybackService:
         self._result_timestamp: str = ""  # 재생 세션별 고유 타임스탬프 (actual 이미지 폴더용)
         self._run_output_dir: Optional[Path] = None  # 런별 출력 디렉토리
         self._run_output_dir_owned = False  # 이 함수가 직접 output dir을 만들었는지
+        self._group_scenario_index: int = 0  # 그룹 내 시나리오 순서 (1-based, 0=단일)
 
     @property
     def is_running(self) -> bool:
@@ -319,13 +320,14 @@ class PlaybackService:
         start_step: int = 0,
         device_map_override: Optional[dict[str, str]] = None,
         group_scenario_index: int = 0,
-    ) -> AsyncGenerator[StepResult, None]:
+    ) -> AsyncGenerator:
         """Execute scenario and yield step results one by one (for WebSocket streaming).
 
         Args:
             start_step: 0-based step index to start execution from (skip earlier steps).
         """
         self._device_map = self._resolve_device_map(scenario, device_map_override)
+        self._group_scenario_index = group_scenario_index
         self._running = True
         _set_sleep_block(True)
         # 그룹 재생에서 호출 시 _should_stop을 리셋하면 안 됨 (이미 설정된 경우)
@@ -501,7 +503,8 @@ class PlaybackService:
                     # 단일 재생: {run_dir}/screenshots/
                     if not self._run_output_dir_owned:
                         safe_sc = re.sub(r'[\\/:*?"<>|→]', '_', scenario_name).replace(" ", "_")
-                        prefix = f"{group_scenario_index:02d}_" if group_scenario_index > 0 else ""
+                        _gsi = self._group_scenario_index
+                        prefix = f"{_gsi:02d}_" if _gsi > 0 else ""
                         actual_dir = self._run_output_dir / f"{prefix}{safe_sc}" / "screenshots"
                     else:
                         actual_dir = self._run_output_dir / "screenshots"
