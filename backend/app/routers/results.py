@@ -130,6 +130,8 @@ def _build_excel_workbook(data: dict, filepath: Path = None):
         top=Side(style="thin"), bottom=Side(style="thin"),
     )
     center = Alignment(horizontal="center", vertical="center")
+    vcenter = Alignment(vertical="center")
+    vcenter_wrap = Alignment(vertical="center", wrap_text=True)
 
     col_headers = [
         "Time Stamp", "TOTAL TC REPEAT", "CURRENT TC REPEAT",

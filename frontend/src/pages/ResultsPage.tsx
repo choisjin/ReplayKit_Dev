@@ -1104,10 +1104,19 @@ export default function ResultsPage() {
                         {recordings.map((rec) => {
                           const m = rec.filename.match(/webcam_r(\d+)\.webm$/);
                           const ri = m ? m[1] : '?';
+                          const isActive = rec.url === activeRecUrl;
                           return (
-                            <div key={rec.filename} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
-                              <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>R{ri}</Tag>
-                              <span style={{ flex: 1, color: '#888' }}>{(rec.size / 1024 / 1024).toFixed(1)}MB</span>
+                            <div key={rec.filename} style={{
+                              display: 'flex', alignItems: 'center', gap: 4, fontSize: 11,
+                              padding: '2px 4px', borderRadius: 4,
+                              background: isActive ? 'var(--accent-light, #e6f4ff)' : 'transparent',
+                              border: isActive ? '1px solid var(--accent, #1677ff)' : '1px solid transparent',
+                              cursor: 'pointer',
+                            }}
+                              onClick={() => { setActiveRecUrl(rec.url); const recCycle = m ? parseInt(m[1]) : 1; setActiveRecRepeat(recCycle); }}
+                            >
+                              <Tag color={isActive ? 'processing' : 'blue'} style={{ margin: 0, fontSize: 10 }}>R{ri}</Tag>
+                              <span style={{ flex: 1, color: isActive ? 'var(--accent, #1677ff)' : '#888', fontWeight: isActive ? 600 : 400 }}>{(rec.size / 1024 / 1024).toFixed(1)}MB</span>
                               <Tooltip title={t('webcam.trimSave')}>
                                 <Button size="small" type="text" icon={<ScissorOutlined />} style={{ padding: '0 4px', height: 20 }}
                                   onClick={() => {
