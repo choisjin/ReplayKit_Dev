@@ -629,17 +629,26 @@ async def migrate_legacy():
                 except Exception as e:
                     errors.append(f"{json_file.name}: {e}")
 
-    # 3) 빈 screenshots 하위 폴더 정리
+    # 3) screenshots 내 actual/actual_ 폴더 정리 + 빈 폴더 삭제
     if SCREENSHOTS_DIR.is_dir():
         for d in list(SCREENSHOTS_DIR.iterdir()):
-            if d.is_dir():
-                try:
-                    # 하위에 actual_ 폴더가 없고 기대 이미지만 있으면 유지
-                    remaining = [x for x in d.iterdir() if x.is_dir() and x.name.startswith("actual_")]
-                    if not remaining and not any(d.iterdir()):
-                        d.rmdir()
-                except Exception:
-                    pass
+            if not d.is_dir():
+                continue
+            for sub in list(d.iterdir()):
+                if sub.is_dir() and sub.name == "actual":
+                    # 타임스탬프 없는 actual 폴더 (단일 스텝 테스트 임시) → 삭제
+                    try:
+                        shutil.rmtree(str(sub))
+                        migrated += 1
+                    except Exception as e:
+                        errors.append(f"screenshots/{d.name}/actual: {e}")
+            # 하위에 actual_ 폴더도 파일도 없으면 폴더 자체 삭제
+            try:
+                remaining = list(d.iterdir())
+                if not remaining:
+                    d.rmdir()
+            except Exception:
+                pass
 
     return {"migrated": migrated, "errors": errors}
 

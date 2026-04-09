@@ -3723,9 +3723,9 @@ export default function RecordPage() {
       <Modal
         title={t('record.stepTestResult')}
         open={testResultModalOpen}
-        onCancel={() => { setTestResultModalOpen(false); setTestResult(null); }}
+        onCancel={() => { setTestResultModalOpen(false); setTestResult(null); scenarioApi.cleanTestScreenshots(scenarioName).catch(() => {}); }}
         width={800}
-        footer={<Button onClick={() => { setTestResultModalOpen(false); setTestResult(null); }}>{t('common.close')}</Button>}
+        footer={<Button onClick={() => { setTestResultModalOpen(false); setTestResult(null); scenarioApi.cleanTestScreenshots(scenarioName).catch(() => {}); }}>{t('common.close')}</Button>}
       >
         {testResult && (
           <div>

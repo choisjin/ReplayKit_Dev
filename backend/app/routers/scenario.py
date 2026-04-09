@@ -728,6 +728,27 @@ class TestStepRequest(BaseModel):
     step_data: Optional[dict] = None  # current (unsaved) step data from frontend
 
 
+@router.post("/clean-test-screenshots")
+async def clean_test_screenshots(scenario_name: str = ""):
+    """단일 스텝 테스트 임시 스크린샷(actual/) 삭제."""
+    import shutil
+    cleaned = 0
+    if scenario_name:
+        actual = SCREENSHOTS_DIR / scenario_name / "actual"
+        if actual.is_dir():
+            shutil.rmtree(str(actual), ignore_errors=True)
+            cleaned += 1
+    else:
+        # 전체 시나리오의 actual 폴더 삭제
+        if SCREENSHOTS_DIR.is_dir():
+            for d in SCREENSHOTS_DIR.iterdir():
+                actual = d / "actual"
+                if actual.is_dir():
+                    shutil.rmtree(str(actual), ignore_errors=True)
+                    cleaned += 1
+    return {"cleaned": cleaned}
+
+
 @router.post("/test-step")
 async def test_step(req: TestStepRequest):
     """Execute a single step on the device and verify against expected image."""
