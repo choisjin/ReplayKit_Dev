@@ -1,29 +1,79 @@
 """module_guides.json에서 module-guide.html을 자동 생성하는 스크립트.
 
 사용법:
-  python docs/generate_module_guide.py
+  python docs/generate_module_guide.py          # 한국어 + 영어 동시 생성
+  python docs/generate_module_guide.py --lang ko # 한국어만
+  python docs/generate_module_guide.py --lang en # 영어만
 
 module_guides.json을 수정한 후 이 스크립트를 실행하면
-docs/module-guide.html이 자동으로 갱신됩니다.
+docs/module-guide.html 및 docs/module-guide-en.html이 자동으로 갱신됩니다.
 """
 
 import json
+import sys
 from pathlib import Path
 from html import escape
 
 GUIDES_PATH = Path(__file__).resolve().parent.parent / "backend" / "app" / "services" / "module_guides.json"
 OUTPUT_PATH = Path(__file__).resolve().parent / "module-guide.html"
+OUTPUT_PATH_EN = Path(__file__).resolve().parent / "module-guide-en.html"
 
-# 모듈 카테고리 분류
+# 모듈 카테고리 분류 (id, ko_label, en_label, modules)
 CATEGORIES = [
-    ("power", "전원 제어", ["POWER", "RIDEN", "KeysightPower"]),
-    ("bench", "벤치 장비", ["IVIQEBenchIOClient", "CCIC_BENCH", "BENCH", "SP25Bench"]),
-    ("can", "CAN 통신", ["CAN", "CANOE", "CANAT", "PCANClient"]),
-    ("comm", "통신 (시리얼/SSH/UART)", ["SerialPlugin", "Uart", "Ignition", "SSHManager"]),
-    ("log", "로깅 & 진단", ["DLTViewer", "DLTLogging", "MLP", "Trace"]),
-    ("media", "미디어 & 이미지", ["VisionCamera", "VisionCameraClient", "AudioLibrary", "ImageProcessing"]),
-    ("system", "시스템 & 유틸리티", ["Android", "CMD", "COMMON_WINDOWS", "TigrisCheck"]),
+    ("power", "전원 제어", "Power Control", ["POWER", "RIDEN", "KeysightPower"]),
+    ("bench", "벤치 장비", "Test Bench", ["IVIQEBenchIOClient", "CCIC_BENCH", "BENCH", "SP25Bench", "SmartBench"]),
+    ("can", "CAN 통신", "CAN Communication", ["CAN", "CANOE", "CANAT", "PCANClient"]),
+    ("comm", "통신 (시리얼/SSH/UART)", "Communication (Serial/SSH/UART)", ["SerialPlugin", "SerialLogging", "Uart", "Ignition", "SSHManager"]),
+    ("log", "로깅 & 진단", "Logging & Diagnostics", ["DLTViewer", "DLTLogging", "MLP", "Trace"]),
+    ("media", "미디어 & 이미지", "Media & Image", ["VisionCamera", "VisionCameraClient", "AudioLibrary", "ImageProcessing"]),
+    ("system", "시스템 & 유틸리티", "System & Utilities", ["Android", "CMD", "COMMON_WINDOWS", "TigrisCheck"]),
 ]
+
+# 언어별 텍스트
+I18N = {
+    "ko": {
+        "html_lang": "ko",
+        "title": "ReplayKit 모듈 가이드",
+        "sidebar_title": "모듈 가이드",
+        "heading": "모듈 가이드",
+        "heading_sub": "ReplayKit에서 사용 가능한 모든 모듈의 함수 및 파라미터 가이드",
+        "intro": '이 문서는 ReplayKit의 <strong>모듈 명령(module_command)</strong> 스텝에서 사용할 수 있는 모든 모듈과 함수를 설명합니다. '
+                 '코딩 지식 없이도 각 함수가 어떤 장비를 제어하고, 어떤 값을 넣어야 하는지 확인할 수 있습니다.',
+        "tip_title": "앱 내 가이드",
+        "tip_body": "스텝 추가 시 함수를 선택하면 설명이 자동으로 표시됩니다. 이 문서는 전체 목록을 한눈에 보거나 인쇄하여 참고하기 위한 것입니다.",
+        "overview": "전체 모듈 목록",
+        "th_module": "모듈",
+        "th_desc": "설명",
+        "th_funcs": "함수 수",
+        "th_func": "함수",
+        "th_param": "파라미터",
+        "no_param": "(없음)",
+        "total": "총 <strong>{modules}개</strong> 모듈, <strong>{funcs}개</strong> 함수가 등록되어 있습니다.",
+        "theme_title": "테마 전환",
+        "cat_label_idx": 1,  # index into CATEGORIES tuple for label
+    },
+    "en": {
+        "html_lang": "en",
+        "title": "ReplayKit Module Guide",
+        "sidebar_title": "Module Guide",
+        "heading": "Module Guide",
+        "heading_sub": "Complete function and parameter reference for all ReplayKit modules",
+        "intro": 'This document describes all modules and functions available in ReplayKit\'s <strong>module_command</strong> step type. '
+                 'You can see what each function controls and what parameters to provide, without any coding knowledge.',
+        "tip_title": "In-App Guide",
+        "tip_body": "When adding a step, selecting a function will automatically display its description. This document is for browsing the full list or printing as a reference.",
+        "overview": "All Modules",
+        "th_module": "Module",
+        "th_desc": "Description",
+        "th_funcs": "Functions",
+        "th_func": "Function",
+        "th_param": "Parameters",
+        "no_param": "(none)",
+        "total": "Total <strong>{modules}</strong> modules, <strong>{funcs}</strong> functions registered.",
+        "theme_title": "Toggle theme",
+        "cat_label_idx": 2,  # index into CATEGORIES tuple for label
+    },
+}
 
 # 연결 타입 한국어
 CONNECT_LABELS = {
@@ -35,28 +85,30 @@ CONNECT_LABELS = {
 }
 
 
-def generate_html(data: dict) -> str:
+def generate_html(data: dict, lang: str = "ko") -> str:
+    t = I18N[lang]
+    cat_label_idx = t["cat_label_idx"]
     modules = {k: v for k, v in data.items() if k != "_meta"}
 
     # 카테고리에 속하지 않은 모듈 수집
+    cats = [list(c) for c in CATEGORIES]  # mutable copy
     categorized = set()
-    for _, _, names in CATEGORIES:
-        categorized.update(names)
+    for c in cats:
+        categorized.update(c[3])
     uncategorized = [n for n in modules if n not in categorized]
     if uncategorized:
-        CATEGORIES.append(("etc", "기타", uncategorized))
+        cats.append(["etc", "기타", "Others", uncategorized])
 
     # --- TOC 생성 ---
     toc_lines = []
-    toc_lines.append('<a href="#top" class="toc-h2">모듈 가이드</a>')
-    toc_lines.append('<a href="#overview" class="toc-h3">전체 모듈 목록</a>')
-    for cat_id, cat_label, _ in CATEGORIES:
+    toc_lines.append(f'<a href="#top" class="toc-h2">{t["heading"]}</a>')
+    toc_lines.append(f'<a href="#overview" class="toc-h3">{t["overview"]}</a>')
+    for c in cats:
+        cat_id, cat_label = c[0], c[cat_label_idx]
         toc_lines.append(f'<a href="#cat-{cat_id}" class="toc-h2">{cat_label}</a>')
-        for cat_id2, _, names in CATEGORIES:
-            if cat_id2 == cat_id:
-                for name in names:
-                    if name in modules:
-                        toc_lines.append(f'<a href="#mod-{name}" class="toc-h3">{name}</a>')
+        for name in c[3]:
+            if name in modules:
+                toc_lines.append(f'<a href="#mod-{name}" class="toc-h3">{name}</a>')
     toc_html = "\n      ".join(toc_lines)
 
     # --- 모듈 섹션 생성 ---
@@ -74,7 +126,8 @@ def generate_html(data: dict) -> str:
     overview_table = "\n".join(overview_rows)
 
     # 카테고리별 모듈 상세
-    for cat_id, cat_label, names in CATEGORIES:
+    for c in cats:
+        cat_id, cat_label, names = c[0], c[cat_label_idx], c[3]
         cat_sections = []
         for name in names:
             if name not in modules:
@@ -94,7 +147,7 @@ def generate_html(data: dict) -> str:
                         param_parts.append(f"<code>{pname}</code>: {escape(pdesc)}")
                     params_html = "<br>".join(param_parts)
                 else:
-                    params_html = '<span style="color:var(--text-muted)">(없음)</span>'
+                    params_html = f'<span style="color:var(--text-muted)">{t["no_param"]}</span>'
 
                 func_rows.append(f"""<tr>
 <td><code>{fname}</code></td>
@@ -108,7 +161,7 @@ def generate_html(data: dict) -> str:
 <h3 id="mod-{name}">{name}</h3>
 <div class="callout callout-info">{desc}</div>
 <table>
-<thead><tr><th style="width:180px">함수</th><th style="width:280px">설명</th><th>파라미터</th></tr></thead>
+<thead><tr><th style="width:180px">{t["th_func"]}</th><th style="width:280px">{t["th_desc"]}</th><th>{t["th_param"]}</th></tr></thead>
 <tbody>
 {func_table}
 </tbody>
@@ -123,11 +176,11 @@ def generate_html(data: dict) -> str:
     content_html = "\n".join(sections)
 
     return f"""<!DOCTYPE html>
-<html lang="ko">
+<html lang="{t['html_lang']}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ReplayKit 모듈 가이드</title>
+<title>{t['title']}</title>
 <style>
   :root {{
     --bg: #ffffff;
@@ -246,35 +299,33 @@ def generate_html(data: dict) -> str:
 </head>
 <body>
 
-<button class="theme-toggle" onclick="toggleTheme()" title="테마 전환">🌓</button>
+<button class="theme-toggle" onclick="toggleTheme()" title="{t['theme_title']}">🌓</button>
 <button class="hamburger" onclick="toggleSidebar()">☰</button>
 <div class="overlay" onclick="toggleSidebar()"></div>
 
 <div class="layout">
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">🔌 ReplayKit</div>
-    <div class="sidebar-version">모듈 가이드</div>
+    <div class="sidebar-version">{t['sidebar_title']}</div>
     <nav id="toc">
       {toc_html}
     </nav>
   </aside>
 
   <div class="main">
-    <h1 id="top">모듈 가이드<small>ReplayKit에서 사용 가능한 모든 모듈의 함수 및 파라미터 가이드</small></h1>
+    <h1 id="top">{t['heading']}<small>{t['heading_sub']}</small></h1>
 
-    <p>이 문서는 ReplayKit의 <strong>모듈 명령(module_command)</strong> 스텝에서 사용할 수 있는 모든 모듈과 함수를 설명합니다.
-    코딩 지식 없이도 각 함수가 어떤 장비를 제어하고, 어떤 값을 넣어야 하는지 확인할 수 있습니다.</p>
+    <p>{t['intro']}</p>
 
     <div class="callout callout-success">
-      <strong>💡 앱 내 가이드</strong>
-      스텝 추가 시 함수를 선택하면 설명이 자동으로 표시됩니다.
-      이 문서는 전체 목록을 한눈에 보거나 인쇄하여 참고하기 위한 것입니다.
+      <strong>{t['tip_title']}</strong>
+      {t['tip_body']}
     </div>
 
-    <h2 id="overview">전체 모듈 목록</h2>
-    <p>총 <strong>{len(modules)}개</strong> 모듈, <strong>{total_funcs}개</strong> 함수가 등록되어 있습니다.</p>
+    <h2 id="overview">{t['overview']}</h2>
+    <p>{t['total'].format(modules=len(modules), funcs=total_funcs)}</p>
     <table>
-      <thead><tr><th>모듈</th><th>설명</th><th>함수 수</th></tr></thead>
+      <thead><tr><th>{t['th_module']}</th><th>{t['th_desc']}</th><th>{t['th_funcs']}</th></tr></thead>
       <tbody>
         {overview_table}
       </tbody>
@@ -326,17 +377,30 @@ document.querySelectorAll('h1[id], h2[id], h3[id]').forEach(el => observer.obser
 
 
 def main():
+    lang_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    # --lang ko / --lang en / 인자 없으면 둘 다
+    target_lang = None
+    if lang_arg == "--lang" and len(sys.argv) > 2:
+        target_lang = sys.argv[2]
+    elif lang_arg in ("ko", "en"):
+        target_lang = lang_arg
+
     with open(GUIDES_PATH, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    html = generate_html(data)
+    langs_to_gen = [target_lang] if target_lang else ["ko", "en"]
+    output_map = {"ko": OUTPUT_PATH, "en": OUTPUT_PATH_EN}
 
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        f.write(html)
+    for lang in langs_to_gen:
+        html = generate_html(data, lang=lang)
+        out = output_map[lang]
+        with open(out, "w", encoding="utf-8") as f:
+            f.write(html)
+        print(f"Generated ({lang}): {out}")
 
     modules = {k: v for k, v in data.items() if k != "_meta"}
     total = sum(len(v.get("functions", {})) for v in modules.values())
-    print(f"Generated: {OUTPUT_PATH}")
+    print(f"  {len(modules)} modules, {total} functions")
     print(f"  {len(modules)} modules, {total} functions")
 
 
