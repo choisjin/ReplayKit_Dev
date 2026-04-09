@@ -773,7 +773,7 @@ async def websocket_playback(websocket: WebSocket):
                             step_jump_target = None
 
                             _pending_seq = 0  # step_start에서 할당한 seq를 step_result에도 동일 적용
-                            async for item in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, start_step=start_step, device_map_override=device_map_override):
+                            async for item in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, start_step=start_step, device_map_override=device_map_override, group_scenario_index=sc_idx + 1):
                                 if isinstance(item, dict) and item.get("_type") == "step_start":
                                     global_step_seq += 1
                                     _pending_seq = global_step_seq

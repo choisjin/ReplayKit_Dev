@@ -318,6 +318,7 @@ class PlaybackService:
         repeat_index: int = 1,
         start_step: int = 0,
         device_map_override: Optional[dict[str, str]] = None,
+        group_scenario_index: int = 0,
     ) -> AsyncGenerator[StepResult, None]:
         """Execute scenario and yield step results one by one (for WebSocket streaming).
 
@@ -500,7 +501,8 @@ class PlaybackService:
                     # 단일 재생: {run_dir}/screenshots/
                     if not self._run_output_dir_owned:
                         safe_sc = re.sub(r'[\\/:*?"<>|→]', '_', scenario_name).replace(" ", "_")
-                        actual_dir = self._run_output_dir / safe_sc / "screenshots"
+                        prefix = f"{group_scenario_index:02d}_" if group_scenario_index > 0 else ""
+                        actual_dir = self._run_output_dir / f"{prefix}{safe_sc}" / "screenshots"
                     else:
                         actual_dir = self._run_output_dir / "screenshots"
                 else:
