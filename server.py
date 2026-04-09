@@ -480,6 +480,24 @@ class ServerManagerApp:
             except Exception as e:
                 log_callback(f"[동기화] Node 의존성 확인 오류: {e}")
 
+        # 4) 고아 screenshots 폴더 정리 (시나리오 없는 스크린샷 폴더 삭제)
+        try:
+            import shutil as _shutil
+            _sc_dir = os.path.join(PROJECT_ROOT, "backend", "screenshots")
+            _scen_dir = os.path.join(PROJECT_ROOT, "backend", "scenarios")
+            if os.path.isdir(_sc_dir) and os.path.isdir(_scen_dir):
+                _existing = {os.path.splitext(f)[0] for f in os.listdir(_scen_dir) if f.endswith(".json")}
+                _cleaned = 0
+                for d in os.listdir(_sc_dir):
+                    dp = os.path.join(_sc_dir, d)
+                    if os.path.isdir(dp) and d not in _existing:
+                        _shutil.rmtree(dp, ignore_errors=True)
+                        _cleaned += 1
+                if _cleaned:
+                    log_callback(f"[동기화] 고아 스크린샷 폴더 {_cleaned}개 삭제")
+        except Exception:
+            pass
+
         log_callback("[동기화] 완료")
         self._set_status("동기화 완료")
         return True
