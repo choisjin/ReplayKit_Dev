@@ -302,7 +302,7 @@ function AppContent() {
               <Button
                 block
                 icon={<AppstoreOutlined />}
-                onClick={() => window.open('/docs/module-guide.html', '_blank')}
+                onClick={() => window.open(settings.language === 'en' ? '/docs/module-guide-en.html' : '/docs/module-guide.html', '_blank')}
               >
                 {!siderCollapsed && t('server.moduleGuide')}
               </Button>
