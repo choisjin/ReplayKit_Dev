@@ -319,7 +319,7 @@ class DLTLogging:
         logger.info("[DLTLogging] WaitLog FAIL: '%s' not found in %ds", keyword, timeout_sec)
         return f"FAIL: keyword '{keyword}' not found within {int(timeout_sec)}s"
 
-    def PollSearch(self, keyword: str, timeout: int = 60, max_retries: int = 5) -> str:
+    def ExpectFound(self, keyword: str, timeout: int = 60, max_retries: int = 5) -> str:
         """키워드가 나타날 때까지 전체 로그를 주기적으로 검색합니다.
 
         먼저 현재 버퍼를 즉시 검색하고, 없으면 (timeout / max_retries) 간격으로
@@ -345,20 +345,20 @@ class DLTLogging:
             for line in logs:
                 if all(k in line for k in keywords):
                     summary = line.strip()[:120]
-                    logger.info("[DLTLogging] PollSearch PASS: '%s' → attempt %d/%d — %s",
+                    logger.info("[DLTLogging] ExpectFound PASS: '%s' → attempt %d/%d — %s",
                                 keyword, attempt, max_retries, summary)
                     return f"PASS: 발견 ({attempt}회차) — {summary}"
 
             if attempt < max_retries:
-                logger.info("[DLTLogging] PollSearch: '%s' not found, retry %d/%d (next in %.1fs)",
+                logger.info("[DLTLogging] ExpectFound: '%s' not found, retry %d/%d (next in %.1fs)",
                             keyword, attempt, max_retries, interval)
                 time.sleep(interval)
 
-        logger.info("[DLTLogging] PollSearch FAIL: '%s' not found after %d retries (%.0fs)",
+        logger.info("[DLTLogging] ExpectFound FAIL: '%s' not found after %d retries (%.0fs)",
                     keyword, max_retries, timeout_sec)
         return f"FAIL: keyword '{keyword}' not found after {max_retries} retries ({int(timeout_sec)}s)"
 
-    def PollAbsent(self, keyword: str, timeout: int = 60, max_retries: int = 5) -> str:
+    def ExpectNotFound(self, keyword: str, timeout: int = 60, max_retries: int = 5) -> str:
         """키워드가 끝까지 없는지 전체 로그를 주기적으로 확인합니다.
 
         먼저 현재 버퍼를 즉시 검색하고, 발견되면 즉시 FAIL.
@@ -385,16 +385,16 @@ class DLTLogging:
             for line in logs:
                 if all(k in line for k in keywords):
                     summary = line.strip()[:120]
-                    logger.info("[DLTLogging] PollAbsent FAIL: '%s' → found at attempt %d/%d — %s",
+                    logger.info("[DLTLogging] ExpectNotFound FAIL: '%s' → found at attempt %d/%d — %s",
                                 keyword, attempt, max_retries, summary)
                     return f"FAIL: 발견 ({attempt}회차) — {summary}"
 
             if attempt < max_retries:
-                logger.info("[DLTLogging] PollAbsent: '%s' absent, check %d/%d (next in %.1fs)",
+                logger.info("[DLTLogging] ExpectNotFound: '%s' absent, check %d/%d (next in %.1fs)",
                             keyword, attempt, max_retries, interval)
                 time.sleep(interval)
 
-        logger.info("[DLTLogging] PollAbsent PASS: '%s' not found after %d checks (%.0fs)",
+        logger.info("[DLTLogging] ExpectNotFound PASS: '%s' not found after %d checks (%.0fs)",
                     keyword, max_retries, timeout_sec)
         return f"PASS: keyword '{keyword}' not found after {max_retries} checks ({int(timeout_sec)}s)"
 
