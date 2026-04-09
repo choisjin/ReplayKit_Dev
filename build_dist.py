@@ -119,13 +119,25 @@ def _prepare_embedded_python():
 
 def _prepack_embedded_with_tkinter(embed_zip_path: Path):
     """Embedded Python을 미리 추출하고 tkinter를 추가하여 dist에 포함."""
-    import zipfile
+    import zipfile, hashlib
 
     python_dir = DIST_DIR / "python"
+    req_file = PROJECT_ROOT / "requirements.txt"
+    hash_file = python_dir / ".req_hash"
+
+    # requirements.txt 해시 계산
+    req_hash = hashlib.md5(req_file.read_bytes()).hexdigest() if req_file.exists() else ""
+    old_hash = hash_file.read_text().strip() if hash_file.exists() else ""
+
+    # python/ 폴더가 이미 있고 requirements 변경 없으면 전체 건너뛰기
+    if python_dir.exists() and (python_dir / "python.exe").exists() and req_hash == old_hash:
+        print(f"  Embedded Python unchanged — skipped")
+        return
+
+    # 변경됐으면 처음부터 다시
     if python_dir.exists():
         shutil.rmtree(str(python_dir))
 
-    # Extract embedded Python
     print("  Extracting embedded Python...")
     with zipfile.ZipFile(str(embed_zip_path)) as zf:
         zf.extractall(str(python_dir))
@@ -156,7 +168,6 @@ def _prepack_embedded_with_tkinter(embed_zip_path: Path):
         _run([str(python_dir / "python.exe"), str(get_pip_file),
               "--no-warn-script-location", "-q"],
              check=False, live_output=False)
-        # Verify
         r = _run([str(python_dir / "python.exe"), "-m", "pip", "--version"],
                  check=False, live_output=False)
         if r.returncode == 0:
@@ -164,21 +175,13 @@ def _prepack_embedded_with_tkinter(embed_zip_path: Path):
         else:
             print(f"  [Warning] pip install failed: {r.stderr[:200]}")
 
-    # Pre-install packages from requirements.txt (변경 시에만)
-    req_file = PROJECT_ROOT / "requirements.txt"
+    # Pre-install packages from requirements.txt
     if req_file.exists() and (python_dir / "python.exe").exists():
-        import hashlib
-        req_hash = hashlib.md5(req_file.read_bytes()).hexdigest()
-        hash_file = python_dir / ".req_hash"
-        old_hash = hash_file.read_text().strip() if hash_file.exists() else ""
-        if req_hash != old_hash:
-            print("  Installing packages from requirements.txt...")
-            _run([str(python_dir / "python.exe"), "-m", "pip", "install",
-                  "-r", str(req_file), "-q", "--no-warn-script-location"],
-                 check=False, live_output=False)
-            hash_file.write_text(req_hash)
-        else:
-            print("  Packages already up to date — skipped")
+        print("  Installing packages from requirements.txt...")
+        _run([str(python_dir / "python.exe"), "-m", "pip", "install",
+              "-r", str(req_file), "-q", "--no-warn-script-location"],
+             check=False, live_output=False)
+        hash_file.write_text(req_hash)
 
     print(f"  Embedded Python ready: {python_dir}")
 
