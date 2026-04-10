@@ -1283,10 +1283,7 @@ export default function DevicePage() {
                         {modalCategory === 'primary' && <Option value="hkmc6th">HKMC 6th (TCP)</Option>}
                         {modalCategory === 'primary' && <Option value="vision_camera">Vision Camera</Option>}
                         <Option value="serial">{t('device.serialPort')}</Option>
-                        {/* SSH: Primary는 General 프로젝트일 때만, Auxiliary는 항상 */}
-                        {(modalCategory === 'auxiliary' || (modalCategory === 'primary' && deviceProject === 'General')) && (
-                          <Option value="ssh">{t('device.ssh')}</Option>
-                        )}
+                        <Option value="ssh">{t('device.ssh')}</Option>
                       </Select>
                     )}
 
