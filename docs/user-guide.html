@@ -871,12 +871,10 @@ npm run dev</code></pre>
   <tr><td><code>wait</code></td><td>지정 시간(ms) 대기</td><td>화면 전환 대기</td></tr>
   <tr><td><code>adb_command</code></td><td>ADB 셸 명령 실행</td><td>앱 강제 종료, 설정 변경</td></tr>
   <tr><td><code>serial_command</code></td><td>시리얼 데이터 전송</td><td>하드웨어 제어 명령</td></tr>
-  <tr><td><code>module_command</code></td><td>모듈 함수 호출</td><td>CAN 메시지 전송, 전원 제어</td></tr>
+  <tr><td><code>module_command</code></td><td>모듈 함수 호출 (CMD 모듈로 Windows 명령 실행 포함)</td><td>CAN 메시지 전송, 전원 제어, ping 검증</td></tr>
   <tr><td><code>hkmc_touch</code></td><td>HKMC IVI 터치</td><td>IVI 화면 터치</td></tr>
   <tr><td><code>hkmc_swipe</code></td><td>HKMC IVI 스와이프</td><td>IVI 화면 스와이프</td></tr>
   <tr><td><code>hkmc_key</code></td><td>HKMC 하드웨어 키</td><td>물리 버튼 제어</td></tr>
-  <tr><td><code>cmd_send</code></td><td>Windows 명령 실행 (결과 무시)</td><td>앱 실행, 파일 복사</td></tr>
-  <tr><td><code>cmd_check</code></td><td>Windows 명령 실행 후 결과 검증</td><td>ping 확인, 프로세스 상태 체크</td></tr>
 </table>
 
 <h4>수동 스텝 추가</h4>
@@ -1450,9 +1448,12 @@ npm run dev</code></pre>
   <tr><td><code>hkmc_touch</code></td><td>HKMC</td><td><code>x</code>, <code>y</code>, <code>screen_type</code></td></tr>
   <tr><td><code>hkmc_swipe</code></td><td>HKMC</td><td><code>x1</code>, <code>y1</code>, <code>x2</code>, <code>y2</code>, <code>screen_type</code></td></tr>
   <tr><td><code>hkmc_key</code></td><td>HKMC</td><td><code>key_name</code>, <code>group</code></td></tr>
-  <tr><td><code>cmd_send</code></td><td>PC (Windows)</td><td><code>command</code></td></tr>
-  <tr><td><code>cmd_check</code></td><td>PC (Windows)</td><td><code>command</code>, <code>expected</code>, <code>match_type</code></td></tr>
 </table>
+
+<div class="callout callout-info">
+  <strong>CMD 명령어 실행이 필요할 때:</strong>
+  스텝 유형 <code>module_command</code>로 <code>CMD</code> 모듈의 함수를 호출합니다 — <code>Run</code> (블로킹), <code>Check</code> (블로킹+기대값 비교), <code>RunCapture</code> (백그라운드+결과 폴링), <code>CheckCapture</code> (백그라운드+기대값 비교). 디바이스 미선택(<code>Common</code>) 시 자동으로 CMD 모듈이 매핑됩니다. 자세한 함수 시그니처는 <a href="module-guide.html#mod-CMD">모듈 가이드 → CMD</a> 참조.
+</div>
 
 <h3 id="appendix-compare">이미지 비교 모드 총정리</h3>
 <table>

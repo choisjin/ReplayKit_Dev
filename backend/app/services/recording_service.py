@@ -925,15 +925,6 @@ class RecordingService:
                 else:
                     await self.adb.multi_finger_swipe(fingers, params.get("duration_ms", 500), serial=serial)
 
-            elif step_type in (StepType.CMD_SEND, StepType.CMD_CHECK):
-                cmd = params.get("command", "")
-                background = params.get("background", False)
-                if background:
-                    import subprocess as _sp
-                    _sp.Popen(cmd, shell=True, stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
-                else:
-                    import subprocess as _sp
-                    _sp.run(cmd, shell=True, capture_output=True, timeout=params.get("timeout", 30))
         return None
 
 

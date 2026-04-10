@@ -457,41 +457,27 @@ export default function ResultsPage() {
           if (r.data.status === 'running') return;
           clearInterval(poll);
 
-          const stdout = r.data.stdout || '';
+          // 서버가 계산한 final_message/final_status 사용
+          const finalMsg = r.data.final_message ?? r.data.stdout ?? '';
+          const finalStatus = r.data.final_status as 'pass' | 'fail' | null | undefined;
+
           setDetail(prev => {
             if (!prev) return prev;
             const updated = { ...prev, step_results: [...prev.step_results] };
             const step = updated.step_results[idx];
-            const cmd = step.command || '';
-            const isCmdCheck = cmd.startsWith('cmd_check:');
+            const newStatus = finalStatus ?? step.status;
+            updated.step_results[idx] = { ...step, message: finalMsg, status: newStatus };
 
-            if (isCmdCheck) {
-              // command에서 expected와 match_mode 추출: "cmd_check: ... (expect[mode]: ...)"
-              const expectMatch = cmd.match(/\(expect(?:\[(\w+)\])?:\s*(.*)\)$/);
-              const matchMode = expectMatch?.[1] || 'contains';
-              const expected = expectMatch?.[2] || '';
-              const passed = matchMode === 'exact'
-                ? stdout.trim() === expected.trim()
-                : stdout.includes(expected);
-              const newMsg = `[CMD_CHECK]\nexpected(${matchMode}): ${expected}\n---\n${stdout}`;
-              const newStatus = passed ? step.status : 'fail';
-              updated.step_results[idx] = { ...step, message: newMsg, status: newStatus };
-
-              // 카운트 재계산
-              if (!passed && step.status !== 'fail') {
-                updated.failed_steps += 1;
-                if (step.status === 'pass') updated.passed_steps = Math.max(0, updated.passed_steps - 1);
-                else if (step.status === 'warning') updated.warning_steps = Math.max(0, updated.warning_steps - 1);
-                if (updated.failed_steps > 0 || updated.error_steps > 0) updated.status = 'fail';
-              }
-
-              // 백엔드에 영구 저장
-              resultsApi.updateStepResult(detailFilename, idx, newMsg, newStatus).catch(() => {});
-            } else {
-              const newMsg = stdout || `완료 (rc: ${r.data.rc})`;
-              updated.step_results[idx] = { ...step, message: newMsg };
-              resultsApi.updateStepResult(detailFilename, idx, newMsg).catch(() => {});
+            // status가 fail로 바뀐 경우 카운트 재계산
+            if (finalStatus === 'fail' && step.status !== 'fail') {
+              updated.failed_steps += 1;
+              if (step.status === 'pass') updated.passed_steps = Math.max(0, updated.passed_steps - 1);
+              else if (step.status === 'warning') updated.warning_steps = Math.max(0, updated.warning_steps - 1);
+              if (updated.failed_steps > 0 || updated.error_steps > 0) updated.status = 'fail';
             }
+
+            // 백엔드에 영구 저장
+            resultsApi.updateStepResult(detailFilename, idx, finalMsg, newStatus).catch(() => {});
             return updated;
           });
         } catch (err: any) {
@@ -752,11 +738,11 @@ export default function ResultsPage() {
       ellipsis: true,
       align: 'center' as const,
       render: (v: string, r: StepResultDetail) => {
-        const isCmdStep = v?.startsWith('cmd_send:') || v?.startsWith('cmd_check:');
-        if (isCmdStep && r.message) {
+        // module_command 결과에 message가 있으면 툴팁으로 표시
+        const isModuleStep = v?.includes('::');
+        if (isModuleStep && r.message) {
           if (r.message.match(/\[BG_TASK:/)) return <span>{v} <Tag color="processing">BG</Tag></span>;
           if (r.message.startsWith('⏳')) return <span>{v} <Tag color="processing">⏳</Tag></span>;
-          if (r.message.startsWith('[CMD_CHECK]')) return <Tooltip title={<pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap' }}>{r.message}</pre>}><span>{v}</span></Tooltip>;
           return <Tooltip title={<pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto' }}>{r.message}</pre>}><span>{v}</span></Tooltip>;
         }
         return <span style={{ textAlign: 'left', display: 'block' }}>{v || r.message || '-'}</span>;

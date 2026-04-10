@@ -183,7 +183,7 @@
     </div>
 
     <h2 id="overview">전체 모듈 목록</h2>
-    <p>총 <strong>29개</strong> 모듈, <strong>354개</strong> 함수가 등록되어 있습니다.</p>
+    <p>총 <strong>29개</strong> 모듈, <strong>357개</strong> 함수가 등록되어 있습니다.</p>
     <table>
       <thead><tr><th>모듈</th><th>설명</th><th>함수 수</th></tr></thead>
       <tbody>
@@ -212,7 +212,7 @@
 <tr><td><a href="#mod-Android"><strong>Android</strong></a></td><td>ADB를 통해 Android 디바이스를 제어하는 모듈. 터치, 스와이프, 앱 설치, 스크린캡처 등</td><td style="text-align:center">18</td></tr>
 <tr><td><a href="#mod-CCIC_BENCH"><strong>CCIC_BENCH</strong></a></td><td>UDP 통신으로 차량 전원(IGN/ACC/배터리)을 제어하는 테스트 벤치 장비</td><td style="text-align:center">16</td></tr>
 <tr><td><a href="#mod-SerialPlugin"><strong>SerialPlugin</strong></a></td><td>RS-232 시리얼 포트로 데이터를 송수신하는 범용 플러그인</td><td style="text-align:center">15</td></tr>
-<tr><td><a href="#mod-CMD"><strong>CMD</strong></a></td><td>Windows 명령 프롬프트(CMD) 명령을 실행하는 모듈. 외부 프로그램 실행이나 시스템 명령에 사용</td><td style="text-align:center">4</td></tr>
+<tr><td><a href="#mod-CMD"><strong>CMD</strong></a></td><td>Windows 명령 프롬프트(CMD) 명령을 실행하는 모듈. 외부 프로그램 실행이나 시스템 명령에 사용</td><td style="text-align:center">7</td></tr>
 <tr><td><a href="#mod-DLTViewer"><strong>DLTViewer</strong></a></td><td>차량 ECU의 DLT 로그를 실시간으로 수신하고 분석하는 모듈 (TCP 직접 연결)</td><td style="text-align:center">15</td></tr>
 <tr><td><a href="#mod-VisionCamera"><strong>VisionCamera</strong></a></td><td>GigE Vision 산업용 카메라로 화면을 캡처하는 모듈</td><td style="text-align:center">8</td></tr>
 <tr><td><a href="#mod-VisionCameraClient"><strong>VisionCameraClient</strong></a></td><td>VisionCamera 내부에서 사용하는 저수준 카메라 제어 모듈</td><td style="text-align:center">6</td></tr>
@@ -2195,8 +2195,23 @@
 <td style="font-size:12px"><code>command</code>: 실행할 명령어. 예: &#x27;ping 127.0.0.1 -n 3&#x27;, &#x27;ipconfig&#x27;<br><code>timeout</code>: 최대 대기 시간 (초). 기본값: 300초</td>
 </tr>
 <tr>
+<td><code>Check</code></td>
+<td>명령어를 실행하고 출력 결과를 기대값과 비교합니다(블로킹). 실패 시 &#x27;FAIL:&#x27; 접두사를 반환하여 스텝이 fail로 판정됩니다.</td>
+<td style="font-size:12px"><code>command</code>: 실행할 명령어<br><code>expected</code>: 출력에 포함되거나 완전히 일치해야 할 기대 문자열<br><code>match_mode</code>: 비교 방식: &#x27;contains&#x27;(부분 일치) 또는 &#x27;exact&#x27;(완전 일치). 기본값: contains<br><code>timeout</code>: 최대 대기 시간 (초). 기본값: 300초</td>
+</tr>
+<tr>
+<td><code>RunCapture</code></td>
+<td>명령어를 백그라운드로 실행하고 즉시 &#x27;[BG_TASK:bg_x]&#x27; placeholder를 반환합니다(논블로킹). 폴링 엔드포인트를 통해 나중에 실제 결과를 회수할 수 있습니다.</td>
+<td style="font-size:12px"><code>command</code>: 실행할 명령어</td>
+</tr>
+<tr>
+<td><code>CheckCapture</code></td>
+<td>명령어를 백그라운드로 실행하고 &#x27;[BG_TASK:bg_x]&#x27; placeholder를 반환합니다. 완료 시 서버가 expected/match_mode로 최종 pass/fail을 판정합니다.</td>
+<td style="font-size:12px"><code>command</code>: 실행할 명령어<br><code>expected</code>: 기대 문자열<br><code>match_mode</code>: &#x27;contains&#x27; 또는 &#x27;exact&#x27;. 기본값: contains</td>
+</tr>
+<tr>
 <td><code>RunBackground</code></td>
-<td>명령어를 백그라운드로 실행합니다(논블로킹). PID가 반환됩니다.</td>
+<td>명령어를 서브프로세스로 실행합니다(fire-and-forget). PID가 반환되지만 결과는 회수할 수 없습니다.</td>
 <td style="font-size:12px"><code>command</code>: 실행할 명령어. 예: &#x27;notepad&#x27;, &#x27;python script.py&#x27;</td>
 </tr>
 <tr>

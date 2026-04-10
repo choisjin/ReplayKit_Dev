@@ -871,12 +871,10 @@ The scan results display the camera's current IP along with the PC network inter
   <tr><td><code>wait</code></td><td>Wait for specified time (ms)</td><td>Wait for screen transition</td></tr>
   <tr><td><code>adb_command</code></td><td>Execute ADB shell command</td><td>Force-stop app, change settings</td></tr>
   <tr><td><code>serial_command</code></td><td>Send serial data</td><td>Hardware control commands</td></tr>
-  <tr><td><code>module_command</code></td><td>Call a module function</td><td>Send CAN message, power control</td></tr>
+  <tr><td><code>module_command</code></td><td>Call a module function (includes Windows shell commands via the CMD module)</td><td>Send CAN message, power control, ping check</td></tr>
   <tr><td><code>hkmc_touch</code></td><td>HKMC IVI touch</td><td>Touch IVI screen</td></tr>
   <tr><td><code>hkmc_swipe</code></td><td>HKMC IVI swipe</td><td>Swipe IVI screen</td></tr>
   <tr><td><code>hkmc_key</code></td><td>HKMC hardware key</td><td>Physical button control</td></tr>
-  <tr><td><code>cmd_send</code></td><td>Execute Windows command (ignore result)</td><td>Launch app, copy file</td></tr>
-  <tr><td><code>cmd_check</code></td><td>Execute Windows command and verify result</td><td>Ping check, process status check</td></tr>
 </table>
 
 <h4>Adding Steps Manually</h4>
@@ -1452,9 +1450,12 @@ to batch-change <code>device_id</code> and <code>screenshot_device_id</code> for
   <tr><td><code>hkmc_touch</code></td><td>HKMC</td><td><code>x</code>, <code>y</code>, <code>screen_type</code></td></tr>
   <tr><td><code>hkmc_swipe</code></td><td>HKMC</td><td><code>x1</code>, <code>y1</code>, <code>x2</code>, <code>y2</code>, <code>screen_type</code></td></tr>
   <tr><td><code>hkmc_key</code></td><td>HKMC</td><td><code>key_name</code>, <code>group</code></td></tr>
-  <tr><td><code>cmd_send</code></td><td>PC (Windows)</td><td><code>command</code></td></tr>
-  <tr><td><code>cmd_check</code></td><td>PC (Windows)</td><td><code>command</code>, <code>expected</code>, <code>match_type</code></td></tr>
 </table>
+
+<div class="callout callout-info">
+  <strong>Running shell commands:</strong>
+  Use the <code>module_command</code> step type to call <code>CMD</code> module functions — <code>Run</code> (blocking), <code>Check</code> (blocking + expected comparison), <code>RunCapture</code> (background + result polling), <code>CheckCapture</code> (background + expected comparison). When no device is selected (<code>Common</code>), the CMD module is auto-mapped. See <a href="module-guide-en.html#mod-CMD">Module Guide → CMD</a> for full function signatures.
+</div>
 
 <h3 id="appendix-compare">Image Comparison Modes Reference</h3>
 <table>

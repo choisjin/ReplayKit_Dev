@@ -793,13 +793,50 @@ async def test_step(req: TestStepRequest):
 
 @router.get("/cmd-result/{task_id}")
 async def get_cmd_result(task_id: str):
-    """백그라운드 CMD 결과 폴링."""
-    from ..services.playback_service import bg_cmd_get, bg_cmd_cleanup
-    result = bg_cmd_get(task_id)
+    """백그라운드 CMD 결과 폴링.
+
+    완료 시 expected/match_mode가 저장되어 있으면 서버에서 비교까지 수행하여
+    final_message와 final_status를 반환한다. 프론트엔드는 이 값을 step result에
+    그대로 반영하기만 하면 된다.
+    """
+    from ..services import bg_task_store
+    result = bg_task_store.get_task(task_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Task not found")
+
     if result["status"] != "running":
-        bg_cmd_cleanup(task_id)
+        # 완료된 태스크: 최종 메시지/판정 계산
+        stdout = result.get("stdout", "") or ""
+        stderr = result.get("stderr", "") or ""
+        rc = result.get("rc")
+        expected = result.get("expected")
+        match_mode = result.get("match_mode", "contains")
+
+        combined = stdout
+        if stderr:
+            combined = (combined + "\n" + stderr).strip() if combined else stderr
+
+        if expected is not None:
+            # CheckCapture 결과: 비교 수행
+            actual = combined.strip()
+            exp = (expected or "").strip()
+            if match_mode == "exact":
+                passed = actual == exp
+            else:
+                passed = exp in actual
+            if passed:
+                result["final_message"] = combined if combined else f"(exit code: {rc})"
+                result["final_status"] = "pass"
+            else:
+                result["final_message"] = f"FAIL: expected({match_mode}): {expected}\n---\n{combined}"
+                result["final_status"] = "fail"
+        else:
+            # RunCapture 결과: 메시지만 제공, 상태는 변경하지 않음
+            result["final_message"] = combined if combined else f"(exit code: {rc})"
+            result["final_status"] = None
+
+        # 반환 후 정리
+        bg_task_store.cleanup_task(task_id)
     return result
 
 

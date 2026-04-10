@@ -2117,8 +2117,31 @@
           "timeout": "최대 대기 시간 (초). 기본값: 300초"
         }
       },
+      "Check": {
+        "description": "명령어를 실행하고 출력 결과를 기대값과 비교합니다(블로킹). 실패 시 'FAIL:' 접두사를 반환하여 스텝이 fail로 판정됩니다.",
+        "params": {
+          "command": "실행할 명령어",
+          "expected": "출력에 포함되거나 완전히 일치해야 할 기대 문자열",
+          "match_mode": "비교 방식: 'contains'(부분 일치) 또는 'exact'(완전 일치). 기본값: contains",
+          "timeout": "최대 대기 시간 (초). 기본값: 300초"
+        }
+      },
+      "RunCapture": {
+        "description": "명령어를 백그라운드로 실행하고 즉시 '[BG_TASK:bg_x]' placeholder를 반환합니다(논블로킹). 폴링 엔드포인트를 통해 나중에 실제 결과를 회수할 수 있습니다.",
+        "params": {
+          "command": "실행할 명령어"
+        }
+      },
+      "CheckCapture": {
+        "description": "명령어를 백그라운드로 실행하고 '[BG_TASK:bg_x]' placeholder를 반환합니다. 완료 시 서버가 expected/match_mode로 최종 pass/fail을 판정합니다.",
+        "params": {
+          "command": "실행할 명령어",
+          "expected": "기대 문자열",
+          "match_mode": "'contains' 또는 'exact'. 기본값: contains"
+        }
+      },
       "RunBackground": {
-        "description": "명령어를 백그라운드로 실행합니다(논블로킹). PID가 반환됩니다.",
+        "description": "명령어를 서브프로세스로 실행합니다(fire-and-forget). PID가 반환되지만 결과는 회수할 수 없습니다.",
         "params": {
           "command": "실행할 명령어. 예: 'notepad', 'python script.py'"
         }

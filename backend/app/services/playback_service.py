@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -39,71 +38,7 @@ from ..utils.cv_io import safe_imread, safe_imwrite
 
 logger = logging.getLogger(__name__)
 
-_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent.parent / "screenshots"
-
-
-# 백그라운드 CMD 태스크 저장소
-_bg_tasks: dict[str, dict] = {}
-_bg_task_counter = 0
-
-
-def _bg_cmd_start(cmd: str) -> str:
-    """백그라운드로 CMD 실행, task_id 반환."""
-    global _bg_task_counter
-    _bg_task_counter += 1
-    task_id = f"bg_{_bg_task_counter}"
-    _bg_tasks[task_id] = {"status": "running", "stdout": "", "stderr": "", "rc": None, "cmd": cmd}
-
-    def _run():
-        try:
-            proc = subprocess.run(cmd, shell=True, capture_output=True, timeout=300, creationflags=_NO_WINDOW)
-            for enc in ("utf-8", "cp949", "euc-kr"):
-                try:
-                    stdout = proc.stdout.decode(enc)
-                    stderr = proc.stderr.decode(enc)
-                    _bg_tasks[task_id].update({"status": "done", "stdout": stdout, "stderr": stderr, "rc": proc.returncode})
-                    return
-                except (UnicodeDecodeError, LookupError):
-                    continue
-            _bg_tasks[task_id].update({"status": "done", "stdout": proc.stdout.decode(errors="replace"), "stderr": proc.stderr.decode(errors="replace"), "rc": proc.returncode})
-        except subprocess.TimeoutExpired:
-            _bg_tasks[task_id].update({"status": "timeout", "stdout": "", "stderr": "Timeout (300s)", "rc": 1})
-        except Exception as e:
-            _bg_tasks[task_id].update({"status": "error", "stdout": "", "stderr": str(e), "rc": 1})
-
-    import threading
-    threading.Thread(target=_run, daemon=True, name=f"bg-cmd-{task_id}").start()
-    return task_id
-
-
-def bg_cmd_get(task_id: str) -> dict | None:
-    """백그라운드 CMD 결과 조회."""
-    return _bg_tasks.get(task_id)
-
-
-def bg_cmd_cleanup(task_id: str) -> None:
-    """완료된 태스크 정리."""
-    _bg_tasks.pop(task_id, None)
-
-
-def _cmd_run_sync(cmd: str, timeout: int = 30) -> tuple[str, str, int]:
-    """CMD 명령어 실행 (subprocess). Windows cp949 인코딩 대응."""
-    try:
-        proc = subprocess.run(cmd, shell=True, capture_output=True, timeout=timeout, creationflags=_NO_WINDOW)
-        # Windows cmd는 cp949, 실패 시 utf-8 폴백
-        for enc in ("utf-8", "cp949", "euc-kr"):
-            try:
-                stdout = proc.stdout.decode(enc)
-                stderr = proc.stderr.decode(enc)
-                return (stdout, stderr, proc.returncode)
-            except (UnicodeDecodeError, LookupError):
-                continue
-        return (proc.stdout.decode(errors="replace"),
-                proc.stderr.decode(errors="replace"),
-                proc.returncode)
-    except subprocess.TimeoutExpired:
-        return ("", f"Command timed out after {timeout}s", 1)
 
 
 def _build_ctor_kwargs(dev) -> dict | None:
@@ -462,26 +397,6 @@ class PlaybackService:
                 if not has_expected and mod_result.startswith("FAIL:"):
                     step_result.status = "fail"
 
-            # CMD 결과 반영
-            if step.type == StepType.CMD_SEND and hasattr(self, '_last_cmd_result'):
-                stdout, _, _ = self._last_cmd_result
-                step_result.message = stdout if stdout else ""
-                del self._last_cmd_result
-            elif step.type == StepType.CMD_CHECK and hasattr(self, '_last_cmd_result'):
-                stdout, _, _ = self._last_cmd_result
-                del self._last_cmd_result
-                actual = stdout.strip()
-                expected = step.params.get("expected", "")
-                match_mode = step.params.get("match_mode", "contains")
-                if match_mode == "exact":
-                    passed = actual == expected.strip()
-                else:
-                    passed = expected.strip() in actual
-                # 구조화된 메시지: 프론트에서 파싱하여 하이라이트
-                step_result.message = f"[CMD_CHECK]\nexpected({match_mode}): {expected}\n---\n{actual}"
-                if not passed:
-                    step_result.status = "fail"
-
             # Wait (중단 가능)
             if await self._interruptible_sleep(step.delay_after_ms / 1000.0):
                 step_result.status = "error"
@@ -747,10 +662,7 @@ class PlaybackService:
                                     logger.warning("Failed to generate diff: %s", e)
 
                             sim_msg = f"Similarity: {judgement['score']:.4f}"
-                            if step_result.message and step_result.message.startswith("[CMD_CHECK]"):
-                                # CMD 결과와 Similarity를 구분자로 분리
-                                step_result.message += f"\n[SIMILARITY]\n{sim_msg}"
-                            elif step_result.message:
+                            if step_result.message:
                                 step_result.message = f"{step_result.message}\n{sim_msg}"
                             else:
                                 step_result.message = sim_msg
@@ -796,11 +708,6 @@ class PlaybackService:
             return f"wait {p.get('duration_ms', 1000)}ms"
         elif step.type == StepType.ADB_COMMAND:
             return f"adb {p.get('command', '')}"
-        elif step.type == StepType.CMD_SEND:
-            return f"cmd_send: {p.get('command', '')}"
-        elif step.type == StepType.CMD_CHECK:
-            mm = p.get('match_mode', 'contains')
-            return f"cmd_check: {p.get('command', '')} (expect[{mm}]: {p.get('expected', '')})"
         elif step.type == StepType.SERIAL_COMMAND:
             return f"serial \"{p.get('data', '')}\""
         elif step.type == StepType.MODULE_COMMAND:
@@ -1083,19 +990,6 @@ class PlaybackService:
                 await self._interruptible_sleep(actual_ms / 1000.0)
             else:
                 await self._interruptible_sleep(params.get("duration_ms", 1000) / 1000.0)
-        elif step.type in (StepType.CMD_SEND, StepType.CMD_CHECK):
-            cmd = params.get("command", "")
-            background = params.get("background", False)
-            if background:
-                task_id = _bg_cmd_start(cmd)
-                logger.info("[%s] background task_id=%s: %s", step.type.value, task_id, cmd)
-                self._last_cmd_result = (f"[BG_TASK:{task_id}]", "", 0)
-            else:
-                timeout = params.get("timeout", 30)
-                loop = asyncio.get_event_loop()
-                stdout, stderr, rc = await loop.run_in_executor(None, _cmd_run_sync, cmd, timeout)
-                logger.info("[%s] rc=%d: %s", step.type.value, rc, cmd)
-                self._last_cmd_result = (stdout, stderr, rc)
         else:
             # ADB actions — real_id를 ADB 시리얼(dev.address)로 변환
             adb_serial = real_id

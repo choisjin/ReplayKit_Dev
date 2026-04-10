@@ -19,8 +19,6 @@ class StepType(str, Enum):
     HKMC_TOUCH = "hkmc_touch"
     HKMC_SWIPE = "hkmc_swipe"
     HKMC_KEY = "hkmc_key"
-    CMD_SEND = "cmd_send"      # CMD 명령어 실행 (결과 무시)
-    CMD_CHECK = "cmd_check"    # CMD 명령어 실행 후 리턴값 비교
     MULTI_TOUCH = "multi_touch"  # 멀티핑거 제스처 (핀치, 멀티스와이프)
     REPEAT_TAP = "repeat_tap"    # 같은 위치 연속 터치
 

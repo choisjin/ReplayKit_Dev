@@ -183,7 +183,7 @@
     </div>
 
     <h2 id="overview">All Modules</h2>
-    <p>Total <strong>29</strong> modules, <strong>354</strong> functions registered.</p>
+    <p>Total <strong>29</strong> modules, <strong>357</strong> functions registered.</p>
     <table>
       <thead><tr><th>Module</th><th>Description</th><th>Functions</th></tr></thead>
       <tbody>
@@ -212,7 +212,7 @@
 <tr><td><a href="#mod-Android"><strong>Android</strong></a></td><td>Controls Android devices via ADB: touch, swipe, app install, screen capture, etc.</td><td style="text-align:center">18</td></tr>
 <tr><td><a href="#mod-CCIC_BENCH"><strong>CCIC_BENCH</strong></a></td><td>Test bench equipment that controls vehicle power (IGN/ACC/Battery) via UDP communication</td><td style="text-align:center">16</td></tr>
 <tr><td><a href="#mod-SerialPlugin"><strong>SerialPlugin</strong></a></td><td>General-purpose plugin for sending and receiving data via RS-232 serial port</td><td style="text-align:center">15</td></tr>
-<tr><td><a href="#mod-CMD"><strong>CMD</strong></a></td><td>Executes Windows command prompt (CMD) commands. Used for running external programs or system commands</td><td style="text-align:center">4</td></tr>
+<tr><td><a href="#mod-CMD"><strong>CMD</strong></a></td><td>Executes Windows command prompt (CMD) commands. Used for running external programs or system commands</td><td style="text-align:center">7</td></tr>
 <tr><td><a href="#mod-DLTViewer"><strong>DLTViewer</strong></a></td><td>Receives and analyzes real-time DLT logs from vehicle ECUs via direct TCP connection</td><td style="text-align:center">15</td></tr>
 <tr><td><a href="#mod-VisionCamera"><strong>VisionCamera</strong></a></td><td>Captures screens using a GigE Vision industrial camera</td><td style="text-align:center">8</td></tr>
 <tr><td><a href="#mod-VisionCameraClient"><strong>VisionCameraClient</strong></a></td><td>Low-level camera control module used internally by VisionCamera</td><td style="text-align:center">6</td></tr>
@@ -2195,8 +2195,23 @@
 <td style="font-size:12px"><code>command</code>: Command to execute. e.g. &#x27;ping 127.0.0.1 -n 3&#x27;, &#x27;ipconfig&#x27;<br><code>timeout</code>: Max wait time in seconds. Default: 300</td>
 </tr>
 <tr>
+<td><code>Check</code></td>
+<td>Executes a command and verifies the output against an expected string (blocking). Returns a &#x27;FAIL:&#x27; prefix on mismatch, which causes the step to be marked as fail.</td>
+<td style="font-size:12px"><code>command</code>: Command to execute<br><code>expected</code>: Expected substring or full match value<br><code>match_mode</code>: Comparison mode: &#x27;contains&#x27; (substring) or &#x27;exact&#x27; (full match). Default: contains<br><code>timeout</code>: Max wait time in seconds. Default: 300</td>
+</tr>
+<tr>
+<td><code>RunCapture</code></td>
+<td>Executes a command in the background and immediately returns a &#x27;[BG_TASK:bg_x]&#x27; placeholder (non-blocking). The actual output can be retrieved later via the polling endpoint.</td>
+<td style="font-size:12px"><code>command</code>: Command to execute</td>
+</tr>
+<tr>
+<td><code>CheckCapture</code></td>
+<td>Executes a command in the background and returns a &#x27;[BG_TASK:bg_x]&#x27; placeholder. On completion, the server evaluates expected/match_mode to determine the final pass/fail.</td>
+<td style="font-size:12px"><code>command</code>: Command to execute<br><code>expected</code>: Expected string<br><code>match_mode</code>: &#x27;contains&#x27; or &#x27;exact&#x27;. Default: contains</td>
+</tr>
+<tr>
 <td><code>RunBackground</code></td>
-<td>Executes a command in the background (non-blocking). Returns the PID.</td>
+<td>Spawns a subprocess fire-and-forget. Returns the PID but the output cannot be retrieved.</td>
 <td style="font-size:12px"><code>command</code>: Command to execute. e.g. &#x27;notepad&#x27;, &#x27;python script.py&#x27;</td>
 </tr>
 <tr>

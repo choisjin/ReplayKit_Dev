@@ -274,9 +274,6 @@ export default function RecordPage() {
   const [stepType, setStepType] = useState('tap');
   const [delayMs, setDelayMs] = useState(1000);
   const [stepDesc, setStepDesc] = useState('');
-  const [cmdExpected, setCmdExpected] = useState('');
-  const [cmdMatchMode, setCmdMatchMode] = useState<'contains' | 'exact'>('contains');
-  const [cmdBackground, setCmdBackground] = useState(false);
   const [serialData, setSerialData] = useState('');
   const [serialResponse, setSerialResponse] = useState('');
   const [serialSending, setSerialSending] = useState(false);
@@ -501,13 +498,24 @@ export default function RecordPage() {
   // The screenshot device is only changed via the explicit device selector.
 
   // Auto-select step types based on device category + fetch module functions
-  const stepDeviceModule = allDevices.find(d => d.id === stepDeviceId)?.info?.module as string | undefined;
+  // __common__ (디바이스 미선택) → CMD 모듈을 자동 매핑
+  const rawStepDeviceModule = allDevices.find(d => d.id === stepDeviceId)?.info?.module as string | undefined;
+  const stepDeviceModule = stepDeviceId === '__common__' ? 'CMD' : rawStepDeviceModule;
 
   useEffect(() => {
-    if (isStepAuxiliary) {
-      if (stepDeviceModule) {
+    if (stepDeviceId === '__common__') {
+      // Common: CMD 모듈 함수 로드
+      setStepType('module_command');
+      deviceApi.getModuleFunctions('CMD').then(res => {
+        setModuleFunctions(res.data.functions || []);
+        setModuleDescription(res.data.module_description || '');
+        setSelectedModuleFunc('');
+        setModuleFuncArgs({});
+      }).catch(() => { setModuleFunctions([]); setModuleDescription(''); });
+    } else if (isStepAuxiliary) {
+      if (rawStepDeviceModule) {
         setStepType('module_command');
-        deviceApi.getModuleFunctions(stepDeviceModule).then(res => {
+        deviceApi.getModuleFunctions(rawStepDeviceModule).then(res => {
           setModuleFunctions(res.data.functions || []);
           setModuleDescription(res.data.module_description || '');
           setSelectedModuleFunc('');
@@ -753,7 +761,7 @@ export default function RecordPage() {
       setTestResult(result);
       setTestResultModalOpen(true);
       refreshScreenshot();
-      // 백그라운드 CMD 결과 폴링
+      // 백그라운드 CMD 결과 폴링: 메시지에 [BG_TASK:bg_x]가 있으면 서버에 폴링
       const bgMatch = result.message?.match?.(/\[BG_TASK:(bg_\d+)\]/);
       if (bgMatch) {
         const taskId = bgMatch[1];
@@ -764,17 +772,14 @@ export default function RecordPage() {
             const r = await scenarioApi.getCmdResult(taskId);
             if (r.data.status !== 'running') {
               clearInterval(poll);
-              const stdout = r.data.stdout || '';
-              const step = steps[stepIdx];
-              if (step?.type === 'cmd_check') {
-                const expected = step.params?.expected || '';
-                const matchMode = step.params?.match_mode || 'contains';
-                const newMsg = `[CMD_CHECK]\nexpected(${matchMode}): ${expected}\n---\n${stdout}`;
-                const passed = matchMode === 'exact' ? stdout.trim() === expected.trim() : stdout.includes(expected);
-                setTestResult((prev: any) => ({ ...prev, message: newMsg, status: passed ? prev.status : 'fail' }));
-              } else {
-                setTestResult((prev: any) => ({ ...prev, message: stdout || `완료 (rc: ${r.data.rc})` }));
-              }
+              // 서버가 계산한 final_message + final_status 사용
+              const finalMsg = r.data.final_message ?? r.data.stdout ?? '';
+              const finalStatus = r.data.final_status;
+              setTestResult((prev: any) => ({
+                ...prev,
+                message: finalMsg,
+                status: finalStatus ?? prev.status,
+              }));
             }
           } catch { clearInterval(poll); }
         }, 1000);
@@ -1424,12 +1429,6 @@ export default function RecordPage() {
     } else if (stepType === 'adb_command') {
       if (!stepDesc.trim()) { message.warning(t('record.enterValue')); return; }
       params = { command: stepDesc };
-    } else if (stepType === 'cmd_send') {
-      if (!stepDesc.trim()) { message.warning(t('record.enterValue')); return; }
-      params = { command: stepDesc, background: cmdBackground };
-    } else if (stepType === 'cmd_check') {
-      if (!stepDesc.trim()) { message.warning(t('record.enterValue')); return; }
-      params = { command: stepDesc, expected: cmdExpected, match_mode: cmdMatchMode, background: cmdBackground };
     } else if (stepType === 'hkmc_key') {
       params = { key_name: stepDesc, screen_type: screenType };
     }
@@ -1442,9 +1441,7 @@ export default function RecordPage() {
         description: stepDesc || (
           stepType === 'module_command' ? `${stepDeviceModule}::${selectedModuleFunc}()` :
           stepType === 'serial_command' ? `Serial: ${serialData.substring(0, 30)}` :
-          stepType === 'hkmc_key' ? (stepDesc ? `HKMC Key: ${stepDesc}` : 'HKMC Key') :
-          stepType === 'cmd_send' ? `CMD: ${stepDesc.substring(0, 40)}` :
-          stepType === 'cmd_check' ? `CHECK: ${stepDesc.substring(0, 30)}` : ''
+          stepType === 'hkmc_key' ? (stepDesc ? `HKMC Key: ${stepDesc}` : 'HKMC Key') : ''
         ),
         delay_after_ms: delayMs,
         skip_execute: true,
@@ -2220,20 +2217,17 @@ export default function RecordPage() {
   const getStepTypes = () => {
     if (stepDeviceId === '__common__') {
       return [
+        { value: 'module_command', label: t('record.moduleLabel', { name: 'CMD' }) },
         { value: 'wait', label: t('record.wait') },
-        { value: 'cmd_send', label: t('record.cmdSend') },
-        { value: 'cmd_check', label: t('record.cmdCheck') },
       ];
     }
     if (isStepAuxiliary) {
       const types = [
         { value: 'serial_command', label: t('record.serialCommand') },
         { value: 'wait', label: t('record.wait') },
-        { value: 'cmd_send', label: t('record.cmdSend') },
-        { value: 'cmd_check', label: t('record.cmdCheck') },
       ];
-      if (stepDeviceModule) {
-        types.unshift({ value: 'module_command', label: t('record.moduleLabel', { name: stepDeviceModule }) });
+      if (rawStepDeviceModule) {
+        types.unshift({ value: 'module_command', label: t('record.moduleLabel', { name: rawStepDeviceModule }) });
       }
       return types;
     }
@@ -2243,8 +2237,6 @@ export default function RecordPage() {
         { value: 'hkmc_swipe', label: t('record.hkmcSwipe') },
         { value: 'hkmc_key', label: t('record.hkmcKey') },
         { value: 'wait', label: t('record.wait') },
-        { value: 'cmd_send', label: t('record.cmdSend') },
-        { value: 'cmd_check', label: t('record.cmdCheck') },
       ];
     }
     return [
@@ -2252,8 +2244,6 @@ export default function RecordPage() {
       { value: 'key_event', label: t('record.keyEvent') },
       { value: 'wait', label: t('record.wait') },
       { value: 'adb_command', label: t('record.adbCommand') },
-      { value: 'cmd_send', label: t('record.cmdSend') },
-      { value: 'cmd_check', label: t('record.cmdCheck') },
     ];
   };
 
@@ -2307,10 +2297,6 @@ export default function RecordPage() {
                     ? `swipe (${s.params.x1},${s.params.y1})→(${s.params.x2},${s.params.y2})`
                     : s.type === 'hkmc_key'
                     ? <><Tag color="volcano" style={{ margin: 0 }}>KEY</Tag> {s.params.key_name || `cmd:${s.params.cmd}`}</>
-                    : s.type === 'cmd_send'
-                    ? <><Tag color="blue" style={{ margin: 0 }}>CMD</Tag> {s.params.command?.substring(0, 40)}</>
-                    : s.type === 'cmd_check'
-                    ? <><Tag color="orange" style={{ margin: 0 }}>CHECK</Tag> {s.params.command?.substring(0, 25)} → {s.params.match_mode === 'exact' ? '=' : '⊃'} {s.params.expected?.substring(0, 20)}</>
                     : JSON.stringify(s.params)}
                 </span>
               )}
@@ -3062,25 +3048,6 @@ export default function RecordPage() {
                       }))}
                     />
                   </>
-                ) : stepType === 'cmd_send' || stepType === 'cmd_check' ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <Input size="small" placeholder={t('record.cmdPlaceholder')} value={stepDesc} onChange={(e) => setStepDesc(e.target.value)} />
-                    {stepType === 'cmd_check' && (
-                      <>
-                        <Input size="small" placeholder={t('record.cmdExpected')} value={cmdExpected} onChange={(e) => setCmdExpected(e.target.value)} />
-                        <Select size="small" value={cmdMatchMode} onChange={setCmdMatchMode} style={{ width: '100%' }}
-                          options={[
-                            { label: t('record.cmdContains'), value: 'contains' },
-                            { label: t('record.cmdExact'), value: 'exact' },
-                          ]}
-                        />
-                      </>
-                    )}
-                    <label style={{ fontSize: 12, color: subTextColor }}>
-                      <input type="checkbox" checked={cmdBackground} onChange={(e) => setCmdBackground(e.target.checked)} />
-                      {' '}{t('record.cmdBackground')}
-                    </label>
-                  </div>
                 ) : (
                   <Input
                     size="small"
@@ -3505,52 +3472,6 @@ export default function RecordPage() {
             );
           }
 
-          if (step.type === 'cmd_send' || step.type === 'cmd_check') {
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div>
-                  <div style={{ marginBottom: 4, fontWeight: 600 }}>{t('record.cmdPlaceholder')}</div>
-                  <TextArea
-                    rows={2}
-                    value={editStepParams.command ?? ''}
-                    onChange={(e) => setEditStepParams({ ...editStepParams, command: e.target.value })}
-                  />
-                </div>
-                {step.type === 'cmd_check' && (
-                  <>
-                    <div>
-                      <div style={{ marginBottom: 4, fontWeight: 600 }}>{t('record.cmdExpected')}</div>
-                      <Input
-                        value={editStepParams.expected ?? ''}
-                        onChange={(e) => setEditStepParams({ ...editStepParams, expected: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <div style={{ marginBottom: 4, fontWeight: 600 }}>{t('record.cmdContains')}</div>
-                      <Select
-                        value={editStepParams.match_mode ?? 'contains'}
-                        onChange={(v) => setEditStepParams({ ...editStepParams, match_mode: v })}
-                        style={{ width: '100%' }}
-                        options={[
-                          { label: t('record.cmdContains'), value: 'contains' },
-                          { label: t('record.cmdExact'), value: 'exact' },
-                        ]}
-                      />
-                    </div>
-                  </>
-                )}
-                <label style={{ fontSize: 12, color: subTextColor }}>
-                  <input
-                    type="checkbox"
-                    checked={editStepParams.background ?? false}
-                    onChange={(e) => setEditStepParams({ ...editStepParams, background: e.target.checked })}
-                  />
-                  {' '}{t('record.cmdBackground')}
-                </label>
-              </div>
-            );
-          }
-
           if (step.type === 'serial_command') {
             return (
               <div>
@@ -3753,64 +3674,15 @@ export default function RecordPage() {
                 <span style={{ color: subTextColor }}>$ </span><span style={{ color: '#e0e0e0' }}>{testResult.command}</span>
               </div>
             )}
-            {testResult.message && (() => {
-              const msg = testResult.message as string;
-              const isCmdCheck = msg.startsWith('[CMD_CHECK]');
-              if (isCmdCheck) {
-                // [SIMILARITY] 구분자로 CMD 결과와 Similarity 분리
-                const simIdx = msg.indexOf('\n[SIMILARITY]\n');
-                const cmdPart = simIdx >= 0 ? msg.substring(0, simIdx) : msg;
-                const lines = cmdPart.split('\n');
-                const expectLine = lines[1] || '';
-                const sepIdx = lines.indexOf('---');
-                const output = lines.slice(sepIdx + 1).join('\n');
-                const expectMatch = expectLine.match(/expected\((.*?)\):\s*(.*)/);
-                const matchMode = expectMatch?.[1] || 'contains';
-                const expectedVal = expectMatch?.[2] || '';
-                // 하이라이트: output 내에서 expectedVal 부분을 모두 강조
-                const highlightOutput = () => {
-                  if (!expectedVal || !output) return <>{output}</>;
-                  const parts: React.ReactNode[] = [];
-                  let remaining = output;
-                  let key = 0;
-                  while (remaining.length > 0) {
-                    const idx = remaining.indexOf(expectedVal);
-                    if (idx === -1) { parts.push(<span key={key}>{remaining}</span>); break; }
-                    if (idx > 0) parts.push(<span key={key++}>{remaining.substring(0, idx)}</span>);
-                    parts.push(<span key={key++} style={{ background: '#faad14', color: '#000', fontWeight: 'bold', padding: '0 2px', borderRadius: 2 }}>{expectedVal}</span>);
-                    remaining = remaining.substring(idx + expectedVal.length);
-                  }
-                  return <>{parts}</>;
-                };
-                // CMD_CHECK 결과에서 pass/fail 판정 (이미지 비교와 독립)
-                const cmdPassed = output.includes(expectedVal);
-                return (
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ marginBottom: 4, fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Tag color={cmdPassed ? 'green' : 'red'} style={{ margin: 0 }}>CMD {cmdPassed ? 'PASS' : 'FAIL'}</Tag>
-                      <span style={{ color: subTextColor }}>{matchMode === 'exact' ? 'Exact' : 'Contains'}:</span>
-                      <strong style={{ color: cmdPassed ? '#52c41a' : '#ff4d4f' }}>{expectedVal}</strong>
-                    </div>
-                    <div style={{
-                      padding: '8px 10px', borderRadius: 4, fontSize: 12, fontFamily: 'monospace',
-                      background: cmdPassed ? '#122010' : '#2a1215',
-                      border: `1px solid ${cmdPassed ? '#274916' : '#5c2024'}`,
-                      color: '#d9d9d9',
-                      whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 300, overflow: 'auto',
-                    }}>{highlightOutput()}</div>
-                  </div>
-                );
-              }
-              return (
-                <div style={{
-                  marginBottom: 12, padding: '8px 10px', borderRadius: 4, fontSize: 13, fontFamily: 'monospace',
-                  background: testResult.status === 'fail' ? '#2a1215' : '#122010',
-                  border: `1px solid ${testResult.status === 'fail' ? '#5c2024' : '#274916'}`,
-                  color: testResult.status === 'fail' ? '#ff7875' : '#95de64',
-                  whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                }}>{msg}</div>
-              );
-            })()}
+            {testResult.message && (
+              <div style={{
+                marginBottom: 12, padding: '8px 10px', borderRadius: 4, fontSize: 13, fontFamily: 'monospace',
+                background: testResult.status === 'fail' ? '#2a1215' : '#122010',
+                border: `1px solid ${testResult.status === 'fail' ? '#5c2024' : '#274916'}`,
+                color: testResult.status === 'fail' ? '#ff7875' : '#95de64',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+              }}>{testResult.message}</div>
+            )}
             <Row gutter={12}>
               {testResult.expected_image && (
                 <Col span={testResult.actual_image ? 12 : 24}>

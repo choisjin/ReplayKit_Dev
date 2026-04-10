@@ -2117,8 +2117,31 @@
           "timeout": "Max wait time in seconds. Default: 300"
         }
       },
+      "Check": {
+        "description": "Executes a command and verifies the output against an expected string (blocking). Returns a 'FAIL:' prefix on mismatch, which causes the step to be marked as fail.",
+        "params": {
+          "command": "Command to execute",
+          "expected": "Expected substring or full match value",
+          "match_mode": "Comparison mode: 'contains' (substring) or 'exact' (full match). Default: contains",
+          "timeout": "Max wait time in seconds. Default: 300"
+        }
+      },
+      "RunCapture": {
+        "description": "Executes a command in the background and immediately returns a '[BG_TASK:bg_x]' placeholder (non-blocking). The actual output can be retrieved later via the polling endpoint.",
+        "params": {
+          "command": "Command to execute"
+        }
+      },
+      "CheckCapture": {
+        "description": "Executes a command in the background and returns a '[BG_TASK:bg_x]' placeholder. On completion, the server evaluates expected/match_mode to determine the final pass/fail.",
+        "params": {
+          "command": "Command to execute",
+          "expected": "Expected string",
+          "match_mode": "'contains' or 'exact'. Default: contains"
+        }
+      },
       "RunBackground": {
-        "description": "Executes a command in the background (non-blocking). Returns the PID.",
+        "description": "Spawns a subprocess fire-and-forget. Returns the PID but the output cannot be retrieved.",
         "params": {
           "command": "Command to execute. e.g. 'notepad', 'python script.py'"
         }

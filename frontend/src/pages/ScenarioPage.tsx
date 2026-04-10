@@ -211,20 +211,13 @@ export default function ScenarioPage() {
           const r = await scenarioApi.getCmdResult(taskId);
           if (r.data.status === 'running') return;
           clearInterval(poll);
-          const stdout = r.data.stdout || '';
+          // 서버가 계산한 final_message/final_status 사용
+          const finalMsg = r.data.final_message ?? r.data.stdout ?? '';
+          const finalStatus = r.data.final_status;
           setStepResults(prev => {
             const u = [...prev];
             const step = u[idx];
-            const cmd = step.command || '';
-            if (cmd.startsWith('cmd_check:')) {
-              const em = cmd.match(/\(expect(?:\[(\w+)\])?:\s*(.*)\)$/);
-              const matchMode = em?.[1] || 'contains';
-              const expected = em?.[2] || '';
-              const passed = matchMode === 'exact' ? stdout.trim() === expected.trim() : stdout.includes(expected);
-              u[idx] = { ...step, message: `[CMD_CHECK]\nexpected(${matchMode}): ${expected}\n---\n${stdout}`, status: passed ? step.status : 'fail' };
-            } else {
-              u[idx] = { ...step, message: stdout || `완료 (rc: ${r.data.rc})` };
-            }
+            u[idx] = { ...step, message: finalMsg, status: finalStatus ?? step.status };
             return u;
           });
         } catch {
@@ -1174,9 +1167,11 @@ export default function ScenarioPage() {
     { title: _colTitle('Duration', t('scenario.colActual')), dataIndex: 'execution_time_ms', key: 'duration', align: 'center' as const, render: (ms: number, r: StepResultData) => r.status === 'running' ? <span style={{ color: '#1677ff' }}>{formatDuration(liveDuration)}</span> : formatDuration(ms) },
     { title: _colTitle('', t('scenario.compare')), key: 'compare', align: 'center' as const, render: (_: any, r: StepResultData) => {
       if (r.status === 'running') return '-';
-      const hasCmdMsg = (r.command?.startsWith('cmd_send:') || r.command?.startsWith('cmd_check:')) && r.message;
-      if (r.expected_image || r.actual_image || hasCmdMsg) {
-        return <Button size="small" onClick={() => setCompareStep(r)}>{hasCmdMsg && !r.expected_image ? 'CMD' : t('scenario.compare')}</Button>;
+      // 모듈 실행 결과(CMD 등)는 이미지 없이 메시지만 있을 수 있음
+      const isModuleMsg = r.command?.startsWith('CMD::') || r.command?.includes('::');
+      const hasMsgOnly = isModuleMsg && r.message && !r.expected_image && !r.actual_image;
+      if (r.expected_image || r.actual_image || hasMsgOnly) {
+        return <Button size="small" onClick={() => setCompareStep(r)}>{hasMsgOnly ? 'LOG' : t('scenario.compare')}</Button>;
       }
       return '-';
     }},
@@ -1880,67 +1875,29 @@ export default function ScenarioPage() {
         )}
       </Modal>
 
-      {/* ===== 이미지 비교 / CMD 결과 모달 ===== */}
+      {/* ===== 이미지 비교 / 모듈 결과 모달 ===== */}
       <Modal title={t('scenario.stepCompare', { id: String(compareStep?.step_id) })} open={!!compareStep} onCancel={() => setCompareStep(null)} width={1100} footer={null} zIndex={1100}>
         {compareStep && (() => {
-          const _isCmdStep = compareStep.command?.startsWith('cmd_send:') || compareStep.command?.startsWith('cmd_check:');
           const _msg = compareStep.message || '';
-          const _isCmdCheck = _msg.startsWith('[CMD_CHECK]');
+          const _hasImage = compareStep.expected_image || compareStep.actual_image;
 
-          // CMD 결과 렌더링 함수
-          const renderCmdResult = () => {
-            if (!_isCmdStep || !_msg) return null;
-            if (_isCmdCheck) {
-              const simIdx = _msg.indexOf('\n[SIMILARITY]\n');
-              const cmdPart = simIdx >= 0 ? _msg.substring(0, simIdx) : _msg;
-              const lines = cmdPart.split('\n');
-              const expectLine = lines[1] || '';
-              const sepIdx = lines.indexOf('---');
-              const output = lines.slice(sepIdx + 1).join('\n');
-              const em = expectLine.match(/expected\((.*?)\):\s*(.*)/);
-              const matchMode = em?.[1] || 'contains';
-              const expectedVal = em?.[2] || '';
-              const cmdPassed = matchMode === 'exact' ? output.trim() === expectedVal.trim() : output.includes(expectedVal);
-              // 하이라이트
-              const parts: React.ReactNode[] = [];
-              if (expectedVal && output) {
-                let rem = output; let k = 0;
-                while (rem.length > 0) {
-                  const fi = rem.indexOf(expectedVal);
-                  if (fi === -1) { parts.push(<span key={k}>{rem}</span>); break; }
-                  if (fi > 0) parts.push(<span key={k++}>{rem.substring(0, fi)}</span>);
-                  parts.push(<span key={k++} style={{ background: '#faad14', color: '#000', fontWeight: 'bold', padding: '0 2px', borderRadius: 2 }}>{expectedVal}</span>);
-                  rem = rem.substring(fi + expectedVal.length);
-                }
-              } else { parts.push(<span key={0}>{output}</span>); }
-              return (
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ marginBottom: 4, fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Tag color={cmdPassed ? 'green' : 'red'} style={{ margin: 0 }}>CMD {cmdPassed ? 'PASS' : 'FAIL'}</Tag>
-                    <span style={{ color: '#888' }}>{matchMode === 'exact' ? 'Exact' : 'Contains'}:</span>
-                    <strong style={{ color: cmdPassed ? '#52c41a' : '#ff4d4f' }}>{expectedVal}</strong>
-                  </div>
-                  <div style={{
-                    padding: '8px 10px', borderRadius: 4, fontSize: 12, fontFamily: 'monospace',
-                    background: cmdPassed ? '#122010' : '#2a1215',
-                    border: `1px solid ${cmdPassed ? '#274916' : '#5c2024'}`,
-                    color: '#d9d9d9', whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 400, overflow: 'auto',
-                  }}>{parts}</div>
-                </div>
-              );
-            }
-            // CMD_SEND 결과
+          // 모듈 결과 메시지 박스 (CMD/DLT 등 모든 module_command 결과)
+          const renderModuleMessage = () => {
+            if (!_msg) return null;
+            const isFail = compareStep.status === 'fail';
             return (
               <div style={{
                 marginBottom: 12, padding: '8px 10px', borderRadius: 4, fontSize: 13, fontFamily: 'monospace',
-                background: '#122010', border: '1px solid #274916', color: '#95de64',
+                background: isFail ? '#2a1215' : '#122010',
+                border: `1px solid ${isFail ? '#5c2024' : '#274916'}`,
+                color: isFail ? '#ff7875' : '#95de64',
                 whiteSpace: 'pre-wrap', wordBreak: 'break-all', maxHeight: 400, overflow: 'auto',
               }}>{_msg}</div>
             );
           };
 
-          // CMD 전용 (이미지 없음)
-          if (_isCmdStep && _msg && !compareStep.expected_image && !compareStep.actual_image) {
+          // 메시지 전용 (이미지 없음)
+          if (!_hasImage && _msg) {
             return (
               <>
                 <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1952,12 +1909,12 @@ export default function ScenarioPage() {
                     <span style={{ color: '#888' }}>$ </span><span style={{ color: '#e0e0e0' }}>{compareStep.command}</span>
                   </div>
                 )}
-                {renderCmdResult()}
+                {renderModuleMessage()}
               </>
             );
           }
 
-          // 이미지 비교 (+ CMD 결과 겸용)
+          // 이미지 비교 (+ 메시지 겸용)
           return (
             <>
               <Space style={{ marginBottom: 8 }} wrap>
@@ -1971,13 +1928,13 @@ export default function ScenarioPage() {
                 {compareStep.match_location && <Tag color="blue">{t('scenario.matchLocation')}: ({compareStep.match_location.x},{compareStep.match_location.y}) {compareStep.match_location.width}x{compareStep.match_location.height}</Tag>}
                 <span style={{ color: '#888' }}>Duration: {formatDuration(compareStep.execution_time_ms)}</span>
               </Space>
-              {/* CMD 결과 (이미지 비교와 함께 있는 경우) */}
-              {_isCmdStep && _msg && (
+              {/* 모듈 결과 메시지 (이미지 비교와 함께) */}
+              {_msg && compareStep.command && compareStep.command.includes('::') && (
                 <div style={{ marginBottom: 8 }}>
                   <div style={{ marginBottom: 4, padding: '6px 10px', background: '#1a1a2e', borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}>
                     <span style={{ color: '#888' }}>$ </span><span style={{ color: '#e0e0e0' }}>{compareStep.command}</span>
                   </div>
-                  {renderCmdResult()}
+                  {renderModuleMessage()}
                 </div>
               )}
               <Row gutter={16}>
