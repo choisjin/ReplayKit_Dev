@@ -270,16 +270,12 @@ export default function RecordPage() {
   const waitDurationRef = useRef(1000);
 
   // Per-step controls (for manual step input)
-  const [stepDeviceId, setStepDeviceId] = useState('');
-  const [stepType, setStepType] = useState('tap');
-  const [delayMs, setDelayMs] = useState(1000);
-  const [stepDesc, setStepDesc] = useState('');
-  const [serialData, setSerialData] = useState('');
-  const [serialResponse, setSerialResponse] = useState('');
-  const [serialSending, setSerialSending] = useState(false);
+  const [delayMs] = useState(1000);
   const [compareModePopoverIndex, setCompareModePopoverIndex] = useState<number | null>(null);
 
-  // Module command
+  // Module-based manual step add
+  const [allModules, setAllModules] = useState<{ name: string; label?: string; connect_type?: string }[]>([]);
+  const [selectedModuleName, setSelectedModuleName] = useState('');
   const [moduleFunctions, setModuleFunctions] = useState<{ name: string; description?: string; params: { name: string; required: boolean; default?: string; description?: string }[] }[]>([]);
   const [selectedModuleFunc, setSelectedModuleFunc] = useState('');
   const [moduleFuncArgs, setModuleFuncArgs] = useState<Record<string, string>>({});
@@ -468,15 +464,8 @@ export default function RecordPage() {
     if (screenshotDeviceId && !connectedPrimaryDevices.find(d => d.id === screenshotDeviceId)) {
       const next = connectedPrimaryDevices.length > 0 ? connectedPrimaryDevices[0].id : '';
       setScreenshotDeviceId(next);
-      if (stepDeviceId === screenshotDeviceId) setStepDeviceId(next);
     }
   }, [primaryDevices]);
-
-  // Get selected step device info
-  const stepDevice = allDevices.find(d => d.id === stepDeviceId);
-  const isStepPrimary = stepDevice?.category === 'primary';
-  const isStepAuxiliary = stepDevice?.category === 'auxiliary';
-  const isStepHkmc = stepDevice?.type === 'hkmc6th';
 
   // Get current screen device info
   const screenDevice = primaryDevices.find(d => d.id === screenshotDeviceId);
@@ -494,45 +483,34 @@ export default function RecordPage() {
       ? { width: hkmcScreen.width, height: hkmcScreen.height }
       : screenDevice?.info?.resolution ?? { width: 1080, height: 1920 };
 
-  // Note: step device selection no longer auto-switches the screenshot.
-  // The screenshot device is only changed via the explicit device selector.
-
-  // Auto-select step types based on device category + fetch module functions
-  // __common__ (디바이스 미선택) → CMD 모듈을 자동 매핑
-  const rawStepDeviceModule = allDevices.find(d => d.id === stepDeviceId)?.info?.module as string | undefined;
-  const stepDeviceModule = stepDeviceId === '__common__' ? 'CMD' : rawStepDeviceModule;
-
+  // 모듈 스텝 추가: 사용 가능한 모든 모듈을 최초 1회 로드
   useEffect(() => {
-    if (stepDeviceId === '__common__') {
-      // Common: CMD 모듈 함수 로드
-      setStepType('module_command');
-      deviceApi.getModuleFunctions('CMD').then(res => {
-        setModuleFunctions(res.data.functions || []);
-        setModuleDescription(res.data.module_description || '');
-        setSelectedModuleFunc('');
-        setModuleFuncArgs({});
-      }).catch(() => { setModuleFunctions([]); setModuleDescription(''); });
-    } else if (isStepAuxiliary) {
-      if (rawStepDeviceModule) {
-        setStepType('module_command');
-        deviceApi.getModuleFunctions(rawStepDeviceModule).then(res => {
-          setModuleFunctions(res.data.functions || []);
-          setModuleDescription(res.data.module_description || '');
-          setSelectedModuleFunc('');
-          setModuleFuncArgs({});
-        }).catch(() => { setModuleFunctions([]); setModuleDescription(''); });
-      } else {
-        setStepType('serial_command');
-        setModuleFunctions([]);
-      }
-    } else if (isStepHkmc) {
-      setStepType('hkmc_touch');
+    deviceApi.listModules().then(res => {
+      setAllModules(res.data.modules || []);
+    }).catch(() => setAllModules([]));
+  }, []);
+
+  // 선택된 모듈의 함수 목록을 로드
+  useEffect(() => {
+    if (!selectedModuleName) {
       setModuleFunctions([]);
-    } else if (isStepPrimary && (stepType === 'serial_command' || stepType === 'module_command' || stepType.startsWith('hkmc_'))) {
-      setStepType('tap');
-      setModuleFunctions([]);
+      setModuleDescription('');
+      setSelectedModuleFunc('');
+      setModuleFuncArgs({});
+      return;
     }
-  }, [stepDeviceId]);
+    deviceApi.getModuleFunctions(selectedModuleName).then(res => {
+      setModuleFunctions(res.data.functions || []);
+      setModuleDescription(res.data.module_description || '');
+      setSelectedModuleFunc('');
+      setModuleFuncArgs({});
+    }).catch(() => { setModuleFunctions([]); setModuleDescription(''); });
+  }, [selectedModuleName]);
+
+  // 선택된 모듈과 매칭된 보조 디바이스 찾기 (있으면 step.device_id로 사용)
+  const matchedDeviceForModule = selectedModuleName
+    ? auxiliaryDevices.find(d => d.info?.module === selectedModuleName)
+    : null;
 
   // Fetch HKMC hardware keys once (when any HKMC device exists)
   useEffect(() => {
@@ -605,14 +583,9 @@ export default function RecordPage() {
     return params;
   }, [allDevices, screenType]);
 
-  // Execute or record an action
+  // Execute or record an action (화면 제스처/HKMC키 전용 — 모듈 스텝 추가와는 별개 경로)
   const executeAction = useCallback(async (action: string, params: Record<string, any>, desc: string) => {
-    // 화면 제스처/HKMC키는 항상 화면 디바이스로, 나머지는 스텝 디바이스로
-    const isScreenAction = ['tap', 'swipe', 'long_press', 'multi_touch', 'repeat_tap', 'hkmc_touch', 'hkmc_swipe', 'hkmc_key'].includes(action);
-    const effectiveStepDevice = stepDeviceId && stepDeviceId !== '__common__' ? stepDeviceId : '';
-    const targetDevice = recording
-      ? (isScreenAction ? screenshotDeviceId : (effectiveStepDevice || screenshotDeviceId))
-      : screenshotDeviceId;
+    const targetDevice = screenshotDeviceId;
     if (!targetDevice) return;
 
     const resolvedAction = resolveAction(action, targetDevice);
@@ -674,7 +647,7 @@ export default function RecordPage() {
         setTimeout(() => refreshScreenshot(), 150);
       }
     }
-  }, [recording, stepDeviceId, screenshotDeviceId, delayMs, refreshScreenshot, resolveAction, resolveParams]);
+  }, [recording, screenshotDeviceId, delayMs, refreshScreenshot, resolveAction, resolveParams, steps.length]);
 
   // --- ROI Modal logic ---
   // Draw on the ROI canvas using the captured screenshot (not reactive screenshot)
@@ -1389,66 +1362,35 @@ export default function RecordPage() {
     }
   };
 
-  // Send serial command directly (without recording)
-  const sendSerialCommand = async () => {
-    if (!stepDeviceId || !serialData.trim()) return;
-    setSerialSending(true);
-    try {
-      const res = await deviceApi.input(stepDeviceId, 'serial_command', { data: serialData });
-      setSerialResponse(res.data.response ?? '(no response)');
-    } catch (e: any) {
-      setSerialResponse(`Error: ${e.response?.data?.detail || e.message}`);
-    }
-    setSerialSending(false);
-  };
-
   const addManualStep = async () => {
     if (!recording) return;
-    let params: Record<string, any> = {};
-    if (stepType === 'module_command') {
-      if (!selectedModuleFunc) {
-        message.warning(t('record.selectFunction2'));
-        return;
-      }
-      // DLTViewer: WaitLog + 백그라운드 체크 시 StartMonitor로 자동 전환
-      let funcName = selectedModuleFunc;
-      if (stepDeviceModule === 'DLTViewer' && selectedModuleFunc === 'WaitLog' && dltBackground) {
-        funcName = 'StartMonitor';
-      }
-      params = { module: stepDeviceModule, function: funcName, args: { ...moduleFuncArgs } };
-    } else if (stepType === 'serial_command') {
-      if (!serialData.trim()) { message.warning(t('record.enterValue')); return; }
-      params = { data: serialData };
-    } else if (stepType === 'input_text') {
-      if (!stepDesc.trim()) { message.warning(t('record.enterValue')); return; }
-      params = { text: stepDesc };
-    } else if (stepType === 'key_event') {
-      params = { keycode: stepDesc || 'KEYCODE_BACK' };
-    } else if (stepType === 'wait') {
-      params = { duration_ms: delayMs };
-    } else if (stepType === 'adb_command') {
-      if (!stepDesc.trim()) { message.warning(t('record.enterValue')); return; }
-      params = { command: stepDesc };
-    } else if (stepType === 'hkmc_key') {
-      params = { key_name: stepDesc, screen_type: screenType };
+    if (!selectedModuleName) {
+      message.warning(t('record.selectModule'));
+      return;
     }
+    if (!selectedModuleFunc) {
+      message.warning(t('record.selectFunction2'));
+      return;
+    }
+    // DLTViewer: WaitLog + 백그라운드 체크 시 StartMonitor로 자동 전환
+    let funcName = selectedModuleFunc;
+    if (selectedModuleName === 'DLTViewer' && selectedModuleFunc === 'WaitLog' && dltBackground) {
+      funcName = 'StartMonitor';
+    }
+    const params = { module: selectedModuleName, function: funcName, args: { ...moduleFuncArgs } };
+    // 매칭된 보조 디바이스가 있으면 device_id로 사용, 없으면 빈 값
+    const deviceId = matchedDeviceForModule?.id || '';
 
     try {
       const res = await scenarioApi.addStep({
-        type: stepType,
-        device_id: stepDeviceId === '__common__' ? '' : stepDeviceId,
+        type: 'module_command',
+        device_id: deviceId,
         params,
-        description: stepDesc || (
-          stepType === 'module_command' ? `${stepDeviceModule}::${selectedModuleFunc}()` :
-          stepType === 'serial_command' ? `Serial: ${serialData.substring(0, 30)}` :
-          stepType === 'hkmc_key' ? (stepDesc ? `HKMC Key: ${stepDesc}` : 'HKMC Key') : ''
-        ),
+        description: `${selectedModuleName}::${funcName}()`,
         delay_after_ms: delayMs,
         skip_execute: true,
       });
       setSteps((prev) => [...prev, res.data.step]);
-      setStepDesc('');
-      setSerialData('');
       message.success(t('record.stepAdded', { id: res.data.step.id }));
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('record.stepAddFailed'));
@@ -2214,39 +2156,6 @@ export default function RecordPage() {
     img.src = screenshot;
   }, [screenshot, viewCropEnabled, viewCropX, viewCropY]);
 
-  const getStepTypes = () => {
-    if (stepDeviceId === '__common__') {
-      return [
-        { value: 'module_command', label: t('record.moduleLabel', { name: 'CMD' }) },
-        { value: 'wait', label: t('record.wait') },
-      ];
-    }
-    if (isStepAuxiliary) {
-      const types = [
-        { value: 'serial_command', label: t('record.serialCommand') },
-        { value: 'wait', label: t('record.wait') },
-      ];
-      if (rawStepDeviceModule) {
-        types.unshift({ value: 'module_command', label: t('record.moduleLabel', { name: rawStepDeviceModule }) });
-      }
-      return types;
-    }
-    if (isStepHkmc) {
-      return [
-        { value: 'hkmc_touch', label: t('record.hkmcTouch') },
-        { value: 'hkmc_swipe', label: t('record.hkmcSwipe') },
-        { value: 'hkmc_key', label: t('record.hkmcKey') },
-        { value: 'wait', label: t('record.wait') },
-      ];
-    }
-    return [
-      { value: 'input_text', label: t('record.inputText') },
-      { value: 'key_event', label: t('record.keyEvent') },
-      { value: 'wait', label: t('record.wait') },
-      { value: 'adb_command', label: t('record.adbCommand') },
-    ];
-  };
-
   const getDeviceTag = (deviceId: string | null) => {
     if (!deviceId) return <Tag>-</Tag>;
     const dev = allDevices.find(d => d.id === deviceId);
@@ -2495,10 +2404,7 @@ export default function RecordPage() {
                 <Space size={4} wrap style={{ justifyContent: 'flex-end' }}>
                   <Select
                     value={screenshotDeviceId || undefined}
-                    onChange={(id) => {
-                      setScreenshotDeviceId(id);
-                      setStepDeviceId(id);
-                    }}
+                    onChange={(id) => setScreenshotDeviceId(id)}
                     placeholder={t('record.primaryDevice')}
                     size="small"
                     style={{ minWidth: 140, maxWidth: 280 }}
@@ -2880,7 +2786,7 @@ export default function RecordPage() {
                   type="primary"
                   icon={<PlusOutlined />}
                   onClick={addManualStep}
-                  disabled={!stepDeviceId && stepType !== 'wait'}
+                  disabled={!selectedModuleName || !selectedModuleFunc}
                 >
                   {t('record.addStep')}
                 </Button>
@@ -2888,54 +2794,42 @@ export default function RecordPage() {
               style={{ flex: 1, minWidth: 0 }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {/* 1행: 대상 디바이스 + 스텝 타입 */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <Select
-                    value={stepDeviceId || undefined}
-                    onChange={setStepDeviceId}
-                    placeholder={t('record.targetDevice')}
-                    size="small"
-                    style={{ flex: 1, minWidth: 120 }}
-                  >
-                    {primaryDevices.length > 0 && (
-                      <Select.OptGroup label={t('record.primaryDevices')}>
-                        {primaryDevices.map(d => (
-                          <Option key={d.id} value={d.id}>
-                            <Tag color="green" style={{ marginRight: 4 }}>{d.type.toUpperCase()}</Tag>
-                            {d.name || d.id}
-                          </Option>
-                        ))}
-                      </Select.OptGroup>
-                    )}
-                    {auxiliaryDevices.length > 0 && (
-                      <Select.OptGroup label={t('record.auxiliaryDevices')}>
-                        {auxiliaryDevices.map(d => (
-                          <Option key={d.id} value={d.id}>
-                            {d.info?.module
-                              ? <><Tag color="purple" style={{ marginRight: 4 }}>{d.info.module}</Tag>{d.address || d.name || d.id}</>
-                              : <><Tag color="purple" style={{ marginRight: 4 }}>{d.type.toUpperCase()}</Tag>{d.name || d.id}</>
-                            }
-                          </Option>
-                        ))}
-                      </Select.OptGroup>
-                    )}
-                    <Select.OptGroup label="Common">
-                      <Option key="__common__" value="__common__">
-                        <Tag color="cyan" style={{ marginRight: 4 }}>CMD</Tag>Common
-                      </Option>
-                    </Select.OptGroup>
-                  </Select>
-                  <Select value={stepType} onChange={setStepType} size="small" style={{ width: 120 }}>
-                    {getStepTypes().map(t => (
-                      <Option key={t.value} value={t.value}>{t.label}</Option>
-                    ))}
-                  </Select>
-                </div>
-                {/* 2행: 스텝 설명/파라미터 + delay + 추가 버튼 */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {stepType === 'module_command' ? (
-                  <>
+                {/* 1행: 모듈 선택 */}
+                <Select
+                  showSearch
+                  value={selectedModuleName || undefined}
+                  onChange={setSelectedModuleName}
+                  placeholder={t('record.selectModule')}
+                  size="small"
+                  style={{ width: '100%' }}
+                  optionFilterProp="label"
+                  options={allModules.map(m => {
+                    const matched = auxiliaryDevices.find(d => d.info?.module === m.name);
+                    return {
+                      value: m.name,
+                      label: m.label || m.name,
+                      _matched: matched,
+                    };
+                  })}
+                  optionRender={(opt) => {
+                    const matched = (opt.data as any)._matched;
+                    return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <Tag color="purple" style={{ margin: 0 }}>{opt.label}</Tag>
+                        {matched ? (
+                          <span style={{ fontSize: 11, color: isDark ? '#8bb4e0' : '#1677ff' }}>
+                            → {matched.name || matched.address || matched.id}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 11, color: subTextColor }}>{t('record.noMatchedDevice')}</span>
+                        )}
+                      </span>
+                    );
+                  }}
+                />
+                {/* 2행: 함수 선택 + 파라미터 입력 */}
+                {selectedModuleName && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {moduleDescription && (
                       <div style={{ padding: '4px 8px', background: isDark ? '#1a2a1a' : '#f6ffed', borderRadius: 4, fontSize: 12, color: isDark ? '#8bc48b' : '#52c41a', lineHeight: 1.5, border: `1px solid ${isDark ? '#1a3a1a' : '#d9f7be'}` }}>
                         {moduleDescription}
@@ -2947,7 +2841,6 @@ export default function RecordPage() {
                       value={selectedModuleFunc || undefined}
                       onChange={(v) => {
                         setSelectedModuleFunc(v);
-                        // Pre-fill default args
                         const fn = moduleFunctions.find(f => f.name === v);
                         if (fn) {
                           const defaults: Record<string, string> = {};
@@ -2957,6 +2850,7 @@ export default function RecordPage() {
                           setModuleFuncArgs({});
                         }
                       }}
+                      size="small"
                       style={{ width: '100%' }}
                       options={moduleFunctions.map(f => ({
                         label: `${f.name}(${f.params.map(p => p.required ? p.name : p.name + '?').join(', ')})`,
@@ -2995,88 +2889,14 @@ export default function RecordPage() {
                         </div>
                       );
                     })()}
-                    {stepDeviceModule === 'DLTViewer' && selectedModuleFunc === 'WaitLog' && (
+                    {selectedModuleName === 'DLTViewer' && selectedModuleFunc === 'WaitLog' && (
                       <label style={{ fontSize: 12, color: subTextColor }}>
                         <input type="checkbox" checked={dltBackground} onChange={(e) => setDltBackground(e.target.checked)} />
                         {' '}{t('dlt.backgroundMonitor')}
                       </label>
                     )}
-                  </>
-                ) : stepType === 'serial_command' ? (
-                  <>
-                    <TextArea
-                      size="small"
-                      placeholder={t('record.serialPlaceholder')}
-                      value={serialData}
-                      onChange={(e) => setSerialData(e.target.value)}
-                      onPressEnter={(e) => { if (e.ctrlKey) { e.preventDefault(); sendSerialCommand(); } }}
-                      rows={3}
-                    />
-                    <Button
-                      size="small"
-                      type="default"
-                      icon={<ThunderboltOutlined />}
-                      onClick={sendSerialCommand}
-                      loading={serialSending}
-                      disabled={!stepDeviceId || !serialData.trim()}
-                      block
-                    >
-                      {t('record.serialSend')}
-                    </Button>
-                    {serialResponse && (
-                      <div style={{
-                        background: isDark ? '#1a1a1a' : '#f5f5f5', border: isDark ? '1px solid #333' : '1px solid #d9d9d9', borderRadius: 4,
-                        padding: '4px 8px', fontSize: 12, fontFamily: 'monospace',
-                        maxHeight: 100, overflow: 'auto', whiteSpace: 'pre-wrap', color: '#52c41a',
-                      }}>
-                        {serialResponse}
-                      </div>
-                    )}
-                  </>
-                ) : stepType === 'hkmc_key' ? (
-                  <>
-                    <Select
-                      size="small"
-                      showSearch
-                      placeholder={t('record.hkmcSelectKey')}
-                      value={stepDesc || undefined}
-                      onChange={(v) => setStepDesc(v)}
-                      style={{ width: '100%' }}
-                      options={hkmcKeys.map(k => ({
-                        label: `[${k.group}] ${k.name.replace(`${k.group}_`, '')}${k.is_dial ? ' (dial)' : ''}`,
-                        value: k.name,
-                      }))}
-                    />
-                  </>
-                ) : (
-                  <Input
-                    size="small"
-                    placeholder={
-                      stepType === 'input_text' ? t('record.textPlaceholder') :
-                      stepType === 'key_event' ? 'KEYCODE_BACK' :
-                      stepType === 'adb_command' ? 'shell am start ...' :
-                      t('record.stepDescription')
-                    }
-                    value={stepDesc}
-                    onChange={(e) => setStepDesc(e.target.value)}
-                  />
+                  </div>
                 )}
-
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, alignItems: 'flex-end' }}>
-                    <InputNumber
-                      size="small"
-                      min={100}
-                      max={Infinity}
-                      step={100}
-                      value={delayMs}
-                      onChange={(v) => setDelayMs(v || 1000)}
-                      onFocus={(e) => (e.target as HTMLInputElement).select()}
-                      suffix="ms"
-                      style={{ width: 120 }}
-                    />
-                  </div>
-                </div>
               </div>
             </Card>
             )}
