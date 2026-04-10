@@ -273,9 +273,8 @@ export default function RecordPage() {
   const [delayMs] = useState(1000);
   const [compareModePopoverIndex, setCompareModePopoverIndex] = useState<number | null>(null);
 
-  // Module-based manual step add
-  const [allModules, setAllModules] = useState<{ name: string; label?: string; connect_type?: string }[]>([]);
-  const [selectedModuleName, setSelectedModuleName] = useState('');
+  // 모듈 스텝 추가: 선택된 "디바이스" (해당 디바이스에 매칭된 모듈을 사용)
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
   const [moduleFunctions, setModuleFunctions] = useState<{ name: string; description?: string; params: { name: string; required: boolean; default?: string; description?: string }[] }[]>([]);
   const [selectedModuleFunc, setSelectedModuleFunc] = useState('');
   const [moduleFuncArgs, setModuleFuncArgs] = useState<Record<string, string>>({});
@@ -483,14 +482,14 @@ export default function RecordPage() {
       ? { width: hkmcScreen.width, height: hkmcScreen.height }
       : screenDevice?.info?.resolution ?? { width: 1080, height: 1920 };
 
-  // 모듈 스텝 추가: 사용 가능한 모든 모듈을 최초 1회 로드
-  useEffect(() => {
-    deviceApi.listModules().then(res => {
-      setAllModules(res.data.modules || []);
-    }).catch(() => setAllModules([]));
-  }, []);
+  // 모듈이 매칭된 보조 디바이스 목록 (dropdown의 옵션)
+  const moduleDevices = auxiliaryDevices.filter(d => d.info?.module);
 
-  // 선택된 모듈의 함수 목록을 로드
+  // 선택된 디바이스에서 모듈 이름 derive
+  const selectedDevice = moduleDevices.find(d => d.id === selectedDeviceId);
+  const selectedModuleName = selectedDevice?.info?.module as string | undefined;
+
+  // 선택된 디바이스의 모듈 함수 목록 로드
   useEffect(() => {
     if (!selectedModuleName) {
       setModuleFunctions([]);
@@ -506,11 +505,6 @@ export default function RecordPage() {
       setModuleFuncArgs({});
     }).catch(() => { setModuleFunctions([]); setModuleDescription(''); });
   }, [selectedModuleName]);
-
-  // 선택된 모듈과 매칭된 보조 디바이스 찾기 (있으면 step.device_id로 사용)
-  const matchedDeviceForModule = selectedModuleName
-    ? auxiliaryDevices.find(d => d.info?.module === selectedModuleName)
-    : null;
 
   // Fetch HKMC hardware keys once (when any HKMC device exists)
   useEffect(() => {
@@ -1364,7 +1358,7 @@ export default function RecordPage() {
 
   const addManualStep = async () => {
     if (!recording) return;
-    if (!selectedModuleName) {
+    if (!selectedDeviceId || !selectedModuleName) {
       message.warning(t('record.selectModule'));
       return;
     }
@@ -1378,13 +1372,11 @@ export default function RecordPage() {
       funcName = 'StartMonitor';
     }
     const params = { module: selectedModuleName, function: funcName, args: { ...moduleFuncArgs } };
-    // 매칭된 보조 디바이스가 있으면 device_id로 사용, 없으면 빈 값
-    const deviceId = matchedDeviceForModule?.id || '';
 
     try {
       const res = await scenarioApi.addStep({
         type: 'module_command',
-        device_id: deviceId,
+        device_id: selectedDeviceId,
         params,
         description: `${selectedModuleName}::${funcName}()`,
         delay_after_ms: delayMs,
@@ -2786,7 +2778,7 @@ export default function RecordPage() {
                   type="primary"
                   icon={<PlusOutlined />}
                   onClick={addManualStep}
-                  disabled={!selectedModuleName || !selectedModuleFunc}
+                  disabled={!selectedDeviceId || !selectedModuleFunc}
                 >
                   {t('record.addStep')}
                 </Button>
@@ -2794,35 +2786,30 @@ export default function RecordPage() {
               style={{ flex: 1, minWidth: 0 }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {/* 1행: 모듈 선택 */}
+                {/* 1행: 모듈 선택 (매칭된 디바이스별 항목) */}
                 <Select
                   showSearch
-                  value={selectedModuleName || undefined}
-                  onChange={setSelectedModuleName}
+                  value={selectedDeviceId || undefined}
+                  onChange={setSelectedDeviceId}
                   placeholder={t('record.selectModule')}
                   size="small"
                   style={{ width: '100%' }}
                   optionFilterProp="label"
-                  options={allModules.map(m => {
-                    const matched = auxiliaryDevices.find(d => d.info?.module === m.name);
-                    return {
-                      value: m.name,
-                      label: m.label || m.name,
-                      _matched: matched,
-                    };
-                  })}
+                  notFoundContent={t('record.noMatchedDevice')}
+                  options={moduleDevices.map(d => ({
+                    value: d.id,
+                    label: `${d.info?.module} ${d.name || d.id}`,
+                    _device: d,
+                  }))}
                   optionRender={(opt) => {
-                    const matched = (opt.data as any)._matched;
+                    const dev = (opt.data as any)._device;
+                    const moduleName = dev?.info?.module || '';
                     return (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <Tag color="purple" style={{ margin: 0 }}>{opt.label}</Tag>
-                        {matched ? (
-                          <span style={{ fontSize: 11, color: isDark ? '#8bb4e0' : '#1677ff' }}>
-                            → {matched.name || matched.address || matched.id}
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: 11, color: subTextColor }}>{t('record.noMatchedDevice')}</span>
-                        )}
+                        <Tag color="purple" style={{ margin: 0 }}>{moduleName}</Tag>
+                        <span style={{ fontSize: 12, color: isDark ? '#8bb4e0' : '#1677ff' }}>
+                          → {dev?.name || dev?.address || dev?.id}
+                        </span>
                       </span>
                     );
                   }}

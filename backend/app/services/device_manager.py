@@ -690,6 +690,24 @@ class DeviceManager:
         self._vision_cams: dict[str, object] = {}  # device_id -> VisionCamera instance
         self._ever_connected: set[str] = set()  # 사용자가 명시적으로 연결한 디바이스만 자동 재연결
         self._load_auxiliary_devices()
+        self._ensure_default_common_device()
+
+    def _ensure_default_common_device(self) -> None:
+        """Common(CMD) 디바이스를 기본값으로 등록. 이미 존재하면 무시."""
+        if "Common" in self._devices:
+            return
+        dev = ManagedDevice(
+            id="Common",
+            type="module",
+            category="auxiliary",
+            address="",
+            status="connected",  # 연결 불필요한 모듈이므로 바로 사용 가능
+            name="Common",
+            info={"module": "CMD", "connect_type": "none"},
+        )
+        self._devices["Common"] = dev
+        self._save_auxiliary_devices()
+        logger.info("Registered default 'Common' device (CMD module)")
 
     def _load_auxiliary_devices(self) -> None:
         """Load saved auxiliary devices from disk."""
