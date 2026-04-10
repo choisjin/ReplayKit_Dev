@@ -138,6 +138,7 @@ export default function DevicePage() {
     setDisconnectingAll(true);
     try {
       for (const d of allDevices) {
+        if (d.protected) continue;
         if (d.status === 'device' || d.status === 'connected') {
           await deviceApi.disconnectOne(d.id);
         }
@@ -699,12 +700,14 @@ export default function DevicePage() {
       <Checkbox
         checked={selectedDeviceIds.has(d.id)}
         onChange={(e) => toggleDeviceSelection(d.id, e.target.checked)}
-        style={{ flexShrink: 0 }}
+        disabled={d.protected}
+        style={{ flexShrink: 0, visibility: d.protected ? 'hidden' : 'visible' }}
       />
       <Tag color={getStatusColor(d.status)} style={{ flexShrink: 0 }}>
         {getStatusLabel(d.status)}
       </Tag>
       <span style={{ fontWeight: 500, flexShrink: 0 }}>{d.id}</span>
+      {d.protected && <Tag color="gold" style={{ flexShrink: 0 }}>SYSTEM</Tag>}
       {d.name && d.name !== d.id && (
         <span style={{ color: '#888', flexShrink: 0 }}>{d.name}</span>
       )}
@@ -713,15 +716,19 @@ export default function DevicePage() {
       {d.info?.baudrate && <Tag style={{ flexShrink: 0 }}>{d.info.baudrate}</Tag>}
       {d.info?.resolution && <Tag style={{ flexShrink: 0 }}>{d.info.resolution.width}x{d.info.resolution.height}</Tag>}
       <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexShrink: 0 }}>
-        {isDeviceConnected(d) ? (
-          <Button size="small" icon={<DisconnectOutlined />} loading={disconnectingIds.has(d.id)}
-            onClick={() => handleDisconnectOne(d.id)}>{t('device.disconnectOne')}</Button>
-        ) : (
-          <Button size="small" type="primary" icon={<LinkOutlined />} loading={connectingIds.has(d.id)}
-            onClick={() => handleConnectOne(d.id)}>{t('device.connectOne')}</Button>
+        {d.protected ? null : (
+          <>
+            {isDeviceConnected(d) ? (
+              <Button size="small" icon={<DisconnectOutlined />} loading={disconnectingIds.has(d.id)}
+                onClick={() => handleDisconnectOne(d.id)}>{t('device.disconnectOne')}</Button>
+            ) : (
+              <Button size="small" type="primary" icon={<LinkOutlined />} loading={connectingIds.has(d.id)}
+                onClick={() => handleConnectOne(d.id)}>{t('device.connectOne')}</Button>
+            )}
+            <Button size="small" icon={<EditOutlined />} onClick={() => openEditModal(d)} />
+            <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDisconnect(d.id)} />
+          </>
         )}
-        <Button size="small" icon={<EditOutlined />} onClick={() => openEditModal(d)} />
-        <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDisconnect(d.id)} />
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ export interface ManagedDevice {
   status: string;
   name: string;
   info: Record<string, any>;
+  protected?: boolean;  // 시스템 기본 디바이스 (삭제/수정 불가)
 }
 
 interface DeviceContextType {

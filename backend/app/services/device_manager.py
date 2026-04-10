@@ -692,12 +692,20 @@ class DeviceManager:
         self._load_auxiliary_devices()
         self._ensure_default_common_device()
 
+    # 기본 Common 디바이스 ID — 삭제/수정 금지
+    DEFAULT_COMMON_DEVICE_ID = "Common"
+
     def _ensure_default_common_device(self) -> None:
-        """Common(CMD) 디바이스를 기본값으로 등록. 이미 존재하면 무시."""
-        if "Common" in self._devices:
+        """Common(CMD) 디바이스를 기본값으로 등록 + 상태를 항상 connected로 고정."""
+        existing = self._devices.get(self.DEFAULT_COMMON_DEVICE_ID)
+        if existing and existing.info.get("module") == "CMD":
+            # 이미 등록되어 있으면 status만 강제 원상 복구 (연결 불필요)
+            existing.status = "connected"
+            existing.type = "module"
+            existing.category = "auxiliary"
             return
         dev = ManagedDevice(
-            id="Common",
+            id=self.DEFAULT_COMMON_DEVICE_ID,
             type="module",
             category="auxiliary",
             address="",
@@ -705,9 +713,13 @@ class DeviceManager:
             name="Common",
             info={"module": "CMD", "connect_type": "none"},
         )
-        self._devices["Common"] = dev
+        self._devices[self.DEFAULT_COMMON_DEVICE_ID] = dev
         self._save_auxiliary_devices()
         logger.info("Registered default 'Common' device (CMD module)")
+
+    def is_protected_device(self, device_id: str) -> bool:
+        """삭제/수정이 금지된 시스템 기본 디바이스인지 여부."""
+        return device_id == self.DEFAULT_COMMON_DEVICE_ID
 
     def _load_auxiliary_devices(self) -> None:
         """Load saved auxiliary devices from disk."""
@@ -1158,6 +1170,8 @@ class DeviceManager:
 
     def swap_device_ids(self, id_a: str, id_b: str) -> None:
         """두 디바이스의 ID를 서로 교체합니다."""
+        if self.is_protected_device(id_a) or self.is_protected_device(id_b):
+            raise ValueError("Protected system device cannot be renamed or swapped")
         dev_a = self._devices.pop(id_a, None)
         dev_b = self._devices.pop(id_b, None)
         if not dev_a or not dev_b:
@@ -1179,6 +1193,8 @@ class DeviceManager:
 
     def rename_device(self, old_id: str, new_id: str) -> None:
         """디바이스 ID를 변경합니다."""
+        if self.is_protected_device(old_id):
+            raise ValueError(f"Device '{old_id}' is a protected system default and cannot be renamed")
         dev = self._devices.pop(old_id, None)
         if not dev:
             raise ValueError(f"Device {old_id} not found")
@@ -1253,6 +1269,9 @@ class DeviceManager:
         dev = self.get_device(device_id)
         if not dev:
             return f"Device {device_id} not found"
+
+        if self.is_protected_device(dev.id):
+            raise ValueError(f"Device '{dev.id}' is a protected system default and cannot be removed")
 
         if dev.type == "adb" and ":" in dev.address:
             result = await self.adb.disconnect_device(dev.address)
@@ -1586,6 +1605,10 @@ class DeviceManager:
         dev = self._devices.get(device_id)
         if not dev:
             return f"Device {device_id} not found"
+
+        # 시스템 기본 디바이스(Common 등)는 항상 연결 상태 유지
+        if self.is_protected_device(device_id):
+            return f"Device '{device_id}' is a protected system default (no-op)"
 
         self._ever_connected.discard(device_id)
 
