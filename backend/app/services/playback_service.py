@@ -917,14 +917,23 @@ class PlaybackService:
             # Pass device connection info as constructor kwargs
             ctor_kwargs = None
             shared_conn = None
+            shared_ssh_client = None
             if real_id:
                 dev = self.dm.get_device(real_id)
                 if dev:
                     ctor_kwargs = _build_ctor_kwargs(dev)
                     shared_conn = self.dm.get_serial_conn(real_id)
-            logger.info("Module exec: %s.%s device=%s ctor=%s shared_conn=%s",
-                        module_name, func_name, real_id, ctor_kwargs, shared_conn is not None)
-            result = await execute_module_function(module_name, func_name, func_args, ctor_kwargs, shared_conn)
+                    # SSH 디바이스: device_manager가 보유한 paramiko 클라이언트 주입
+                    if dev.type == "ssh":
+                        ssh_obj = self.dm.get_ssh_conn(real_id)
+                        if ssh_obj:
+                            shared_ssh_client = ssh_obj.get_client()
+            logger.info("Module exec: %s.%s device=%s ctor=%s shared_conn=%s ssh=%s",
+                        module_name, func_name, real_id, ctor_kwargs,
+                        shared_conn is not None, shared_ssh_client is not None)
+            result = await execute_module_function(
+                module_name, func_name, func_args, ctor_kwargs, shared_conn, shared_ssh_client,
+            )
             self._last_module_result = result
         elif step.type == StepType.SERIAL_COMMAND:
             if not real_id:

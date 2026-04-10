@@ -97,16 +97,16 @@ def _build_constructor_kwargs(dev) -> dict | None:
 
 
 class ConnectRequest(BaseModel):
-    type: str  # "adb" | "serial" | "module" | "hkmc6th" | "vision_camera"
+    type: str  # "adb" | "serial" | "module" | "hkmc6th" | "vision_camera" | "ssh"
     category: str = ""  # "primary" | "auxiliary" — auto-detected if empty
-    address: str = ""  # COM port for serial, IP for socket/HKMC, etc.
+    address: str = ""  # COM port for serial, IP for socket/HKMC/SSH, etc.
     baudrate: Optional[int] = 115200
-    port: Optional[int] = None  # TCP port for HKMC6th
+    port: Optional[int] = None  # TCP port for HKMC6th / SSH (default 22)
     name: Optional[str] = ""
     device_id: Optional[str] = ""  # custom device ID/alias (e.g. "Android_1", "HKMC_1")
     module: Optional[str] = None  # lge.auto module name (e.g. "POWER", "CAN")
-    connect_type: Optional[str] = None  # "serial" | "socket" | "can" | "none" | "vision_camera"
-    extra_fields: Optional[dict] = None  # Additional module-specific fields
+    connect_type: Optional[str] = None  # "serial" | "socket" | "can" | "none" | "vision_camera" | "ssh"
+    extra_fields: Optional[dict] = None  # Additional module-specific fields (SSH: username, password, key_file_path)
     device_model: Optional[str] = None  # 장비 모델 (GVM, ccNC, Phone 등) — 하드키 매칭용
 
 
@@ -324,6 +324,37 @@ async def connect_device(req: ConnectRequest):
             "primary": _with_protected_flag(dm.list_primary()),
             "auxiliary": _with_protected_flag(dm.list_auxiliary()),
         }
+    elif req.type == "ssh":
+        ef = req.extra_fields or {}
+        username = ef.get("username", "")
+        password = ef.get("password", "")
+        key_file_path = ef.get("key_file_path", "")
+        if not req.address:
+            raise HTTPException(status_code=400, detail="SSH requires address (host)")
+        if not username:
+            raise HTTPException(status_code=400, detail="SSH requires username")
+        if not password and not key_file_path:
+            raise HTTPException(status_code=400, detail="SSH requires password or key_file_path")
+        category = req.category or "auxiliary"
+        try:
+            dev = await dm.add_ssh_device(
+                host=req.address,
+                port=int(req.port or 22),
+                username=username,
+                password=password,
+                category=category,
+                name=req.name or "",
+                device_id=custom_id,
+                key_file_path=key_file_path,
+            )
+            return {
+                "result": f"SSH connected: {dev.name} (ID: {dev.id})",
+                "primary": _with_protected_flag(dm.list_primary()),
+                "auxiliary": _with_protected_flag(dm.list_auxiliary()),
+            }
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     elif req.type == "vision_camera":
         ef = req.extra_fields or {}
         mac = ef.get("mac", "")

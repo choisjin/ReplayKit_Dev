@@ -14,6 +14,7 @@ from typing import Optional
 
 from .adb_service import ADBService
 from .hkmc6th_service import HKMC6thService
+from .ssh_service import SSHConnection
 
 logger = logging.getLogger(__name__)
 
@@ -688,6 +689,7 @@ class DeviceManager:
         self._hkmc_reconnect_attempts: dict[str, int] = {}  # device_id -> 연속 재연결 실패 횟수
         self._adb_reconnect_attempts: dict[str, int] = {}  # device_id -> 연속 재연결 실패 횟수
         self._vision_cams: dict[str, object] = {}  # device_id -> VisionCamera instance
+        self._ssh_conns: dict[str, SSHConnection] = {}  # device_id -> SSHConnection
         self._ever_connected: set[str] = set()  # 사용자가 명시적으로 연결한 디바이스만 자동 재연결
         self._load_auxiliary_devices()
         self._ensure_default_common_device()
@@ -756,6 +758,8 @@ class DeviceManager:
             prefix = "HKMC"
         elif dev_type == "vision_camera":
             prefix = "VisionCam"
+        elif dev_type == "ssh":
+            prefix = "SSH"
         else:
             prefix = "Device"
         # Find the highest existing number for this prefix
@@ -768,8 +772,12 @@ class DeviceManager:
         return f"{prefix}_{max_num + 1}"
 
     def _save_auxiliary_devices(self) -> None:
-        """Persist all manually registered devices (auxiliary + ADB + HKMC) to disk."""
-        aux = [d.to_dict() for d in self._devices.values() if d.category == "auxiliary" or d.type in ("adb", "hkmc6th", "vision_camera")]
+        """Persist all manually registered devices (auxiliary + ADB + HKMC + SSH) to disk."""
+        aux = [
+            d.to_dict()
+            for d in self._devices.values()
+            if d.category == "auxiliary" or d.type in ("adb", "hkmc6th", "vision_camera", "ssh")
+        ]
         try:
             _AUX_DEVICES_FILE.write_text(json.dumps(aux, ensure_ascii=False, indent=2), encoding="utf-8")
         except Exception as e:
@@ -924,6 +932,13 @@ class DeviceManager:
             if dev.type == "vision_camera":
                 cam = self._vision_cams.get(dev.id)
                 if cam and cam.IsConnected():
+                    dev.status = "connected"
+                else:
+                    dev.status = "disconnected"
+                continue
+            if dev.type == "ssh":
+                conn = self._ssh_conns.get(dev.id)
+                if conn and conn.is_alive():
                     dev.status = "connected"
                 else:
                     dev.status = "disconnected"
@@ -1129,6 +1144,70 @@ class DeviceManager:
         self._save_auxiliary_devices()
         return dev
 
+    async def add_ssh_device(self, host: str, port: int, username: str, password: str,
+                             category: str = "auxiliary", name: str = "", device_id: str = "",
+                             key_file_path: str = "") -> ManagedDevice:
+        """SSH 디바이스 등록 + 즉시 인증 시도. 실패 시 RuntimeError.
+
+        Args:
+            host: SSH 호스트 (IP 또는 hostname)
+            port: SSH 포트 (보통 22)
+            username, password: 자격증명
+            category: "primary" | "auxiliary"
+            name: 표시 이름 (없으면 자동 생성)
+            device_id: 사용자 지정 ID (없으면 자동 생성)
+            key_file_path: SSH 키 파일 경로 (선택)
+        """
+        final_id = device_id or self._generate_device_id("ssh")
+        display_name = name or f"{username}@{host}"
+
+        # 1. 먼저 SSH 연결 시도 (실패 시 디바이스 등록 안 함)
+        loop = asyncio.get_event_loop()
+        ssh_conn = SSHConnection(host=host, port=port, username=username,
+                                 password=password, key_file_path=key_file_path or None)
+        try:
+            await loop.run_in_executor(None, ssh_conn.connect)
+        except Exception as e:
+            raise RuntimeError(f"SSH connect failed: {e}") from e
+
+        info = {
+            "host": host,
+            "port": port,
+            "username": username,
+            "password": password,  # 평문 저장 (auxiliary_devices.json)
+            "key_file_path": key_file_path,
+            "module": "SSHManager",  # 모듈 스텝 추가에서 자동으로 SSHManager 함수 사용
+            "connect_type": "ssh",
+        }
+        dev = ManagedDevice(
+            id=final_id,
+            type="ssh",
+            category=category,
+            address=host,
+            status="connected",
+            name=display_name,
+            info=info,
+        )
+        self._devices[final_id] = dev
+        self._ssh_conns[final_id] = ssh_conn
+        self._ever_connected.add(final_id)
+        self._save_auxiliary_devices()
+        logger.info("SSH device added: %s (%s@%s:%d)", final_id, username, host, port)
+        return dev
+
+    def get_ssh_conn(self, device_id: str) -> Optional[SSHConnection]:
+        """등록된 SSH 디바이스의 SSHConnection 반환. 없으면 None."""
+        return self._ssh_conns.get(device_id)
+
+    def _close_ssh_conn(self, device_id: str) -> None:
+        """SSH 연결 종료 + 캐시에서 제거."""
+        conn = self._ssh_conns.pop(device_id, None)
+        if conn:
+            try:
+                conn.disconnect()
+            except Exception as e:
+                logger.warning("SSH disconnect error %s: %s", device_id, e)
+
     async def add_module_device(self, address: str, module: str, connect_type: str = "none",
                                name: str = "", extra_fields: dict | None = None, device_id: str = "") -> ManagedDevice:
         """모듈 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행)."""
@@ -1290,6 +1369,8 @@ class DeviceManager:
                 cam.Disconnect()
             except Exception:
                 pass
+        # Close SSH connection if applicable
+        self._close_ssh_conn(dev.id)
         # 모듈 인스턴스 캐시 제거
         module_name = dev.info.get("module")
         if module_name:
@@ -1568,6 +1649,26 @@ class DeviceManager:
                 dev.status = "disconnected"
                 return f"VisionCamera connect failed: {dev.id} — {e}"
 
+        elif dev.type == "ssh":
+            host = dev.info.get("host", dev.address)
+            port = int(dev.info.get("port", 22))
+            username = dev.info.get("username", "")
+            password = dev.info.get("password", "")
+            key_file_path = dev.info.get("key_file_path", "") or None
+            try:
+                # 기존 연결 닫고 새로 생성
+                self._close_ssh_conn(dev.id)
+                conn = SSHConnection(host=host, port=port, username=username,
+                                     password=password, key_file_path=key_file_path)
+                await loop.run_in_executor(None, conn.connect)
+                self._ssh_conns[dev.id] = conn
+                dev.status = "connected"
+                _mark_connected()
+                return f"SSH connected: {dev.id} ({username}@{host}:{port})"
+            except Exception as e:
+                dev.status = "disconnected"
+                return f"SSH connect failed: {dev.id} — {e}"
+
         elif dev.type == "adb":
             try:
                 # WiFi: adb connect, USB: adb reconnect
@@ -1637,6 +1738,11 @@ class DeviceManager:
             dev.status = "disconnected"
             return f"Disconnected: {dev.id}"
 
+        elif dev.type == "ssh":
+            self._close_ssh_conn(device_id)
+            dev.status = "disconnected"
+            return f"Disconnected: {dev.id}"
+
         elif dev.type == "adb":
             if ":" in dev.address:
                 try:
@@ -1650,7 +1756,7 @@ class DeviceManager:
         return f"Disconnected: {dev.id}"
 
     def close_all_serial_connections(self) -> None:
-        """Close all persistent serial/HKMC/VisionCamera connections (called on shutdown)."""
+        """Close all persistent serial/HKMC/VisionCamera/SSH connections (called on shutdown)."""
         for device_id in list(self._serial_conns.keys()):
             self._close_serial_conn(device_id)
             logger.info("Serial connection closed: %s", device_id)
@@ -1658,6 +1764,9 @@ class DeviceManager:
             hkmc.disconnect()
             logger.info("HKMC connection closed: %s", device_id)
         self._hkmc_conns.clear()
+        for device_id in list(self._ssh_conns.keys()):
+            self._close_ssh_conn(device_id)
+            logger.info("SSH connection closed: %s", device_id)
         for device_id, cam in list(self._vision_cams.items()):
             try:
                 cam.Disconnect()

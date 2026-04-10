@@ -356,13 +356,19 @@ def _is_connected(instance) -> bool:
 
 
 def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
-                  shared_serial_conn=None) -> Any:
+                  shared_serial_conn=None, shared_ssh_client=None) -> Any:
     """Get or create a singleton instance of the module class.
 
     Args:
         shared_serial_conn: device_manager가 이미 열어둔 Serial 객체.
             전달되면 모듈의 Connect()를 호출하지 않고 _conn에 직접 주입.
+        shared_ssh_client: device_manager가 이미 열어둔 paramiko SSHClient.
+            전달되면 SSHManager의 ssh_client에 주입하고, 매번 fresh instance 생성.
     """
+    # SSHManager는 디바이스별로 다른 ssh_client를 가질 수 있으므로 캐시 무효화
+    if module_name == "SSHManager" and shared_ssh_client is not None:
+        _instances.pop(module_name, None)
+        _auto_connected.discard(module_name)
     # host/port가 변경된 경우 기존 인스턴스 무효화
     if module_name in _instances and constructor_kwargs:
         existing = _instances[module_name]
@@ -491,14 +497,22 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
                 _instances[module_name] = instance
         else:
             _instances[module_name] = cls()
+
+    # SSHManager: 디바이스 매니저가 보유한 paramiko 클라이언트를 주입
+    if module_name == "SSHManager" and shared_ssh_client is not None:
+        instance = _instances[module_name]
+        instance.ssh_client = shared_ssh_client
+        _auto_connected.add(module_name)
+        logger.info("Injected shared paramiko client into SSHManager.ssh_client")
+
     return _instances[module_name]
 
 
 def _execute_sync(module_name: str, function_name: str, args: dict,
                   constructor_kwargs: Optional[dict] = None,
-                  shared_serial_conn=None) -> Any:
+                  shared_serial_conn=None, shared_ssh_client=None) -> Any:
     """Execute a module function synchronously."""
-    instance = _get_instance(module_name, constructor_kwargs, shared_serial_conn)
+    instance = _get_instance(module_name, constructor_kwargs, shared_serial_conn, shared_ssh_client)
     func = getattr(instance, function_name, None)
     if func is None:
         raise ValueError(f"Function '{function_name}' not found in {module_name}")
@@ -582,7 +596,7 @@ def _redirect_path_args_to_run_dir(call_args: dict, module_name: str, function_n
 async def execute_module_function(
     module_name: str, function_name: str, args: dict,
     constructor_kwargs: Optional[dict] = None,
-    shared_serial_conn=None,
+    shared_serial_conn=None, shared_ssh_client=None,
 ) -> str:
     """Execute a module function asynchronously (runs in thread pool)."""
     loop = asyncio.get_event_loop()
@@ -590,7 +604,7 @@ async def execute_module_function(
         result = await loop.run_in_executor(
             None,
             functools.partial(_execute_sync, module_name, function_name, args,
-                              constructor_kwargs, shared_serial_conn),
+                              constructor_kwargs, shared_serial_conn, shared_ssh_client),
         )
         return str(result) if result is not None else "OK"
     except Exception as e:

@@ -224,11 +224,15 @@ export default function DevicePage() {
   const [forceIpSubnet, setForceIpSubnet] = useState('255.255.255.0');
   const [forceIpGateway, setForceIpGateway] = useState('0.0.0.0');
   const [forceIpLoading, setForceIpLoading] = useState(false);
-  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th' | 'vision_camera'>('adb');
+  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th' | 'vision_camera' | 'ssh'>('adb');
   const [connectAddress, setConnectAddress] = useState('');
   const [baudrate, setBaudrate] = useState(115200);
   const [connecting, setConnecting] = useState(false);
   const [hkmcPort, setHkmcPort] = useState(5000);
+  const [sshPort, setSshPort] = useState(22);
+  const [sshUser, setSshUser] = useState('');
+  const [sshPass, setSshPass] = useState('');
+  const [sshKeyFile, setSshKeyFile] = useState('');
   const [modalTabKey, setModalTabKey] = useState('scan');
   const [deviceProject, setDeviceProject] = useState('');
   const [deviceModel, setDeviceModel] = useState('');
@@ -420,6 +424,35 @@ export default function DevicePage() {
   const handleConnect = async () => {
     const moduleConnType = getModuleConnectType(selectedModule);
     const fields = getModuleConnectFields(selectedModule);
+
+    // SSH 전용 처리
+    if (connectType === 'ssh') {
+      if (!connectAddress.trim()) { message.warning(t('device.sshHostPlaceholder')); return; }
+      if (!sshUser.trim()) { message.warning(t('device.sshUserPlaceholder')); return; }
+      if (!sshPass.trim() && !sshKeyFile.trim()) { message.warning(t('device.sshPassPlaceholder')); return; }
+      setConnecting(true);
+      try {
+        const extra = {
+          username: sshUser.trim(),
+          password: sshPass,
+          key_file_path: sshKeyFile.trim(),
+        };
+        const result = await connectDevice(
+          'ssh', connectAddress.trim(), undefined, '', modalCategory,
+          undefined, 'ssh', extra, '', sshPort,
+        );
+        message.success(result);
+        setConnectAddress('');
+        setSshUser('');
+        setSshPass('');
+        setSshKeyFile('');
+        closeAddModal();
+      } catch (e: any) {
+        message.error(e.response?.data?.detail || t('device.connectFailed'));
+      }
+      setConnecting(false);
+      return;
+    }
 
     // VisionCamera 전용 처리
     if (connectType === 'vision_camera') {
@@ -1250,6 +1283,10 @@ export default function DevicePage() {
                         {modalCategory === 'primary' && <Option value="hkmc6th">HKMC 6th (TCP)</Option>}
                         {modalCategory === 'primary' && <Option value="vision_camera">Vision Camera</Option>}
                         <Option value="serial">{t('device.serialPort')}</Option>
+                        {/* SSH: Primary는 General 프로젝트일 때만, Auxiliary는 항상 */}
+                        {(modalCategory === 'auxiliary' || (modalCategory === 'primary' && deviceProject === 'General')) && (
+                          <Option value="ssh">{t('device.ssh')}</Option>
+                        )}
                       </Select>
                     )}
 
@@ -1344,7 +1381,43 @@ export default function DevicePage() {
                       </>
                     )}
 
-                    {!selectedModule && connectType !== 'hkmc6th' && connectType !== 'vision_camera' && (
+                    {!selectedModule && connectType === 'ssh' && (
+                      <>
+                        <Input
+                          placeholder={t('device.sshHostPlaceholder')}
+                          value={connectAddress}
+                          onChange={(e) => setConnectAddress(e.target.value)}
+                          onPressEnter={handleConnect}
+                        />
+                        <div>
+                          <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>{t('device.sshPort')}:</span>
+                          <InputNumber
+                            value={sshPort}
+                            onChange={(v) => setSshPort(v || 22)}
+                            min={1} max={65535}
+                            style={{ width: 150 }}
+                          />
+                        </div>
+                        <Input
+                          placeholder={t('device.sshUserPlaceholder')}
+                          value={sshUser}
+                          onChange={(e) => setSshUser(e.target.value)}
+                        />
+                        <Input.Password
+                          placeholder={t('device.sshPassPlaceholder')}
+                          value={sshPass}
+                          onChange={(e) => setSshPass(e.target.value)}
+                          onPressEnter={handleConnect}
+                        />
+                        <Input
+                          placeholder={t('device.sshKeyFilePlaceholder')}
+                          value={sshKeyFile}
+                          onChange={(e) => setSshKeyFile(e.target.value)}
+                        />
+                      </>
+                    )}
+
+                    {!selectedModule && connectType !== 'hkmc6th' && connectType !== 'vision_camera' && connectType !== 'ssh' && (
                       <>
                         <Input
                           placeholder={connectType === 'adb' ? t('device.adbPlaceholder') : t('device.comPlaceholder')}
