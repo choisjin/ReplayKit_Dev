@@ -926,6 +926,15 @@ class PlaybackService:
                     # SSH 디바이스: device_manager가 보유한 paramiko 클라이언트 주입
                     if dev.type == "ssh":
                         ssh_obj = self.dm.get_ssh_conn(real_id)
+                        # 연결이 없거나 끊어진 경우 저장된 자격증명으로 lazy 재연결
+                        if not ssh_obj or not ssh_obj.is_alive():
+                            logger.info("SSH connection missing/stale for %s — reconnecting", real_id)
+                            try:
+                                msg = await self.dm.connect_device_by_id(real_id)
+                                logger.info("SSH lazy reconnect: %s", msg)
+                            except Exception as e:
+                                logger.warning("SSH lazy reconnect failed for %s: %s", real_id, e)
+                            ssh_obj = self.dm.get_ssh_conn(real_id)
                         if ssh_obj:
                             shared_ssh_client = ssh_obj.get_client()
             logger.info("Module exec: %s.%s device=%s ctor=%s shared_conn=%s ssh=%s",

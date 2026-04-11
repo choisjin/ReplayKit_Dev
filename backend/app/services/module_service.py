@@ -365,8 +365,9 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
         shared_ssh_client: device_manager가 이미 열어둔 paramiko SSHClient.
             전달되면 SSHManager의 ssh_client에 주입하고, 매번 fresh instance 생성.
     """
-    # SSHManager는 디바이스별로 다른 ssh_client를 가질 수 있으므로 캐시 무효화
-    if module_name == "SSHManager" and shared_ssh_client is not None:
+    # SSHManager는 디바이스별로 다른 ssh_client를 가질 수 있으므로 매 호출마다 캐시 무효화
+    # (매번 주입할 shared_ssh_client가 달라질 수 있고, 끊긴 client를 재사용하면 안 됨)
+    if module_name == "SSHManager":
         _instances.pop(module_name, None)
         _auto_connected.discard(module_name)
     # host/port가 변경된 경우 기존 인스턴스 무효화
@@ -498,12 +499,15 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
         else:
             _instances[module_name] = cls()
 
-    # SSHManager: 디바이스 매니저가 보유한 paramiko 클라이언트를 주입
-    if module_name == "SSHManager" and shared_ssh_client is not None:
+    # SSHManager: 디바이스 매니저가 보유한 paramiko 클라이언트를 주입 (매 호출마다)
+    if module_name == "SSHManager":
         instance = _instances[module_name]
-        instance.ssh_client = shared_ssh_client
-        _auto_connected.add(module_name)
-        logger.info("Injected shared paramiko client into SSHManager.ssh_client")
+        instance.ssh_client = shared_ssh_client  # None이면 send_command 호출 시 내부에서 fail
+        if shared_ssh_client is not None:
+            _auto_connected.add(module_name)
+            logger.info("Injected shared paramiko client into SSHManager.ssh_client")
+        else:
+            logger.warning("SSHManager instance created WITHOUT shared_ssh_client — calls will fail")
 
     return _instances[module_name]
 

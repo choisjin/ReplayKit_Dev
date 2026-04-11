@@ -260,6 +260,18 @@ async def lifespan(app: FastAPI):
 
     reconnect_task = asyncio.create_task(_reconnect_loop())
 
+    # 저장된 SSH 디바이스를 시작 시 자동 재연결 시도 (메모리 전용 연결이므로 재시작 시 복구)
+    try:
+        ssh_devices = [d for d in device_manager.list_all() if d.type == "ssh"]
+        for dev in ssh_devices:
+            try:
+                msg = await device_manager.connect_device_by_id(dev.id)
+                logger.info("SSH auto-reconnect on startup: %s", msg)
+            except Exception as e:
+                logger.warning("SSH auto-reconnect failed for %s: %s", dev.id, e)
+    except Exception as e:
+        logger.debug("SSH startup reconnect sweep: %s", e)
+
     # 관제 클라이언트 콜백 항상 등록 (URL은 나중에 Settings에서 설정 가능)
     monitor_client.set_status_callback(_get_monitor_status)
     monitor_client.set_command_callback(_handle_monitor_command)
