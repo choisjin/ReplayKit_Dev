@@ -183,7 +183,7 @@
     </div>
 
     <h2 id="overview">All Modules</h2>
-    <p>Total <strong>29</strong> modules, <strong>357</strong> functions registered.</p>
+    <p>Total <strong>29</strong> modules, <strong>358</strong> functions registered.</p>
     <table>
       <thead><tr><th>Module</th><th>Description</th><th>Functions</th></tr></thead>
       <tbody>
@@ -198,7 +198,7 @@
 <tr><td><a href="#mod-Uart"><strong>Uart</strong></a></td><td>Performs UART serial communication and saves logs. Used for Linux console access, etc.</td><td style="text-align:center">10</td></tr>
 <tr><td><a href="#mod-Ignition"><strong>Ignition</strong></a></td><td>Controls ICAS3/MIB3 device ignition via TCP socket (default: 192.168.1.4:15500)</td><td style="text-align:center">4</td></tr>
 <tr><td><a href="#mod-KeysightPower"><strong>KeysightPower</strong></a></td><td>Controls voltage settings and waveform sequences for Keysight power supplies connected via Ethernet/GPIB</td><td style="text-align:center">22</td></tr>
-<tr><td><a href="#mod-SSHManager"><strong>SSHManager</strong></a></td><td>Connects to remote devices via SSH for command execution and file transfer</td><td style="text-align:center">6</td></tr>
+<tr><td><a href="#mod-SSHManager"><strong>SSHManager</strong></a></td><td>Connects to remote devices via SSH for command execution and file transfer</td><td style="text-align:center">7</td></tr>
 <tr><td><a href="#mod-AudioLibrary"><strong>AudioLibrary</strong></a></td><td>Performs audio recording and mute detection. Checks for silence from music/radio sources</td><td style="text-align:center">7</td></tr>
 <tr><td><a href="#mod-ImageProcessing"><strong>ImageProcessing</strong></a></td><td>Performs OCR (text recognition), image comparison, and template matching. Requires Tesseract-OCR</td><td style="text-align:center">11</td></tr>
 <tr><td><a href="#mod-DLTLogging"><strong>DLTLogging</strong></a></td><td>Captures and saves logs via direct TCP connection to the DLT daemon, with keyword-based PASS/FAIL evaluation (no GUI required)</td><td style="text-align:center">10</td></tr>
@@ -1644,8 +1644,13 @@
 </tr>
 <tr>
 <td><code>send_command</code></td>
-<td>Executes a command via SSH.</td>
+<td>Executes a command via SSH and returns the full output on completion (blocking). Korean Windows output is automatically handled via cp949/euc-kr encoding.</td>
 <td style="font-size:12px"><code>command</code>: Command to execute. e.g. &#x27;ls -al&#x27;, &#x27;cat /etc/version&#x27;</td>
+</tr>
+<tr>
+<td><code>send_command_stream</code></td>
+<td>Executes a command via SSH and immediately returns a [BG_TASK:bg_x] placeholder (non-blocking). Output streams in real time and can be observed via the polling endpoint. Useful for long-running commands (netstat, tail -f, etc.).</td>
+<td style="font-size:12px"><code>command</code>: Command to execute. e.g. &#x27;netstat -a&#x27;, &#x27;tail -f /var/log/syslog&#x27;</td>
 </tr>
 <tr>
 <td><code>send_file</code></td>

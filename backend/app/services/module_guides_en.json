@@ -1251,9 +1251,15 @@
         "params": {}
       },
       "send_command": {
-        "description": "Executes a command via SSH.",
+        "description": "Executes a command via SSH and returns the full output on completion (blocking). Korean Windows output is automatically handled via cp949/euc-kr encoding.",
         "params": {
           "command": "Command to execute. e.g. 'ls -al', 'cat /etc/version'"
+        }
+      },
+      "send_command_stream": {
+        "description": "Executes a command via SSH and immediately returns a [BG_TASK:bg_x] placeholder (non-blocking). Output streams in real time and can be observed via the polling endpoint. Useful for long-running commands (netstat, tail -f, etc.).",
+        "params": {
+          "command": "Command to execute. e.g. 'netstat -a', 'tail -f /var/log/syslog'"
         }
       },
       "send_file": {

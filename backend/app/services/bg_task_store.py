@@ -95,10 +95,60 @@ def start_task(command: str, expected: Optional[str] = None, match_mode: str = "
     return task_id
 
 
+def create_streaming_task(command: str) -> str:
+    """외부(e.g. SSH)에서 실시간으로 stdout을 append할 수 있는 빈 태스크를 생성.
+
+    호출 측(예: SSH paramiko 리더)은 append_stdout / mark_done 으로 상태를 갱신한다.
+    """
+    global _bg_task_counter
+    with _lock:
+        _bg_task_counter += 1
+        task_id = f"bg_{_bg_task_counter}"
+        _bg_tasks[task_id] = {
+            "status": "running",
+            "stdout": "",
+            "stderr": "",
+            "rc": None,
+            "cmd": command,
+            "expected": None,
+            "match_mode": "contains",
+        }
+    return task_id
+
+
+def append_stdout(task_id: str, chunk: str) -> None:
+    """스트리밍 태스크의 stdout에 chunk를 추가."""
+    with _lock:
+        task = _bg_tasks.get(task_id)
+        if task is not None:
+            task["stdout"] = task["stdout"] + chunk
+
+
+def append_stderr(task_id: str, chunk: str) -> None:
+    """스트리밍 태스크의 stderr에 chunk를 추가."""
+    with _lock:
+        task = _bg_tasks.get(task_id)
+        if task is not None:
+            task["stderr"] = task["stderr"] + chunk
+
+
+def mark_done(task_id: str, status: str = "done", rc: Optional[int] = 0) -> None:
+    """스트리밍 태스크를 완료 상태로 변경."""
+    with _lock:
+        task = _bg_tasks.get(task_id)
+        if task is not None:
+            task["status"] = status
+            task["rc"] = rc
+
+
 def get_task(task_id: str) -> Optional[dict]:
     """태스크 상태 조회. 존재하지 않으면 None."""
     with _lock:
-        return _bg_tasks.get(task_id)
+        task = _bg_tasks.get(task_id)
+        if task is None:
+            return None
+        # copy to avoid concurrent mutation during JSON serialization
+        return dict(task)
 
 
 def cleanup_task(task_id: str) -> None:

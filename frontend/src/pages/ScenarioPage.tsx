@@ -209,7 +209,18 @@ export default function ScenarioPage() {
       const poll = setInterval(async () => {
         try {
           const r = await scenarioApi.getCmdResult(taskId);
-          if (r.data.status === 'running') return;
+          if (r.data.status === 'running') {
+            // 라이브 업데이트: 누적 stdout을 계속 반영 (send_command_stream)
+            const liveStdout = r.data.stdout ?? '';
+            if (liveStdout) {
+              setStepResults(prev => {
+                const u = [...prev];
+                u[idx] = { ...u[idx], message: liveStdout };
+                return u;
+              });
+            }
+            return;
+          }
           clearInterval(poll);
           // 서버가 계산한 final_message/final_status 사용
           const finalMsg = r.data.final_message ?? r.data.stdout ?? '';
@@ -228,7 +239,7 @@ export default function ScenarioPage() {
             return u;
           });
         }
-      }, 1000);
+      }, 500);
       bgPollTimers.current.push(poll);
     });
   };

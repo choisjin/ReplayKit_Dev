@@ -307,6 +307,15 @@ def get_module_functions(module_name: str) -> list[dict]:
             "params": params,
         })
 
+    # SSHManager: 스트리밍 send_command 가상 함수 추가 (실제 클래스에는 없음)
+    if module_name == "SSHManager":
+        functions.append({
+            "name": "send_command_stream",
+            "params": [
+                {"name": "command", "required": True},
+            ],
+        })
+
     # 가이드 데이터 병합
     guides = _load_guides()
     mod_guide = guides.get(module_name, {})
@@ -548,6 +557,96 @@ def _execute_sync(module_name: str, function_name: str, args: dict,
             except UnicodeDecodeError:
                 continue
         return combined.decode(errors="replace").strip() or "(no output)"
+
+    # SSHManager.send_command_stream 가상 함수: 실시간 스트리밍 (bg_task_store 사용)
+    if module_name == "SSHManager" and function_name == "send_command_stream":
+        client = getattr(instance, "ssh_client", None)
+        if client is None:
+            raise RuntimeError("SSH client not connected")
+        command = args.get("command", "")
+        from . import bg_task_store
+        task_id = bg_task_store.create_streaming_task(command)
+
+        def _stream_reader(cmd: str, tid: str, ssh_client):
+            """백그라운드 스레드에서 paramiko 채널을 폴링하며 chunk를 bg task에 append."""
+            import select as _select
+            try:
+                transport = ssh_client.get_transport()
+                if transport is None or not transport.is_active():
+                    bg_task_store.append_stderr(tid, "SSH transport not active")
+                    bg_task_store.mark_done(tid, status="error", rc=1)
+                    return
+                channel = transport.open_session()
+                channel.settimeout(0.0)
+                channel.exec_command(cmd)
+                out_buffer = bytearray()
+                err_buffer = bytearray()
+
+                def _decode_chunk(buf: bytearray) -> tuple[str, bytearray]:
+                    """버퍼에서 가능한 만큼 디코딩하고 불완전한 뒷부분은 남김."""
+                    if not buf:
+                        return "", buf
+                    for enc in ("utf-8", "cp949", "euc-kr", "cp437"):
+                        try:
+                            text = buf.decode(enc)
+                            return text, bytearray()
+                        except UnicodeDecodeError as e:
+                            # 잘린 multibyte일 수 있으니 뒷부분 남김
+                            if enc == "utf-8" and e.start > 0:
+                                try:
+                                    text = buf[:e.start].decode(enc)
+                                    return text, bytearray(buf[e.start:])
+                                except UnicodeDecodeError:
+                                    continue
+                            continue
+                    return buf.decode(errors="replace"), bytearray()
+
+                while True:
+                    if channel.recv_ready():
+                        chunk = channel.recv(4096)
+                        if chunk:
+                            out_buffer.extend(chunk)
+                            text, out_buffer = _decode_chunk(out_buffer)
+                            if text:
+                                bg_task_store.append_stdout(tid, text)
+                    if channel.recv_stderr_ready():
+                        chunk = channel.recv_stderr(4096)
+                        if chunk:
+                            err_buffer.extend(chunk)
+                            text, err_buffer = _decode_chunk(err_buffer)
+                            if text:
+                                bg_task_store.append_stderr(tid, text)
+                    if channel.exit_status_ready() and not channel.recv_ready() and not channel.recv_stderr_ready():
+                        break
+                    import time as _time
+                    _time.sleep(0.05)
+
+                # flush 잔여 버퍼
+                if out_buffer:
+                    text, _ = _decode_chunk(out_buffer)
+                    if text:
+                        bg_task_store.append_stdout(tid, text)
+                if err_buffer:
+                    text, _ = _decode_chunk(err_buffer)
+                    if text:
+                        bg_task_store.append_stderr(tid, text)
+
+                rc = channel.recv_exit_status()
+                channel.close()
+                bg_task_store.mark_done(tid, status="done", rc=rc)
+            except Exception as e:
+                logger.exception("SSH stream reader error for %s", tid)
+                bg_task_store.append_stderr(tid, f"\n[stream error] {e}")
+                bg_task_store.mark_done(tid, status="error", rc=1)
+
+        import threading
+        threading.Thread(
+            target=_stream_reader,
+            args=(command, task_id, client),
+            daemon=True,
+            name=f"ssh-stream-{task_id}",
+        ).start()
+        return f"[BG_TASK:{task_id}]"
 
     func = getattr(instance, function_name, None)
     if func is None:

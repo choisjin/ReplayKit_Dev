@@ -728,7 +728,7 @@ export default function RecordPage() {
       setTestResult(result);
       setTestResultModalOpen(true);
       refreshScreenshot();
-      // 백그라운드 CMD 결과 폴링: 메시지에 [BG_TASK:bg_x]가 있으면 서버에 폴링
+      // 백그라운드 CMD/SSH 결과 폴링: 메시지에 [BG_TASK:bg_x]가 있으면 서버에 폴링
       const bgMatch = result.message?.match?.(/\[BG_TASK:(bg_\d+)\]/);
       if (bgMatch) {
         const taskId = bgMatch[1];
@@ -737,7 +737,13 @@ export default function RecordPage() {
         const poll = setInterval(async () => {
           try {
             const r = await scenarioApi.getCmdResult(taskId);
-            if (r.data.status !== 'running') {
+            if (r.data.status === 'running') {
+              // 라이브 업데이트: 현재까지 누적된 stdout을 보여줌 (send_command_stream 용)
+              const liveStdout = r.data.stdout ?? '';
+              if (liveStdout) {
+                setTestResult((prev: any) => ({ ...prev, message: liveStdout }));
+              }
+            } else {
               clearInterval(poll);
               // 서버가 계산한 final_message + final_status 사용
               const finalMsg = r.data.final_message ?? r.data.stdout ?? '';
@@ -749,7 +755,7 @@ export default function RecordPage() {
               }));
             }
           } catch { clearInterval(poll); }
-        }, 1000);
+        }, 500);
       }
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('record.stepTestFailed'));

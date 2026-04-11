@@ -454,7 +454,19 @@ export default function ResultsPage() {
       const poll = setInterval(async () => {
         try {
           const r = await scenarioApi.getCmdResult(taskId);
-          if (r.data.status === 'running') return;
+          if (r.data.status === 'running') {
+            // 라이브 업데이트: 누적 stdout을 계속 반영 (send_command_stream)
+            const liveStdout = r.data.stdout ?? '';
+            if (liveStdout) {
+              setDetail(prev => {
+                if (!prev) return prev;
+                const updated = { ...prev, step_results: [...prev.step_results] };
+                updated.step_results[idx] = { ...updated.step_results[idx], message: liveStdout };
+                return updated;
+              });
+            }
+            return;
+          }
           clearInterval(poll);
 
           // 서버가 계산한 final_message/final_status 사용
