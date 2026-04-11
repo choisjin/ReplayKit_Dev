@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Button, Card, Col, Image, Input, Modal, Radio, Row, Select, Slider, Space, InputNumber, message, List, Tag, Popover, Tooltip, Splitter } from 'antd';
-import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, ArrowUpOutlined, ArrowDownOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined, CopyOutlined, ZoomInOutlined, ZoomOutOutlined, HolderOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined, CopyOutlined, ZoomInOutlined, ZoomOutOutlined, HolderOutlined } from '@ant-design/icons';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -1611,27 +1611,6 @@ export default function RecordPage() {
     message.success(t('record.stepDeleted', { index: index + 1 }));
   };
 
-  const moveStep = (index: number, direction: -1 | 1) => {
-    setSteps((prev) => {
-      const target = index + direction;
-      if (target < 0 || target >= prev.length) return prev;
-      const arr = [...prev];
-      [arr[index], arr[target]] = [arr[target], arr[index]];
-      // Build old-position → new-position mapping
-      const mapping = new Map<number, number>();
-      for (let i = 0; i < arr.length; i++) {
-        mapping.set(i + 1, i + 1);
-      }
-      mapping.set(index + 1, target + 1);
-      mapping.set(target + 1, index + 1);
-      return arr.map(s => ({
-        ...s,
-        on_pass_goto: remapGoto(s.on_pass_goto, mapping),
-        on_fail_goto: remapGoto(s.on_fail_goto, mapping),
-      }));
-    });
-  };
-
   const moveStepDnD = (oldIndex: number, newIndex: number) => {
     if (oldIndex === newIndex) return;
     setSteps((prev) => {
@@ -2328,10 +2307,8 @@ export default function RecordPage() {
           </div>
           {/* 우측: 2행 아이콘 영역 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, borderLeft: isDark ? '1px solid #333' : '1px solid #d9d9d9', paddingLeft: 8, alignSelf: 'stretch', justifyContent: 'center' }}>
-            {/* 1행: 순서변경 + 테스트 + 삭제 */}
+            {/* 1행: 테스트 + 가져오기 + 삭제 (순서는 드래그로 변경) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'flex-end' }}>
-              <Button size="small" type="text" icon={<ArrowUpOutlined />} disabled={index === 0} onClick={() => moveStep(index, -1)} style={{ width: 28 }} />
-              <Button size="small" type="text" icon={<ArrowDownOutlined />} disabled={index === steps.length - 1} onClick={() => moveStep(index, 1)} style={{ width: 28 }} />
               {scenarioName && (() => {
                 const stepDev = allDevices.find(dd => dd.id === s.device_id);
                 const devConnected = !stepDev || stepDev.status === 'device' || stepDev.status === 'connected';
