@@ -1105,6 +1105,10 @@ class DeviceManager:
         """TCP 포트 스캔으로 LAN 상의 DLT 데몬 탐지."""
         return await _scan_dlt_tcp()
 
+    async def scan_ssh(self, port: int = 22) -> list[dict]:
+        """TCP 포트 스캔으로 LAN 상의 SSH 호스트 탐지."""
+        return await scan_tcp_port(port)
+
     async def scan_udp_port(self, port: int) -> list[dict]:
         """LAN에서 특정 UDP 포트 응답 호스트 탐지."""
         return await _scan_udp_port(port)

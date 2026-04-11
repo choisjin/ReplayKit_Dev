@@ -217,6 +217,7 @@ export default function DevicePage() {
   const [scannedVision, setScannedVision] = useState<{ id: string; mac: string; model: string; serial: string; vendor: string; tl_type: string; ip: string; subnet?: string; gateway?: string }[]>([]);
   const [scannedDlt, setScannedDlt] = useState<{ ip: string; port: number }[]>([]);
   const [scannedSmartbench, setScannedSmartbench] = useState<{ ip: string; port: number; label: string; module: string }[]>([]);
+  const [scannedSsh, setScannedSsh] = useState<{ ip: string; port: number }[]>([]);
   const [scannedCustom, setScannedCustom] = useState<{ label: string; hosts: { ip: string; port: number }[] }[]>([]);
   const [pcInterfaces, setPcInterfaces] = useState<{ name: string; ip: string; prefix: number }[]>([]);
   const [forceIpModal, setForceIpModal] = useState<{ mac: string; currentIp: string } | null>(null);
@@ -249,6 +250,7 @@ export default function DevicePage() {
     'General': [
       { label: 'Android', value: 'Android' },
       { label: 'Phone', value: 'Phone' },
+      { label: 'SSH', value: 'SSH' },
     ],
   };
 
@@ -290,13 +292,14 @@ export default function DevicePage() {
 
   // Scan settings modal
   const [scanSettingsOpen, setScanSettingsOpen] = useState(false);
-  const [scanBuiltin, setScanBuiltin] = useState<Record<string, { enabled: boolean; module: string }>>({
+  const [scanBuiltin, setScanBuiltin] = useState<Record<string, { enabled: boolean; module: string; port?: number }>>({
     adb: { enabled: true, module: '' },
     serial: { enabled: true, module: 'SerialLogging' },
     hkmc: { enabled: true, module: '' },
     dlt: { enabled: true, module: 'DLTLogging' },
     bench: { enabled: true, module: 'CCIC_BENCH' },
     vision_camera: { enabled: false, module: 'VisionCamera' },
+    ssh: { enabled: true, module: 'SSHManager', port: 22 },
   });
   const [scanCustom, setScanCustom] = useState<{ label: string; type: string; port: number; module: string; enabled: boolean }[]>([]);
   const [newCustomLabel, setNewCustomLabel] = useState('');
@@ -413,6 +416,7 @@ export default function DevicePage() {
       setScannedVision(res.data.vision_cameras || []);
       setScannedDlt(res.data.dlt_devices || []);
       setScannedSmartbench(res.data.smartbench_devices || []);
+      setScannedSsh(res.data.ssh_hosts || []);
       setScannedCustom(res.data.custom_results || []);
       setPcInterfaces(ifRes.data.interfaces || []);
     } catch {
@@ -916,7 +920,15 @@ export default function DevicePage() {
                         <Select
                           allowClear
                           value={deviceModel || undefined}
-                          onChange={(v) => setDeviceModel(v || '')}
+                          onChange={(v) => {
+                            const nextModel = v || '';
+                            setDeviceModel(nextModel);
+                            // SSH는 스캔 대상이 아니므로 수동 연결 탭으로 자동 전환
+                            if (nextModel === 'SSH') {
+                              setConnectType('ssh');
+                              setModalTabKey('manual');
+                            }
+                          }}
                           style={{ minWidth: 200 }}
                           placeholder="장비 모델 선택"
                           options={DEVICE_MODELS}
@@ -1181,6 +1193,44 @@ export default function DevicePage() {
                     </div>
                   )}
 
+                  {/* SSH 스캔 결과 — 인증 정보가 필요하므로 수동 연결 탭으로 prefill */}
+                  {scannedSsh.length > 0 && (
+                    <div>
+                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{t('device.detectedSsh')} ({scannedSsh.length})</div>
+                      <List
+                        size="small"
+                        bordered
+                        dataSource={scannedSsh}
+                        renderItem={(h) => (
+                          <List.Item
+                            actions={[
+                              <Button
+                                size="small"
+                                type="primary"
+                                onClick={() => {
+                                  // SSH는 인증이 필요하므로 수동 연결 탭으로 전환 + prefill
+                                  setConnectType('ssh');
+                                  setConnectAddress(h.ip);
+                                  setSshPort(h.port);
+                                  if (modalCategory === 'primary') {
+                                    setDeviceProject('General');
+                                    setDeviceModel('SSH');
+                                  }
+                                  setModalTabKey('manual');
+                                }}
+                              >{t('common.connect')}</Button>,
+                            ]}
+                          >
+                            <div>
+                              <Tag color="magenta">SSH</Tag>
+                              <strong>{h.ip}</strong>:{h.port}
+                            </div>
+                          </List.Item>
+                        )}
+                      />
+                    </div>
+                  )}
+
                   {/* 커스텀 스캔 결과 */}
                   {scannedCustom.map((group, gi) => {
                     if (group.hosts.length === 0) return null;
@@ -1225,7 +1275,7 @@ export default function DevicePage() {
                     );
                   })}
 
-                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && scannedBench.length === 0 && scannedVision.length === 0 && scannedDlt.length === 0 && scannedSmartbench.length === 0 && scannedCustom.every(g => g.hosts.length === 0) && !scanning && (
+                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && scannedBench.length === 0 && scannedVision.length === 0 && scannedDlt.length === 0 && scannedSmartbench.length === 0 && scannedSsh.length === 0 && scannedCustom.every(g => g.hosts.length === 0) && !scanning && (
                     <div style={{ color: '#666', textAlign: 'center', padding: 24 }}>
                       {t('device.noDevicesFound')}
                     </div>
@@ -1252,7 +1302,17 @@ export default function DevicePage() {
                         <Select
                           allowClear
                           value={deviceModel || undefined}
-                          onChange={(v) => setDeviceModel(v || '')}
+                          onChange={(v) => {
+                            const nextModel = v || '';
+                            setDeviceModel(nextModel);
+                            // SSH 모델 선택 시 연결 타입도 자동으로 SSH로 전환
+                            if (nextModel === 'SSH') {
+                              setConnectType('ssh');
+                            } else if (connectType === 'ssh') {
+                              // SSH 아닌 모델로 바꾸면 ADB로 되돌림
+                              setConnectType('adb');
+                            }
+                          }}
                           style={{ minWidth: 200, flex: 1 }}
                           placeholder="장비 모델 선택"
                           options={DEVICE_MODELS}
@@ -1646,6 +1706,7 @@ export default function DevicePage() {
               { key: 'dlt', label: 'DLT', proto: 'TCP', port: '3490' },
               { key: 'bench', label: 'Bench', proto: 'UDP', port: '25000' },
               { key: 'vision_camera', label: 'Vision Camera', proto: 'GigE', port: '-' },
+              { key: 'ssh', label: 'SSH', proto: 'TCP', port: '22' },
             ].map(item => {
               const v = scanBuiltin[item.key] || { enabled: true, module: '' };
               return (

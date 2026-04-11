@@ -36,6 +36,7 @@ _DEFAULT_SCAN_SETTINGS = {
         "dlt":            {"enabled": True,  "module": "DLTLogging"},
         "bench":          {"enabled": True,  "module": "CCIC_BENCH"},
         "vision_camera":  {"enabled": False, "module": "VisionCamera"},
+        "ssh":            {"enabled": True,  "module": "SSHManager", "port": 22},
     },
     # type: "tcp" | "udp"
     # [{"label": "MLP", "type": "tcp", "port": 5001, "module": "MLP", "enabled": true}, ...]
@@ -181,6 +182,10 @@ async def scan_ports():
         tasks["dlt_devices"] = asyncio.ensure_future(dm.scan_dlt())
     if _enabled("smartbench"):
         tasks["smartbench_devices"] = asyncio.ensure_future(dm.scan_smartbench())
+    if _enabled("ssh"):
+        ssh_entry = builtin.get("ssh", {}) if isinstance(builtin.get("ssh"), dict) else {}
+        ssh_port = int(ssh_entry.get("port", 22))
+        tasks["ssh_hosts"] = asyncio.ensure_future(dm.scan_ssh(ssh_port))
 
     # 커스텀 TCP/UDP 포트 스캔
     custom_tasks: list[tuple[str, asyncio.Task]] = []
@@ -211,6 +216,7 @@ async def scan_ports():
         "vision_cameras": [],
         "dlt_devices": [],
         "smartbench_devices": [],
+        "ssh_hosts": [],
         "custom_results": [],
     }
     for key, result in zip(all_keys, results):
