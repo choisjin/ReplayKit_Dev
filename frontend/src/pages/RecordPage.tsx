@@ -1723,8 +1723,23 @@ export default function RecordPage() {
     };
 
     if (recording) {
-      // During recording: also record to backend
-      setSteps((prev) => [...prev, waitStep]);
+      // During recording: 프론트엔드 상태에 삽입(afterIndex 있으면 지정 위치, 없으면 맨 뒤)
+      // + 백엔드에도 addStep 호출. 순서 차이는 저장 시점에 frontend state가 일괄 push됨.
+      if (afterIndex !== undefined) {
+        setSteps((prev) => {
+          const arr = [...prev];
+          const insertPos1Based = afterIndex + 2;
+          arr.splice(afterIndex + 1, 0, waitStep);
+          return arr.map((s, i) => ({
+            ...s,
+            id: i + 1,
+            on_pass_goto: s.on_pass_goto != null && s.on_pass_goto !== -1 && s.on_pass_goto >= insertPos1Based ? s.on_pass_goto + 1 : s.on_pass_goto,
+            on_fail_goto: s.on_fail_goto != null && s.on_fail_goto !== -1 && s.on_fail_goto >= insertPos1Based ? s.on_fail_goto + 1 : s.on_fail_goto,
+          }));
+        });
+      } else {
+        setSteps((prev) => [...prev, waitStep]);
+      }
       pendingStepsRef.current += 1;
       setHasPendingSteps(true);
       try {
@@ -1736,7 +1751,8 @@ export default function RecordPage() {
           delay_after_ms: 0,
           skip_execute: true,
         });
-        setSteps((prev) => prev.map(s => s === waitStep ? res.data.step : s));
+        // 백엔드 응답으로 교체하되 프론트엔드가 재번호한 id는 유지
+        setSteps((prev) => prev.map(s => s === waitStep ? { ...res.data.step, id: s.id } : s));
       } catch (e: any) {
         message.error(e.response?.data?.detail || t('record.waitAddFailed'));
         setSteps((prev) => prev.filter(s => s !== waitStep));
