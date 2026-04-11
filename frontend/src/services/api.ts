@@ -73,6 +73,7 @@ export const scenarioApi = {
   testStep: (scenarioName: string, stepIndex: number, stepData?: any) =>
     api.post('/scenario/test-step', { scenario_name: scenarioName, step_index: stepIndex, step_data: stepData }),
   getCmdResult: (taskId: string) => api.get(`/scenario/cmd-result/${taskId}`),
+  cancelCmdTask: (taskId: string) => api.delete(`/scenario/cmd-result/${taskId}`),
   cleanTestScreenshots: (scenarioName: string) => api.post(`/scenario/clean-test-screenshots?scenario_name=${encodeURIComponent(scenarioName)}`),
   // Folders
   getFolders: () => api.get('/scenario/folders'),

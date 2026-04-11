@@ -112,8 +112,26 @@ def create_streaming_task(command: str) -> str:
             "cmd": command,
             "expected": None,
             "match_mode": "contains",
+            "cancel_requested": False,
         }
     return task_id
+
+
+def request_cancel(task_id: str) -> bool:
+    """스트리밍 태스크에 취소 요청 플래그를 설정. 리더 스레드가 주기적으로 확인하여 종료."""
+    with _lock:
+        task = _bg_tasks.get(task_id)
+        if task is None:
+            return False
+        task["cancel_requested"] = True
+        return True
+
+
+def is_cancel_requested(task_id: str) -> bool:
+    """태스크 취소 요청 여부 확인."""
+    with _lock:
+        task = _bg_tasks.get(task_id)
+        return bool(task and task.get("cancel_requested"))
 
 
 def append_stdout(task_id: str, chunk: str) -> None:

@@ -166,8 +166,19 @@ export default function ResultsPage() {
   const [groupDetail, setGroupDetail] = useState<ResultDetail[] | null>(null);
   const [groupDetailCycle, setGroupDetailCycle] = useState(1);
 
-  // 백그라운드 CMD 폴링
+  // 백그라운드 CMD/SSH 폴링 (task_id도 함께 추적해서 취소 가능)
   const bgPollTimers = useRef<ReturnType<typeof setInterval>[]>([]);
+  const bgPollTaskIds = useRef<string[]>([]);
+  const stopAllResultBgPolls = (cancelBackend: boolean = true) => {
+    bgPollTimers.current.forEach(t => clearInterval(t));
+    bgPollTimers.current = [];
+    if (cancelBackend) {
+      bgPollTaskIds.current.forEach(tid => {
+        scenarioApi.cancelCmdTask(tid).catch(() => {});
+      });
+    }
+    bgPollTaskIds.current = [];
+  };
 
   // 선택 삭제 + 필터
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
@@ -432,9 +443,8 @@ export default function ResultsPage() {
 
   // 결과 상세 열릴 때 BG_TASK 마커 감지 → 폴링
   useEffect(() => {
-    // 이전 폴링 정리
-    bgPollTimers.current.forEach(t => clearInterval(t));
-    bgPollTimers.current = [];
+    // 이전 폴링 정리 (detail 변경이므로 backend cancel은 안 함 — 이전 detail의 태스크는 그대로 둠)
+    stopAllResultBgPolls(false);
 
     if (!detail || !detailFilename) return;
 
@@ -508,11 +518,11 @@ export default function ResultsPage() {
         }
       }, 1000);
       bgPollTimers.current.push(poll);
+      bgPollTaskIds.current.push(taskId);
     });
 
     return () => {
-      bgPollTimers.current.forEach(t => clearInterval(t));
-      bgPollTimers.current = [];
+      stopAllResultBgPolls();
     };
   }, [detail?.scenario_name, detailFilename, detailVisible]);
 

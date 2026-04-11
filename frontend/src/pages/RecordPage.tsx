@@ -351,6 +351,36 @@ export default function RecordPage() {
   const [testResultModalOpen, setTestResultModalOpen] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
   const [testingStepIndex, setTestingStepIndex] = useState<number | null>(null);
+  // 활성 bg 폴링 refs (모달 닫힘 시 정리용)
+  const activeBgPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeBgTaskIdRef = useRef<string | null>(null);
+
+  const stopActiveBgPoll = useCallback((cancelBackend: boolean = true) => {
+    if (activeBgPollRef.current) {
+      clearInterval(activeBgPollRef.current);
+      activeBgPollRef.current = null;
+    }
+    const tid = activeBgTaskIdRef.current;
+    if (tid && cancelBackend) {
+      scenarioApi.cancelCmdTask(tid).catch(() => {});
+    }
+    activeBgTaskIdRef.current = null;
+  }, []);
+
+  // 컴포넌트 언마운트 시 활성 폴링 정리
+  useEffect(() => {
+    return () => {
+      if (activeBgPollRef.current) {
+        clearInterval(activeBgPollRef.current);
+        activeBgPollRef.current = null;
+      }
+      const tid = activeBgTaskIdRef.current;
+      if (tid) {
+        scenarioApi.cancelCmdTask(tid).catch(() => {});
+        activeBgTaskIdRef.current = null;
+      }
+    };
+  }, []);
 
   // Step command edit modal
   const [editStepIndex, setEditStepIndex] = useState<number | null>(null);
@@ -734,6 +764,9 @@ export default function RecordPage() {
         const taskId = bgMatch[1];
         result.message = `${t('record.cmdRunning')}...`;
         setTestResult({ ...result });
+        // 이전 폴링이 남아있으면 먼저 정리
+        stopActiveBgPoll(false);
+        activeBgTaskIdRef.current = taskId;
         const poll = setInterval(async () => {
           try {
             const r = await scenarioApi.getCmdResult(taskId);
@@ -745,6 +778,10 @@ export default function RecordPage() {
               }
             } else {
               clearInterval(poll);
+              if (activeBgPollRef.current === poll) {
+                activeBgPollRef.current = null;
+                activeBgTaskIdRef.current = null;
+              }
               // 서버가 계산한 final_message + final_status 사용
               const finalMsg = r.data.final_message ?? r.data.stdout ?? '';
               const finalStatus = r.data.final_status;
@@ -754,8 +791,15 @@ export default function RecordPage() {
                 status: finalStatus ?? prev.status,
               }));
             }
-          } catch { clearInterval(poll); }
+          } catch {
+            clearInterval(poll);
+            if (activeBgPollRef.current === poll) {
+              activeBgPollRef.current = null;
+              activeBgTaskIdRef.current = null;
+            }
+          }
         }, 500);
+        activeBgPollRef.current = poll;
       }
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('record.stepTestFailed'));
@@ -3457,9 +3501,9 @@ export default function RecordPage() {
       <Modal
         title={t('record.stepTestResult')}
         open={testResultModalOpen}
-        onCancel={() => { setTestResultModalOpen(false); setTestResult(null); scenarioApi.cleanTestScreenshots(scenarioName).catch(() => {}); }}
+        onCancel={() => { stopActiveBgPoll(); setTestResultModalOpen(false); setTestResult(null); scenarioApi.cleanTestScreenshots(scenarioName).catch(() => {}); }}
         width={800}
-        footer={<Button onClick={() => { setTestResultModalOpen(false); setTestResult(null); scenarioApi.cleanTestScreenshots(scenarioName).catch(() => {}); }}>{t('common.close')}</Button>}
+        footer={<Button onClick={() => { stopActiveBgPoll(); setTestResultModalOpen(false); setTestResult(null); scenarioApi.cleanTestScreenshots(scenarioName).catch(() => {}); }}>{t('common.close')}</Button>}
       >
         {testResult && (
           <div>

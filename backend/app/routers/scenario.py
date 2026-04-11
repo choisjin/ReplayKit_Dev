@@ -791,6 +791,16 @@ async def test_step(req: TestStepRequest):
     return result.model_dump()
 
 
+@router.delete("/cmd-result/{task_id}")
+async def cancel_cmd_task(task_id: str):
+    """백그라운드 태스크 취소 요청. SSH 스트리밍 reader가 다음 tick에 채널을 닫고 종료한다."""
+    from ..services import bg_task_store
+    ok = bg_task_store.request_cancel(task_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"cancelled": True, "task_id": task_id}
+
+
 @router.get("/cmd-result/{task_id}")
 async def get_cmd_result(task_id: str):
     """백그라운드 CMD 결과 폴링.

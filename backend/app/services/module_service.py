@@ -568,8 +568,12 @@ def _execute_sync(module_name: str, function_name: str, args: dict,
         task_id = bg_task_store.create_streaming_task(command)
 
         def _stream_reader(cmd: str, tid: str, ssh_client):
-            """백그라운드 스레드에서 paramiko 채널을 폴링하며 chunk를 bg task에 append."""
-            import select as _select
+            """백그라운드 스레드에서 paramiko 채널을 폴링하며 chunk를 bg task에 append.
+
+            bg_task_store에 cancel_requested 플래그가 설정되면 즉시 채널을 닫고 종료한다.
+            """
+            import time as _time
+            channel = None
             try:
                 transport = ssh_client.get_transport()
                 if transport is None or not transport.is_active():
@@ -602,6 +606,17 @@ def _execute_sync(module_name: str, function_name: str, args: dict,
                     return buf.decode(errors="replace"), bytearray()
 
                 while True:
+                    # 취소 요청 확인
+                    if bg_task_store.is_cancel_requested(tid):
+                        logger.info("SSH stream task %s cancel requested — closing channel", tid)
+                        try:
+                            channel.close()
+                        except Exception:
+                            pass
+                        bg_task_store.append_stderr(tid, "\n[cancelled by user]")
+                        bg_task_store.mark_done(tid, status="cancelled", rc=130)
+                        return
+
                     if channel.recv_ready():
                         chunk = channel.recv(4096)
                         if chunk:
@@ -618,7 +633,6 @@ def _execute_sync(module_name: str, function_name: str, args: dict,
                                 bg_task_store.append_stderr(tid, text)
                     if channel.exit_status_ready() and not channel.recv_ready() and not channel.recv_stderr_ready():
                         break
-                    import time as _time
                     _time.sleep(0.05)
 
                 # flush 잔여 버퍼
@@ -632,11 +646,19 @@ def _execute_sync(module_name: str, function_name: str, args: dict,
                         bg_task_store.append_stderr(tid, text)
 
                 rc = channel.recv_exit_status()
-                channel.close()
+                try:
+                    channel.close()
+                except Exception:
+                    pass
                 bg_task_store.mark_done(tid, status="done", rc=rc)
             except Exception as e:
                 logger.exception("SSH stream reader error for %s", tid)
                 bg_task_store.append_stderr(tid, f"\n[stream error] {e}")
+                try:
+                    if channel is not None:
+                        channel.close()
+                except Exception:
+                    pass
                 bg_task_store.mark_done(tid, status="error", rc=1)
 
         import threading

@@ -191,11 +191,21 @@ export default function ScenarioPage() {
   const setRepeatCount = (name: string, val: number) =>
     setRepeatCounts((prev) => ({ ...prev, [name]: val }));
 
-  // 백그라운드 CMD 폴링
+  // 백그라운드 CMD/SSH 폴링 — 활성 task_id를 함께 추적해서 취소 가능
   const bgPollTimers = useRef<ReturnType<typeof setInterval>[]>([]);
-  const startBgPolling = (results: StepResultData[]) => {
+  const bgPollTaskIds = useRef<string[]>([]);
+  const stopAllBgPolls = (cancelBackend: boolean = true) => {
     bgPollTimers.current.forEach(t => clearInterval(t));
     bgPollTimers.current = [];
+    if (cancelBackend) {
+      bgPollTaskIds.current.forEach(tid => {
+        scenarioApi.cancelCmdTask(tid).catch(() => {});
+      });
+    }
+    bgPollTaskIds.current = [];
+  };
+  const startBgPolling = (results: StepResultData[]) => {
+    stopAllBgPolls(false);
     results.forEach((sr, idx) => {
       const m = sr.message?.match?.(/\[BG_TASK:(bg_\d+)\]/);
       if (!m) return;
@@ -241,6 +251,7 @@ export default function ScenarioPage() {
         }
       }, 500);
       bgPollTimers.current.push(poll);
+      bgPollTaskIds.current.push(taskId);
     });
   };
 
@@ -401,7 +412,7 @@ export default function ScenarioPage() {
       }
     };
     window.addEventListener('tab-change', onTabChange);
-    return () => { if (wsRef.current) wsRef.current.close(); window.removeEventListener('tab-change', onTabChange); bgPollTimers.current.forEach(t => clearInterval(t)); };
+    return () => { if (wsRef.current) wsRef.current.close(); window.removeEventListener('tab-change', onTabChange); stopAllBgPolls(); };
   }, []);
 
   // --- Scenario CRUD ---
