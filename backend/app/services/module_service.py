@@ -525,6 +525,30 @@ def _execute_sync(module_name: str, function_name: str, args: dict,
                   shared_serial_conn=None, ssh_credentials: Optional[dict] = None) -> Any:
     """Execute a module function synchronously."""
     instance = _get_instance(module_name, constructor_kwargs, shared_serial_conn, ssh_credentials)
+
+    # SSHManager.send_command 특수 처리: SSHManager가 UTF-8로 강제 디코딩하면서
+    # Windows(CP949) 등 비-UTF8 출력이 깨지므로, paramiko를 직접 호출해서 raw bytes를
+    # 다중 인코딩 fallback으로 처리한다.
+    if module_name == "SSHManager" and function_name == "send_command":
+        client = getattr(instance, "ssh_client", None)
+        if client is None:
+            raise RuntimeError("SSH client not connected")
+        command = args.get("command", "")
+        try:
+            stdin, stdout, stderr = client.exec_command(command, timeout=60)
+            out_bytes = stdout.read()
+            err_bytes = stderr.read()
+        except Exception as e:
+            raise RuntimeError(f"SSH exec failed: {e}") from e
+        combined = out_bytes + (b"\n" + err_bytes if err_bytes else b"")
+        # 인코딩 fallback: utf-8 → cp949 → euc-kr → cp437 (Windows 기본)
+        for enc in ("utf-8", "cp949", "euc-kr", "cp437"):
+            try:
+                return combined.decode(enc).strip() or "(no output)"
+            except UnicodeDecodeError:
+                continue
+        return combined.decode(errors="replace").strip() or "(no output)"
+
     func = getattr(instance, function_name, None)
     if func is None:
         raise ValueError(f"Function '{function_name}' not found in {module_name}")
