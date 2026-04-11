@@ -917,31 +917,26 @@ class PlaybackService:
             # Pass device connection info as constructor kwargs
             ctor_kwargs = None
             shared_conn = None
-            shared_ssh_client = None
+            ssh_credentials = None
             if real_id:
                 dev = self.dm.get_device(real_id)
                 if dev:
                     ctor_kwargs = _build_ctor_kwargs(dev)
                     shared_conn = self.dm.get_serial_conn(real_id)
-                    # SSH 디바이스: device_manager가 보유한 paramiko 클라이언트 주입
+                    # SSH 디바이스: 저장된 자격증명을 SSHManager.create_ssh_client에 전달
                     if dev.type == "ssh":
-                        ssh_obj = self.dm.get_ssh_conn(real_id)
-                        # 연결이 없거나 끊어진 경우 저장된 자격증명으로 lazy 재연결
-                        if not ssh_obj or not ssh_obj.is_alive():
-                            logger.info("SSH connection missing/stale for %s — reconnecting", real_id)
-                            try:
-                                msg = await self.dm.connect_device_by_id(real_id)
-                                logger.info("SSH lazy reconnect: %s", msg)
-                            except Exception as e:
-                                logger.warning("SSH lazy reconnect failed for %s: %s", real_id, e)
-                            ssh_obj = self.dm.get_ssh_conn(real_id)
-                        if ssh_obj:
-                            shared_ssh_client = ssh_obj.get_client()
+                        ssh_credentials = {
+                            "host": dev.info.get("host", dev.address),
+                            "port": int(dev.info.get("port", 22)),
+                            "username": dev.info.get("username", ""),
+                            "password": dev.info.get("password", ""),
+                            "key_file_path": dev.info.get("key_file_path", ""),
+                        }
             logger.info("Module exec: %s.%s device=%s ctor=%s shared_conn=%s ssh=%s",
                         module_name, func_name, real_id, ctor_kwargs,
-                        shared_conn is not None, shared_ssh_client is not None)
+                        shared_conn is not None, ssh_credentials is not None)
             result = await execute_module_function(
-                module_name, func_name, func_args, ctor_kwargs, shared_conn, shared_ssh_client,
+                module_name, func_name, func_args, ctor_kwargs, shared_conn, ssh_credentials,
             )
             self._last_module_result = result
         elif step.type == StepType.SERIAL_COMMAND:

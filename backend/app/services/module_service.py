@@ -356,17 +356,17 @@ def _is_connected(instance) -> bool:
 
 
 def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
-                  shared_serial_conn=None, shared_ssh_client=None) -> Any:
+                  shared_serial_conn=None, ssh_credentials: Optional[dict] = None) -> Any:
     """Get or create a singleton instance of the module class.
 
     Args:
         shared_serial_conn: device_manager가 이미 열어둔 Serial 객체.
             전달되면 모듈의 Connect()를 호출하지 않고 _conn에 직접 주입.
-        shared_ssh_client: device_manager가 이미 열어둔 paramiko SSHClient.
-            전달되면 SSHManager의 ssh_client에 주입하고, 매번 fresh instance 생성.
+        ssh_credentials: SSH 디바이스의 자격증명 {host, port, username, password, key_file_path}.
+            전달되면 SSHManager 인스턴스에 instance.create_ssh_client()로 정식 연결.
     """
-    # SSHManager는 디바이스별로 다른 ssh_client를 가질 수 있으므로 매 호출마다 캐시 무효화
-    # (매번 주입할 shared_ssh_client가 달라질 수 있고, 끊긴 client를 재사용하면 안 됨)
+    # SSHManager는 디바이스별로 다른 자격증명을 가질 수 있으므로 매 호출마다 캐시 무효화
+    # (SSHManager 내부 상태 때문에 create_ssh_client를 새로 호출해야 안정적)
     if module_name == "SSHManager":
         _instances.pop(module_name, None)
         _auto_connected.discard(module_name)
@@ -499,24 +499,32 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
         else:
             _instances[module_name] = cls()
 
-    # SSHManager: 디바이스 매니저가 보유한 paramiko 클라이언트를 주입 (매 호출마다)
-    if module_name == "SSHManager":
+    # SSHManager: 디바이스 자격증명으로 공식 create_ssh_client 호출 (매 호출마다)
+    if module_name == "SSHManager" and ssh_credentials is not None:
         instance = _instances[module_name]
-        instance.ssh_client = shared_ssh_client  # None이면 send_command 호출 시 내부에서 fail
-        if shared_ssh_client is not None:
+        host = ssh_credentials.get("host", "")
+        username = ssh_credentials.get("username", "")
+        password = ssh_credentials.get("password", "")
+        key_file = ssh_credentials.get("key_file_path", "") or None
+        try:
+            if key_file:
+                instance.create_ssh_client(host, username, password, key_file)
+            else:
+                instance.create_ssh_client(host, username, password)
             _auto_connected.add(module_name)
-            logger.info("Injected shared paramiko client into SSHManager.ssh_client")
-        else:
-            logger.warning("SSHManager instance created WITHOUT shared_ssh_client — calls will fail")
+            logger.info("SSHManager.create_ssh_client(%s@%s) OK", username, host)
+        except Exception as e:
+            logger.error("SSHManager.create_ssh_client(%s@%s) failed: %s", username, host, e)
+            raise
 
     return _instances[module_name]
 
 
 def _execute_sync(module_name: str, function_name: str, args: dict,
                   constructor_kwargs: Optional[dict] = None,
-                  shared_serial_conn=None, shared_ssh_client=None) -> Any:
+                  shared_serial_conn=None, ssh_credentials: Optional[dict] = None) -> Any:
     """Execute a module function synchronously."""
-    instance = _get_instance(module_name, constructor_kwargs, shared_serial_conn, shared_ssh_client)
+    instance = _get_instance(module_name, constructor_kwargs, shared_serial_conn, ssh_credentials)
     func = getattr(instance, function_name, None)
     if func is None:
         raise ValueError(f"Function '{function_name}' not found in {module_name}")
@@ -600,7 +608,7 @@ def _redirect_path_args_to_run_dir(call_args: dict, module_name: str, function_n
 async def execute_module_function(
     module_name: str, function_name: str, args: dict,
     constructor_kwargs: Optional[dict] = None,
-    shared_serial_conn=None, shared_ssh_client=None,
+    shared_serial_conn=None, ssh_credentials: Optional[dict] = None,
 ) -> str:
     """Execute a module function asynchronously (runs in thread pool)."""
     loop = asyncio.get_event_loop()
@@ -608,7 +616,7 @@ async def execute_module_function(
         result = await loop.run_in_executor(
             None,
             functools.partial(_execute_sync, module_name, function_name, args,
-                              constructor_kwargs, shared_serial_conn, shared_ssh_client),
+                              constructor_kwargs, shared_serial_conn, ssh_credentials),
         )
         return str(result) if result is not None else "OK"
     except Exception as e:
