@@ -937,202 +937,223 @@ export default function DevicePage() {
                     )}
                   </Space>
 
-                  {modalCategory === 'primary' && scannedAdb.length > 0 && (
-                    <>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8 }}>{t('device.detectedAdb')}</div>
-                      <List
-                        size="small"
-                        dataSource={scannedAdb}
-                        renderItem={(d) => (
-                          <List.Item actions={[
-                            <Button size="small" type="primary" loading={connecting} onClick={() => handleAddAdb(d.serial)}>{t('common.add')}</Button>
-                          ]}>
-                            <Tag color="green">{d.serial}</Tag> {d.model} <Tag>{d.status}</Tag>
-                          </List.Item>
-                        )}
-                      />
-                    </>
-                  )}
+                  {(() => {
+                    // 카테고리별 tab 구성 — 결과 있는 것만 표시
+                    const PAGE_SIZE = 5;
+                    const scanTabs: { key: string; label: React.ReactNode; children: React.ReactNode }[] = [];
 
-                  {scannedSerial.length > 0 && (
-                    <>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{t('device.detectedSerial')}</div>
-                      {modalCategory === 'auxiliary' && (
-                        <Space style={{ marginBottom: 8, width: '100%' }} direction="vertical">
-                          {modules.length > 0 && (
-                            <div>
-                              <span style={{ marginRight: 8, color: '#888', fontSize: 12 }}>{`${t('device.module')}:`}</span>
-                              <Select
-                                allowClear
-                                placeholder={t('device.moduleSelect')}
-                                value={scanSelectedModule}
-                                onChange={setScanSelectedModule}
-                                style={{ width: 280 }}
-                                options={modules.map(m => ({ label: m.label, value: m.name }))}
-                              />
-                            </div>
-                          )}
-                          <div>
-                            <span style={{ marginRight: 8, color: '#888', fontSize: 12 }}>Baudrate:</span>
-                            <Select
-                              value={baudrate}
-                              onChange={setBaudrate}
-                              style={{ width: 150 }}
-                              options={baudrateOptions.map(b => ({ label: `${b}`, value: b }))}
-                            />
-                          </div>
-                        </Space>
-                      )}
-                      <Table
-                        columns={serialColumns}
-                        dataSource={scannedSerial}
-                        rowKey="port"
-                        size="small"
-                        pagination={false}
-                      />
-                    </>
-                  )}
-
-                  {modalCategory === 'primary' && scannedHkmc.length > 0 && (
-                    <>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{t('device.detectedHkmc')}</div>
-                      <List
-                        size="small"
-                        dataSource={scannedHkmc}
-                        renderItem={(d) => (
-                          <List.Item actions={[
-                            <Button size="small" type="primary" loading={connecting} onClick={() => handleAddHkmc(d.ip, d.port)}>{t('common.add')}</Button>
-                          ]}>
-                            <Tag color="volcano">HKMC</Tag> <Tag color="blue">{d.ip}</Tag> <span style={{ color: '#888' }}>TCP: {d.port}</span>
-                          </List.Item>
-                        )}
-                      />
-                    </>
-                  )}
-
-                  {modalCategory === 'auxiliary' && scannedBench.length > 0 && (
-                    <>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{t('device.detectedBench')}</div>
-                      {modules.length > 0 && (
-                        <div style={{ marginBottom: 8 }}>
-                          <span style={{ marginRight: 8, color: '#888', fontSize: 12 }}>{`${t('device.module')}:`}</span>
-                          <Select
-                            placeholder={t('device.moduleSelect')}
-                            value={scanSelectedModule}
-                            onChange={setScanSelectedModule}
-                            style={{ width: 280 }}
-                            defaultValue="CCIC_BENCH"
-                            options={modules.filter(m => m.connect_type === 'socket').map(m => ({ label: m.label, value: m.name }))}
+                    if (modalCategory === 'primary' && scannedAdb.length > 0) {
+                      scanTabs.push({
+                        key: 'adb',
+                        label: <span>{t('device.detectedAdb')} <Tag style={{ marginLeft: 4 }}>{scannedAdb.length}</Tag></span>,
+                        children: (
+                          <List
+                            size="small"
+                            dataSource={scannedAdb}
+                            pagination={scannedAdb.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                            renderItem={(d) => (
+                              <List.Item actions={[
+                                <Button size="small" type="primary" loading={connecting} onClick={() => handleAddAdb(d.serial)}>{t('common.add')}</Button>
+                              ]}>
+                                <Tag color="green">{d.serial}</Tag> {d.model} <Tag>{d.status}</Tag>
+                              </List.Item>
+                            )}
                           />
-                        </div>
-                      )}
-                      <List
-                        size="small"
-                        dataSource={scannedBench}
-                        renderItem={(d) => (
-                          <List.Item actions={[
-                            <Button size="small" type="primary" loading={connecting} onClick={() => handleAddBench(d.ip, d.port)}>{t('common.add')}</Button>
-                          ]}>
-                            {d.verified
-                              ? <Tag color="green">Bench</Tag>
-                              : <Tag color="default">Host</Tag>
-                            }
-                            <Tag color="blue">{d.ip}</Tag>
-                            <span style={{ color: '#888' }}>UDP: {d.port}</span>
-                            {d.verified && <Tag color="green" style={{ marginLeft: 4 }}>응답확인</Tag>}
-                          </List.Item>
-                        )}
-                      />
-                    </>
-                  )}
+                        ),
+                      });
+                    }
 
-                  {modalCategory === 'primary' && scannedVision.length > 0 && (
-                    <>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{t('device.detectedVision')}</div>
-                      {pcInterfaces.length > 0 && (
-                        <div style={{ marginBottom: 8, fontSize: 12, color: '#888' }}>
-                          {t('device.pcInterfaces')}: {pcInterfaces.map(i => `${i.ip}/${i.prefix} (${i.name})`).join(' | ')}
-                        </div>
-                      )}
-                      <List
-                        size="small"
-                        dataSource={scannedVision}
-                        renderItem={(cam) => (
-                          <List.Item actions={[
-                            <Space size={4}>
-                              {cam.mac && (
-                                <Button size="small" onClick={() => {
-                                  setForceIpModal({ mac: cam.mac, currentIp: cam.ip || '' });
-                                  // PC 인터페이스 서브넷에 맞는 IP 자동 추천
-                                  const iface = pcInterfaces[0];
-                                  if (iface) {
-                                    const parts = iface.ip.split('.');
-                                    const camParts = (cam.ip || '').split('.');
-                                    // 같은 서브넷인지 확인 (prefix 기준)
-                                    const prefixLen = iface.prefix || 24;
-                                    const sameSubnet = prefixLen >= 24
-                                      && parts[0] === camParts[0]
-                                      && parts[1] === camParts[1]
-                                      && parts[2] === camParts[2];
-                                    if (sameSubnet) {
-                                      // 이미 같은 서브넷 — 현재 값 유지
-                                      setForceIpAddr(cam.ip || '');
-                                      setForceIpSubnet(cam.subnet || '255.255.255.0');
-                                    } else {
-                                      // 다른 서브넷 — PC와 같은 서브넷의 IP 추천
-                                      const lastOctet = parseInt(parts[3]) < 200 ? parseInt(parts[3]) + 100 : parseInt(parts[3]) - 100;
-                                      setForceIpAddr(`${parts[0]}.${parts[1]}.${parts[2]}.${Math.min(Math.max(lastOctet, 2), 254)}`);
-                                      const masks: Record<number, string> = { 8: '255.0.0.0', 16: '255.255.0.0', 24: '255.255.255.0' };
-                                      setForceIpSubnet(masks[prefixLen] || '255.255.255.0');
-                                    }
-                                  } else {
-                                    setForceIpAddr(cam.ip || '');
-                                    setForceIpSubnet(cam.subnet || '255.255.255.0');
-                                  }
-                                  setForceIpGateway(cam.gateway || '0.0.0.0');
-                                }}>{t('device.visionForceIp')}</Button>
+                    if (scannedSerial.length > 0) {
+                      scanTabs.push({
+                        key: 'serial',
+                        label: <span>{t('device.detectedSerial')} <Tag style={{ marginLeft: 4 }}>{scannedSerial.length}</Tag></span>,
+                        children: (
+                          <>
+                            {modalCategory === 'auxiliary' && (
+                              <Space style={{ marginBottom: 8, width: '100%' }} direction="vertical">
+                                {modules.length > 0 && (
+                                  <div>
+                                    <span style={{ marginRight: 8, color: '#888', fontSize: 12 }}>{`${t('device.module')}:`}</span>
+                                    <Select
+                                      allowClear
+                                      placeholder={t('device.moduleSelect')}
+                                      value={scanSelectedModule}
+                                      onChange={setScanSelectedModule}
+                                      style={{ width: 280 }}
+                                      options={modules.map(m => ({ label: m.label, value: m.name }))}
+                                    />
+                                  </div>
+                                )}
+                                <div>
+                                  <span style={{ marginRight: 8, color: '#888', fontSize: 12 }}>Baudrate:</span>
+                                  <Select
+                                    value={baudrate}
+                                    onChange={setBaudrate}
+                                    style={{ width: 150 }}
+                                    options={baudrateOptions.map(b => ({ label: `${b}`, value: b }))}
+                                  />
+                                </div>
+                              </Space>
+                            )}
+                            <Table
+                              columns={serialColumns}
+                              dataSource={scannedSerial}
+                              rowKey="port"
+                              size="small"
+                              pagination={scannedSerial.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                            />
+                          </>
+                        ),
+                      });
+                    }
+
+                    if (modalCategory === 'primary' && scannedHkmc.length > 0) {
+                      scanTabs.push({
+                        key: 'hkmc',
+                        label: <span>{t('device.detectedHkmc')} <Tag style={{ marginLeft: 4 }}>{scannedHkmc.length}</Tag></span>,
+                        children: (
+                          <List
+                            size="small"
+                            dataSource={scannedHkmc}
+                            pagination={scannedHkmc.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                            renderItem={(d) => (
+                              <List.Item actions={[
+                                <Button size="small" type="primary" loading={connecting} onClick={() => handleAddHkmc(d.ip, d.port)}>{t('common.add')}</Button>
+                              ]}>
+                                <Tag color="volcano">HKMC</Tag> <Tag color="blue">{d.ip}</Tag> <span style={{ color: '#888' }}>TCP: {d.port}</span>
+                              </List.Item>
+                            )}
+                          />
+                        ),
+                      });
+                    }
+
+                    if (modalCategory === 'auxiliary' && scannedBench.length > 0) {
+                      scanTabs.push({
+                        key: 'bench',
+                        label: <span>{t('device.detectedBench')} <Tag style={{ marginLeft: 4 }}>{scannedBench.length}</Tag></span>,
+                        children: (
+                          <>
+                            {modules.length > 0 && (
+                              <div style={{ marginBottom: 8 }}>
+                                <span style={{ marginRight: 8, color: '#888', fontSize: 12 }}>{`${t('device.module')}:`}</span>
+                                <Select
+                                  placeholder={t('device.moduleSelect')}
+                                  value={scanSelectedModule}
+                                  onChange={setScanSelectedModule}
+                                  style={{ width: 280 }}
+                                  defaultValue="CCIC_BENCH"
+                                  options={modules.filter(m => m.connect_type === 'socket').map(m => ({ label: m.label, value: m.name }))}
+                                />
+                              </div>
+                            )}
+                            <List
+                              size="small"
+                              dataSource={scannedBench}
+                              pagination={scannedBench.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                              renderItem={(d) => (
+                                <List.Item actions={[
+                                  <Button size="small" type="primary" loading={connecting} onClick={() => handleAddBench(d.ip, d.port)}>{t('common.add')}</Button>
+                                ]}>
+                                  {d.verified ? <Tag color="green">Bench</Tag> : <Tag color="default">Host</Tag>}
+                                  <Tag color="blue">{d.ip}</Tag>
+                                  <span style={{ color: '#888' }}>UDP: {d.port}</span>
+                                  {d.verified && <Tag color="green" style={{ marginLeft: 4 }}>응답확인</Tag>}
+                                </List.Item>
                               )}
-                              <Button size="small" type="primary" loading={connecting} onClick={() => {
-                                setConnectType('vision_camera');
-                                setVcMac(cam.mac);
-                                setVcModel(cam.model || '');
-                                setVcSerial(cam.serial || '');
-                                setConnectAddress(cam.ip || '');
-                                setModalTabKey('manual');
-                              }}>{t('common.connect')}</Button>
-                            </Space>
-                          ]}>
-                            <div>
-                              <Tag color="magenta">VisionCam</Tag>
-                              {cam.model && <span style={{ marginRight: 8, fontWeight: 500 }}>{cam.model}</span>}
-                              {cam.vendor && <span style={{ color: '#888', marginRight: 8 }}>{cam.vendor}</span>}
-                              <br />
-                              {cam.mac && <Tag color="blue">MAC: {cam.mac}</Tag>}
-                              {cam.ip ? <Tag color="cyan">IP: {cam.ip}</Tag> : <Tag color="orange">IP: unknown</Tag>}
-                              {cam.subnet && <Tag>/{cam.subnet}</Tag>}
-                            </div>
-                          </List.Item>
-                        )}
-                      />
-                    </>
-                  )}
+                            />
+                          </>
+                        ),
+                      });
+                    }
 
-                  {scannedDlt.length > 0 && (() => {
-                    const dltModule = (scanBuiltin.dlt as any)?.module || 'DLTLogging';
-                    return (
-                    <>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{t('dlt.detectedDlt')}</div>
-                      <List
-                        size="small"
-                        bordered
-                        dataSource={scannedDlt}
-                        renderItem={(d) => (
-                          <List.Item
-                            actions={[
-                              <Button
-                                size="small"
-                                type="primary"
-                                onClick={async () => {
+                    if (modalCategory === 'primary' && scannedVision.length > 0) {
+                      scanTabs.push({
+                        key: 'vision',
+                        label: <span>{t('device.detectedVision')} <Tag style={{ marginLeft: 4 }}>{scannedVision.length}</Tag></span>,
+                        children: (
+                          <>
+                            {pcInterfaces.length > 0 && (
+                              <div style={{ marginBottom: 8, fontSize: 12, color: '#888' }}>
+                                {t('device.pcInterfaces')}: {pcInterfaces.map(i => `${i.ip}/${i.prefix} (${i.name})`).join(' | ')}
+                              </div>
+                            )}
+                            <List
+                              size="small"
+                              dataSource={scannedVision}
+                              pagination={scannedVision.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                              renderItem={(cam) => (
+                                <List.Item actions={[
+                                  <Space size={4}>
+                                    {cam.mac && (
+                                      <Button size="small" onClick={() => {
+                                        setForceIpModal({ mac: cam.mac, currentIp: cam.ip || '' });
+                                        const iface = pcInterfaces[0];
+                                        if (iface) {
+                                          const parts = iface.ip.split('.');
+                                          const camParts = (cam.ip || '').split('.');
+                                          const prefixLen = iface.prefix || 24;
+                                          const sameSubnet = prefixLen >= 24
+                                            && parts[0] === camParts[0]
+                                            && parts[1] === camParts[1]
+                                            && parts[2] === camParts[2];
+                                          if (sameSubnet) {
+                                            setForceIpAddr(cam.ip || '');
+                                            setForceIpSubnet(cam.subnet || '255.255.255.0');
+                                          } else {
+                                            const lastOctet = parseInt(parts[3]) < 200 ? parseInt(parts[3]) + 100 : parseInt(parts[3]) - 100;
+                                            setForceIpAddr(`${parts[0]}.${parts[1]}.${parts[2]}.${Math.min(Math.max(lastOctet, 2), 254)}`);
+                                            const masks: Record<number, string> = { 8: '255.0.0.0', 16: '255.255.0.0', 24: '255.255.255.0' };
+                                            setForceIpSubnet(masks[prefixLen] || '255.255.255.0');
+                                          }
+                                        } else {
+                                          setForceIpAddr(cam.ip || '');
+                                          setForceIpSubnet(cam.subnet || '255.255.255.0');
+                                        }
+                                        setForceIpGateway(cam.gateway || '0.0.0.0');
+                                      }}>{t('device.visionForceIp')}</Button>
+                                    )}
+                                    <Button size="small" type="primary" loading={connecting} onClick={() => {
+                                      setConnectType('vision_camera');
+                                      setVcMac(cam.mac);
+                                      setVcModel(cam.model || '');
+                                      setVcSerial(cam.serial || '');
+                                      setConnectAddress(cam.ip || '');
+                                      setModalTabKey('manual');
+                                    }}>{t('common.connect')}</Button>
+                                  </Space>
+                                ]}>
+                                  <div>
+                                    <Tag color="magenta">VisionCam</Tag>
+                                    {cam.model && <span style={{ marginRight: 8, fontWeight: 500 }}>{cam.model}</span>}
+                                    {cam.vendor && <span style={{ color: '#888', marginRight: 8 }}>{cam.vendor}</span>}
+                                    <br />
+                                    {cam.mac && <Tag color="blue">MAC: {cam.mac}</Tag>}
+                                    {cam.ip ? <Tag color="cyan">IP: {cam.ip}</Tag> : <Tag color="orange">IP: unknown</Tag>}
+                                    {cam.subnet && <Tag>/{cam.subnet}</Tag>}
+                                  </div>
+                                </List.Item>
+                              )}
+                            />
+                          </>
+                        ),
+                      });
+                    }
+
+                    if (scannedDlt.length > 0) {
+                      const dltModule = (scanBuiltin.dlt as any)?.module || 'DLTLogging';
+                      scanTabs.push({
+                        key: 'dlt',
+                        label: <span>{t('dlt.detectedDlt')} <Tag style={{ marginLeft: 4 }}>{scannedDlt.length}</Tag></span>,
+                        children: (
+                          <List
+                            size="small"
+                            bordered
+                            dataSource={scannedDlt}
+                            pagination={scannedDlt.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                            renderItem={(d) => (
+                              <List.Item actions={[
+                                <Button size="small" type="primary" onClick={async () => {
                                   try {
                                     await connectDevice('module', d.ip, undefined, `${dltModule}_${d.ip}`, 'auxiliary', dltModule, 'socket', { port: d.port });
                                     message.success(`DLT ${d.ip}:${d.port} ${t('common.connect')}`);
@@ -1140,37 +1161,33 @@ export default function DevicePage() {
                                   } catch (e: any) {
                                     message.error(e.response?.data?.detail || 'Connect failed');
                                   }
-                                }}
-                              >{t('common.connect')}</Button>,
-                            ]}
-                          >
-                            <div>
-                              <Tag color="geekblue">DLT</Tag>
-                              <strong>{d.ip}</strong>:{d.port}
-                              <Tag style={{ marginLeft: 8 }}>{dltModule}</Tag>
-                            </div>
-                          </List.Item>
-                        )}
-                      />
-                    </>
-                    );
-                  })()}
+                                }}>{t('common.connect')}</Button>,
+                              ]}>
+                                <div>
+                                  <Tag color="geekblue">DLT</Tag>
+                                  <strong>{d.ip}</strong>:{d.port}
+                                  <Tag style={{ marginLeft: 8 }}>{dltModule}</Tag>
+                                </div>
+                              </List.Item>
+                            )}
+                          />
+                        ),
+                      });
+                    }
 
-                  {/* SmartBench 스캔 결과 */}
-                  {scannedSmartbench.length > 0 && (
-                    <div>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>SmartBench ({scannedSmartbench.length})</div>
-                      <List
-                        size="small"
-                        bordered
-                        dataSource={scannedSmartbench}
-                        renderItem={(h) => (
-                          <List.Item
-                            actions={[
-                              <Button
-                                size="small"
-                                type="primary"
-                                onClick={async () => {
+                    if (scannedSmartbench.length > 0) {
+                      scanTabs.push({
+                        key: 'smartbench',
+                        label: <span>SmartBench <Tag style={{ marginLeft: 4 }}>{scannedSmartbench.length}</Tag></span>,
+                        children: (
+                          <List
+                            size="small"
+                            bordered
+                            dataSource={scannedSmartbench}
+                            pagination={scannedSmartbench.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                            renderItem={(h) => (
+                              <List.Item actions={[
+                                <Button size="small" type="primary" onClick={async () => {
                                   try {
                                     const devId = `SmartBench_${h.ip}`;
                                     await connectDevice('module', h.ip, undefined, devId, 'auxiliary', 'SmartBench', 'socket', { port: h.port });
@@ -1179,36 +1196,32 @@ export default function DevicePage() {
                                   } catch (e: any) {
                                     message.error(e.response?.data?.detail || 'Connect failed');
                                   }
-                                }}
-                              >{t('common.connect')}</Button>,
-                            ]}
-                          >
-                            <div>
-                              <Tag color="orange">SmartBench</Tag>
-                              <strong>{h.ip}</strong>:{h.port}
-                            </div>
-                          </List.Item>
-                        )}
-                      />
-                    </div>
-                  )}
+                                }}>{t('common.connect')}</Button>,
+                              ]}>
+                                <div>
+                                  <Tag color="orange">SmartBench</Tag>
+                                  <strong>{h.ip}</strong>:{h.port}
+                                </div>
+                              </List.Item>
+                            )}
+                          />
+                        ),
+                      });
+                    }
 
-                  {/* SSH 스캔 결과 — 인증 정보가 필요하므로 수동 연결 탭으로 prefill */}
-                  {scannedSsh.length > 0 && (
-                    <div>
-                      <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{t('device.detectedSsh')} ({scannedSsh.length})</div>
-                      <List
-                        size="small"
-                        bordered
-                        dataSource={scannedSsh}
-                        renderItem={(h) => (
-                          <List.Item
-                            actions={[
-                              <Button
-                                size="small"
-                                type="primary"
-                                onClick={() => {
-                                  // SSH는 인증이 필요하므로 수동 연결 탭으로 전환 + prefill
+                    if (scannedSsh.length > 0) {
+                      scanTabs.push({
+                        key: 'ssh',
+                        label: <span>{t('device.detectedSsh')} <Tag style={{ marginLeft: 4 }}>{scannedSsh.length}</Tag></span>,
+                        children: (
+                          <List
+                            size="small"
+                            bordered
+                            dataSource={scannedSsh}
+                            pagination={scannedSsh.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                            renderItem={(h) => (
+                              <List.Item actions={[
+                                <Button size="small" type="primary" onClick={() => {
                                   setConnectType('ssh');
                                   setConnectAddress(h.ip);
                                   setSshPort(h.port);
@@ -1217,69 +1230,68 @@ export default function DevicePage() {
                                     setDeviceModel('SSH');
                                   }
                                   setModalTabKey('manual');
-                                }}
-                              >{t('common.connect')}</Button>,
-                            ]}
-                          >
-                            <div>
-                              <Tag color="magenta">SSH</Tag>
-                              <strong>{h.ip}</strong>:{h.port}
-                            </div>
-                          </List.Item>
-                        )}
-                      />
-                    </div>
-                  )}
+                                }}>{t('common.connect')}</Button>,
+                              ]}>
+                                <div>
+                                  <Tag color="magenta">SSH</Tag>
+                                  <strong>{h.ip}</strong>:{h.port}
+                                </div>
+                              </List.Item>
+                            )}
+                          />
+                        ),
+                      });
+                    }
 
-                  {/* 커스텀 스캔 결과 */}
-                  {scannedCustom.map((group, gi) => {
-                    if (group.hosts.length === 0) return null;
-                    // 스캔 설정에서 모듈명 찾기
-                    const customEntry = scanCustom.find(c => c.label === group.label);
-                    const moduleName = customEntry?.module || '';
-                    return (
-                      <div key={gi}>
-                        <div style={{ fontWeight: 'bold', marginBottom: 8, marginTop: 8 }}>{group.label} ({group.hosts.length})</div>
-                        <List
-                          size="small"
-                          bordered
-                          dataSource={group.hosts}
-                          renderItem={(h) => (
-                            <List.Item
-                              actions={[
-                                <Button
-                                  size="small"
-                                  type="primary"
-                                  onClick={async () => {
-                                    try {
-                                      const devId = moduleName ? `${moduleName}_${h.ip}` : `tcp_${h.ip}_${h.port}`;
-                                      await connectDevice('module', h.ip, undefined, devId, 'auxiliary', moduleName || undefined, 'socket', { port: h.port });
-                                      message.success(`${group.label} ${h.ip}:${h.port} ${t('common.connect')}`);
-                                      closeAddModal();
-                                    } catch (e: any) {
-                                      message.error(e.response?.data?.detail || 'Connect failed');
-                                    }
-                                  }}
-                                >{t('common.connect')}</Button>,
-                              ]}
-                            >
-                              <div>
-                                <Tag color="cyan">{group.label}</Tag>
-                                <strong>{h.ip}</strong>:{h.port}
-                                {moduleName && <Tag style={{ marginLeft: 8 }}>{moduleName}</Tag>}
-                              </div>
-                            </List.Item>
-                          )}
-                        />
-                      </div>
-                    );
-                  })}
+                    // 커스텀 스캔 결과
+                    scannedCustom.forEach((group, gi) => {
+                      if (group.hosts.length === 0) return;
+                      const customEntry = scanCustom.find(c => c.label === group.label);
+                      const moduleName = customEntry?.module || '';
+                      scanTabs.push({
+                        key: `custom_${gi}`,
+                        label: <span>{group.label} <Tag style={{ marginLeft: 4 }}>{group.hosts.length}</Tag></span>,
+                        children: (
+                          <List
+                            size="small"
+                            bordered
+                            dataSource={group.hosts}
+                            pagination={group.hosts.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                            renderItem={(h) => (
+                              <List.Item actions={[
+                                <Button size="small" type="primary" onClick={async () => {
+                                  try {
+                                    const devId = moduleName ? `${moduleName}_${h.ip}` : `tcp_${h.ip}_${h.port}`;
+                                    await connectDevice('module', h.ip, undefined, devId, 'auxiliary', moduleName || undefined, 'socket', { port: h.port });
+                                    message.success(`${group.label} ${h.ip}:${h.port} ${t('common.connect')}`);
+                                    closeAddModal();
+                                  } catch (e: any) {
+                                    message.error(e.response?.data?.detail || 'Connect failed');
+                                  }
+                                }}>{t('common.connect')}</Button>,
+                              ]}>
+                                <div>
+                                  <Tag color="cyan">{group.label}</Tag>
+                                  <strong>{h.ip}</strong>:{h.port}
+                                  {moduleName && <Tag style={{ marginLeft: 8 }}>{moduleName}</Tag>}
+                                </div>
+                              </List.Item>
+                            )}
+                          />
+                        ),
+                      });
+                    });
 
-                  {scannedSerial.length === 0 && scannedAdb.length === 0 && scannedHkmc.length === 0 && scannedBench.length === 0 && scannedVision.length === 0 && scannedDlt.length === 0 && scannedSmartbench.length === 0 && scannedSsh.length === 0 && scannedCustom.every(g => g.hosts.length === 0) && !scanning && (
-                    <div style={{ color: '#666', textAlign: 'center', padding: 24 }}>
-                      {t('device.noDevicesFound')}
-                    </div>
-                  )}
+                    if (scanTabs.length === 0 && !scanning) {
+                      return (
+                        <div style={{ color: '#666', textAlign: 'center', padding: 24 }}>
+                          {t('device.noDevicesFound')}
+                        </div>
+                      );
+                    }
+
+                    return <Tabs size="small" items={scanTabs} />;
+                  })()}
                 </div>
               ),
             },
