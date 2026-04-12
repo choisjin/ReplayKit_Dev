@@ -1652,9 +1652,9 @@ export default function RecordPage() {
   const openImportStepModal = (afterIndex: number, mode: 'copy' | 'move' = 'copy') => {
     setImportMode(mode);
     setImportInsertIndex(afterIndex);
-    // move 모드는 동일 시나리오 내 의미 없음 → 다른 시나리오 선택 유도 (빈 목록)
-    setImportSourceName(mode === 'move' ? '' : '__current__');
-    setImportSourceSteps(mode === 'move' ? [] : steps);
+    // move 모드: 항상 현재 시나리오에서만 선택 (벌크 재정렬)
+    setImportSourceName('__current__');
+    setImportSourceSteps(steps);
     setImportChecked(new Set());
     setImportStepModalOpen(true);
   };
@@ -1681,17 +1681,74 @@ export default function RecordPage() {
 
   const executeImportSteps = async () => {
     if (importChecked.size === 0) return;
-    const sourceName = importSourceName === '__current__' ? scenarioName : importSourceName;
-    // move는 동일 시나리오에서 금지 (드래그로 처리)
-    if (importMode === 'move' && sourceName === scenarioName) {
-      message.warning(t('record.moveSameScenarioError'));
+    const sortedIndices = Array.from(importChecked).sort((a, b) => a - b);
+
+    // MOVE 모드: 현재 시나리오 내 벌크 재정렬 (프론트엔드 전용, 백엔드 호출 X)
+    if (importMode === 'move') {
+      setSteps(prev => {
+        // 선택 안 된 스텝과 선택된 스텝을 분리
+        const removedSet = new Set(sortedIndices);
+        const moved: Step[] = [];
+        const kept: Step[] = [];
+        prev.forEach((s, i) => {
+          if (removedSet.has(i)) moved.push(s);
+          else kept.push(s);
+        });
+        // 삽입 위치: importInsertIndex 이하에서 제거된 개수만큼 보정
+        const removedBeforeOrAt = sortedIndices.filter(i => i <= importInsertIndex).length;
+        const insertAtInKept = importInsertIndex + 1 - removedBeforeOrAt;
+        const clamped = Math.max(0, Math.min(insertAtInKept, kept.length));
+        // 이동된 스텝의 조건부 이동(on_pass_goto/on_fail_goto)은 초기화
+        const movedCleared: Step[] = moved.map(s => ({ ...s, on_pass_goto: null, on_fail_goto: null }));
+        const movedSet = new Set<Step>(movedCleared);
+        const finalArr = [...kept.slice(0, clamped), ...movedCleared, ...kept.slice(clamped)];
+
+        // Goto 재매핑 (남은 스텝들의 참조만): old 1-based → new 1-based
+        // 이동된 스텝을 가리키던 참조는 null로 초기화 (정책상 끊어짐)
+        const posMap = new Map<number, number>();
+        moved.forEach((_s, mi) => {
+          const oldPos1 = sortedIndices[mi] + 1;
+          posMap.set(oldPos1, -1); // -1 sentinel: 참조 끊기
+        });
+        let newIdx = 0;
+        kept.forEach((s) => {
+          const oldIdx = prev.indexOf(s);
+          const oldPos1 = oldIdx + 1;
+          if (newIdx === clamped) newIdx += movedCleared.length;
+          posMap.set(oldPos1, newIdx + 1);
+          newIdx += 1;
+        });
+
+        const remapOrNull = (v: number | null | undefined): number | null | undefined => {
+          if (v == null || v === -1) return v;
+          const mapped = posMap.get(v);
+          if (mapped === -1 || mapped === undefined) return null; // 이동된 스텝 참조 → 끊기
+          return mapped;
+        };
+
+        return finalArr.map((s, i) => {
+          // 이동된 스텝은 이미 goto 초기화됨
+          if (movedSet.has(s)) {
+            return { ...s, id: i + 1 };
+          }
+          return {
+            ...s,
+            id: i + 1,
+            on_pass_goto: remapOrNull(s.on_pass_goto),
+            on_fail_goto: remapOrNull(s.on_fail_goto),
+          };
+        });
+      });
+      setImportStepModalOpen(false);
+      message.success(t('record.stepsMoved', { count: sortedIndices.length }));
       return;
     }
+
+    // COPY 모드: 기존 백엔드 import-steps 호출 (이미지 파일 복사 포함)
+    const sourceName = importSourceName === '__current__' ? scenarioName : importSourceName;
     setImportLoading(true);
     try {
-      const sortedIndices = Array.from(importChecked).sort((a, b) => a - b);
-      const isMove = importMode === 'move';
-      const res = await scenarioApi.importSteps(scenarioName, sourceName, sortedIndices, isMove);
+      const res = await scenarioApi.importSteps(scenarioName, sourceName, sortedIndices, false);
       const imported: Step[] = res.data.steps || [];
       setSteps(prev => {
         const arr = [...prev];
@@ -1699,11 +1756,7 @@ export default function RecordPage() {
         return arr.map((s, i) => ({ ...s, id: i + 1 }));
       });
       setImportStepModalOpen(false);
-      message.success(
-        isMove
-          ? t('record.stepsMoved', { count: imported.length })
-          : t('record.stepsImported', { count: imported.length })
-      );
+      message.success(t('record.stepsImported', { count: imported.length }));
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('common.saveFailed'));
     } finally {
@@ -3438,20 +3491,21 @@ export default function RecordPage() {
         width={600}
       >
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <div>
-            <div style={{ marginBottom: 4, fontSize: 13 }}>{t('record.importSource')}</div>
-            <Select
-              style={{ width: '100%' }}
-              value={importSourceName || undefined}
-              onChange={loadImportSource}
-              placeholder={importMode === 'move' ? t('record.importSource') : undefined}
-            >
-              {importMode !== 'move' && <Option value="__current__">{t('record.currentScenario')}</Option>}
-              {savedScenarios.filter(n => n !== scenarioName).map(n => (
-                <Option key={n} value={n}>{n}</Option>
-              ))}
-            </Select>
-          </div>
+          {importMode !== 'move' && (
+            <div>
+              <div style={{ marginBottom: 4, fontSize: 13 }}>{t('record.importSource')}</div>
+              <Select
+                style={{ width: '100%' }}
+                value={importSourceName || undefined}
+                onChange={loadImportSource}
+              >
+                <Option value="__current__">{t('record.currentScenario')}</Option>
+                {savedScenarios.filter(n => n !== scenarioName).map(n => (
+                  <Option key={n} value={n}>{n}</Option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div style={{ fontSize: 12, color: '#888' }}>
             {t('record.importInsertAt', { index: importInsertIndex + 1 })}
             {' · '}{t('record.importSelectHint')}
