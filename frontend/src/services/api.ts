@@ -62,8 +62,8 @@ export const scenarioApi = {
     api.post('/scenario/record/capture-expected-image', { scenario_name: scenarioName, step_index: stepIndex, device_id: deviceId, crop, compare_mode: compareMode, crop_label: cropLabel, screen_type: screenType || 'front_center', preserve_crops: preserveCrops || false }),
   removeExpectedImage: (scenarioName: string, stepIndex: number) =>
     api.post('/scenario/record/remove-expected-image', { scenario_name: scenarioName, step_index: stepIndex }),
-  importSteps: (targetName: string, sourceName: string, stepIndices: number[]) =>
-    api.post('/scenario/record/import-steps', { target_name: targetName, source_name: sourceName, step_indices: stepIndices }),
+  importSteps: (targetName: string, sourceName: string, stepIndices: number[], move: boolean = false) =>
+    api.post('/scenario/record/import-steps', { target_name: targetName, source_name: sourceName, step_indices: stepIndices, move }),
   removeCrop: (scenarioName: string, stepIndex: number, cropIndex: number) =>
     api.post('/scenario/record/remove-crop', { scenario_name: scenarioName, step_index: stepIndex, crop_index: cropIndex }),
   cropFromExpected: (scenarioName: string, stepIndex: number, crop: { x: number; y: number; width: number; height: number }, cropLabel?: string, replaceIndex?: number) =>

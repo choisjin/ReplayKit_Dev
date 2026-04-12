@@ -2,12 +2,15 @@
 
 import base64
 import json
+import logging
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from ..dependencies import adb_service as adb_svc
 from ..dependencies import device_manager as dm
@@ -369,22 +372,29 @@ class ImportStepsRequest(BaseModel):
     target_name: str
     source_name: str
     step_indices: list[int]  # 0-based indices
+    move: bool = False  # True면 복사 후 소스에서 제거 (move 동작)
 
 
 @router.post("/record/import-steps")
 async def import_steps(req: ImportStepsRequest):
-    """소스 시나리오에서 선택된 스텝들을 복사해온다 (기대이미지 포함)."""
-    import shutil, time as _time, re as _re
+    """소스 시나리오에서 선택된 스텝들을 복사해온다 (기대이미지 포함).
+
+    move=True이면 복사 후 소스 시나리오에서 해당 스텝들을 제거하고 소스도 저장.
+    동일 시나리오(source == target)에서 move는 허용되지 않음 (드래그앤드롭 사용).
+    """
+    import shutil, time as _time
     source = await recording_svc.load_scenario(req.source_name)
     tgt_ss_dir = SCREENSHOTS_DIR / req.target_name
     tgt_ss_dir.mkdir(parents=True, exist_ok=True)
     src_ss_dir = SCREENSHOTS_DIR / req.source_name
 
+    is_move = req.move and req.source_name != req.target_name
+
     imported = []
+    src_images_to_delete: list[Path] = []
     for idx in req.step_indices:
         if idx < 0 or idx >= len(source.steps):
             continue
-        from ..models.scenario import Step, CropItem
         orig = source.steps[idx]
         step_data = orig.model_dump()
         # 새 타임스탬프 기반 ID (충돌 방지)
@@ -398,6 +408,8 @@ async def import_steps(req: ImportStepsRequest):
             new_file = tgt_ss_dir / new_filename
             if old_file.exists():
                 shutil.copy2(str(old_file), str(new_file))
+                if is_move:
+                    src_images_to_delete.append(old_file)
             step_data["expected_image"] = new_filename
             ts += 1
 
@@ -410,6 +422,8 @@ async def import_steps(req: ImportStepsRequest):
                 new_ci = tgt_ss_dir / new_ci_name
                 if old_ci.exists():
                     shutil.copy2(str(old_ci), str(new_ci))
+                    if is_move:
+                        src_images_to_delete.append(old_ci)
                 ci["image"] = new_ci_name
             new_crops.append(ci)
         step_data["expected_images"] = new_crops
@@ -419,7 +433,43 @@ async def import_steps(req: ImportStepsRequest):
         step_data["on_fail_goto"] = None
         imported.append(step_data)
 
-    return {"steps": imported}
+    # Move: 소스에서 선택된 스텝 제거 + 소스 저장 + 이미지 파일 정리
+    if is_move and req.step_indices:
+        remove_set = {i for i in req.step_indices if 0 <= i < len(source.steps)}
+        # 제거 후 id 재번호 + goto 참조 재매핑
+        remaining_pairs = [(i, s) for i, s in enumerate(source.steps) if i not in remove_set]
+        # old 1-based position → new 1-based position (제거된 것은 None)
+        pos_map: dict[int, Optional[int]] = {}
+        for new_idx, (old_idx, _s) in enumerate(remaining_pairs):
+            pos_map[old_idx + 1] = new_idx + 1
+        for old_idx in remove_set:
+            pos_map[old_idx + 1] = None
+
+        def _remap_goto(g):
+            if g is None or g == -1:
+                return g
+            return pos_map.get(g, None)
+
+        new_steps = []
+        for new_idx, (_old_idx, s) in enumerate(remaining_pairs):
+            s_copy = s.model_copy(update={
+                "id": new_idx + 1,
+                "on_pass_goto": _remap_goto(s.on_pass_goto),
+                "on_fail_goto": _remap_goto(s.on_fail_goto),
+            })
+            new_steps.append(s_copy)
+        source.steps = new_steps
+        await recording_svc.save_scenario(source)
+
+        # 원본 이미지 파일 제거
+        for f in src_images_to_delete:
+            try:
+                if f.exists():
+                    f.unlink()
+            except Exception as e:
+                logger.warning("Failed to delete source image %s: %s", f, e)
+
+    return {"steps": imported, "moved": is_move}
 
 
 class RemoveCropRequest(BaseModel):

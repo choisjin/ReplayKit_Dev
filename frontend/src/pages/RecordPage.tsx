@@ -1640,18 +1640,21 @@ export default function RecordPage() {
     });
   };
 
-  // 스텝 가져오기 모달 상태
+  // 스텝 복사/이동 모달 상태
   const [importStepModalOpen, setImportStepModalOpen] = useState(false);
+  const [importMode, setImportMode] = useState<'copy' | 'move'>('copy');
   const [importInsertIndex, setImportInsertIndex] = useState(0); // 삽입 위치 (해당 인덱스 뒤에 삽입)
   const [importSourceName, setImportSourceName] = useState('__current__');
   const [importSourceSteps, setImportSourceSteps] = useState<Step[]>([]);
   const [importChecked, setImportChecked] = useState<Set<number>>(new Set());
   const [importLoading, setImportLoading] = useState(false);
 
-  const openImportStepModal = (afterIndex: number) => {
+  const openImportStepModal = (afterIndex: number, mode: 'copy' | 'move' = 'copy') => {
+    setImportMode(mode);
     setImportInsertIndex(afterIndex);
-    setImportSourceName('__current__');
-    setImportSourceSteps(steps);
+    // move 모드는 동일 시나리오 내 의미 없음 → 다른 시나리오 선택 유도 (빈 목록)
+    setImportSourceName(mode === 'move' ? '' : '__current__');
+    setImportSourceSteps(mode === 'move' ? [] : steps);
     setImportChecked(new Set());
     setImportStepModalOpen(true);
   };
@@ -1661,6 +1664,10 @@ export default function RecordPage() {
     setImportChecked(new Set());
     if (name === '__current__') {
       setImportSourceSteps(steps);
+      return;
+    }
+    if (!name) {
+      setImportSourceSteps([]);
       return;
     }
     try {
@@ -1674,21 +1681,29 @@ export default function RecordPage() {
 
   const executeImportSteps = async () => {
     if (importChecked.size === 0) return;
+    const sourceName = importSourceName === '__current__' ? scenarioName : importSourceName;
+    // move는 동일 시나리오에서 금지 (드래그로 처리)
+    if (importMode === 'move' && sourceName === scenarioName) {
+      message.warning(t('record.moveSameScenarioError'));
+      return;
+    }
     setImportLoading(true);
     try {
-      const sourceName = importSourceName === '__current__' ? scenarioName : importSourceName;
-      // 체크된 스텝을 원래 순서대로 가져오기
       const sortedIndices = Array.from(importChecked).sort((a, b) => a - b);
-      const res = await scenarioApi.importSteps(scenarioName, sourceName, sortedIndices);
+      const isMove = importMode === 'move';
+      const res = await scenarioApi.importSteps(scenarioName, sourceName, sortedIndices, isMove);
       const imported: Step[] = res.data.steps || [];
-      // 삽입 위치 뒤에 추가
       setSteps(prev => {
         const arr = [...prev];
         arr.splice(importInsertIndex + 1, 0, ...imported.map(s => ({ ...s, _imageVer: Date.now() })));
         return arr.map((s, i) => ({ ...s, id: i + 1 }));
       });
       setImportStepModalOpen(false);
-      message.success(t('record.stepsImported', { count: imported.length }));
+      message.success(
+        isMove
+          ? t('record.stepsMoved', { count: imported.length })
+          : t('record.stepsImported', { count: imported.length })
+      );
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('common.saveFailed'));
     } finally {
@@ -2332,7 +2347,8 @@ export default function RecordPage() {
                   <Button size="small" type="text" icon={<ThunderboltOutlined />} title={devConnected ? t('record.testStep') : t('record.deviceNotConnected')} loading={testingStepIndex === index} disabled={!devConnected} onClick={() => testStep(index)} style={{ color: devConnected ? '#faad14' : undefined, width: 28 }} />
                 );
               })()}
-              <Button size="small" type="text" icon={<PlusOutlined />} title={t('record.importSteps')} onClick={() => openImportStepModal(index)} style={{ width: 28 }} />
+              <Button size="small" type="text" icon={<PlusOutlined />} title={t('record.importSteps')} onClick={() => openImportStepModal(index, 'copy')} style={{ width: 28 }} />
+              <Button size="small" type="text" title={t('record.moveSteps')} onClick={() => openImportStepModal(index, 'move')} style={{ width: 28, fontSize: 12, fontWeight: 600, color: '#faad14' }}>M</Button>
               <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => Modal.confirm({ title: t('record.confirmDeleteStep', { index: index + 1 }), okText: t('common.delete'), okType: 'danger', cancelText: t('common.cancel'), onOk: () => deleteStep(index) })} style={{ width: 28 }} />
             </div>
             {/* 2행: 편집 + 조건부이동 + W + 카메라 */}
@@ -3411,13 +3427,13 @@ export default function RecordPage() {
         })()}
       </Modal>
 
-      {/* 스텝 가져오기 모달 */}
+      {/* 스텝 복사/이동 모달 */}
       <Modal
-        title={t('record.importSteps')}
+        title={importMode === 'move' ? t('record.moveSteps') : t('record.importSteps')}
         open={importStepModalOpen}
         onCancel={() => setImportStepModalOpen(false)}
         onOk={executeImportSteps}
-        okText={`${t('record.importSteps')} (${importChecked.size})`}
+        okText={`${importMode === 'move' ? t('record.moveSteps') : t('record.importSteps')} (${importChecked.size})`}
         okButtonProps={{ disabled: importChecked.size === 0, loading: importLoading }}
         width={600}
       >
@@ -3426,10 +3442,11 @@ export default function RecordPage() {
             <div style={{ marginBottom: 4, fontSize: 13 }}>{t('record.importSource')}</div>
             <Select
               style={{ width: '100%' }}
-              value={importSourceName}
+              value={importSourceName || undefined}
               onChange={loadImportSource}
+              placeholder={importMode === 'move' ? t('record.importSource') : undefined}
             >
-              <Option value="__current__">{t('record.currentScenario')}</Option>
+              {importMode !== 'move' && <Option value="__current__">{t('record.currentScenario')}</Option>}
               {savedScenarios.filter(n => n !== scenarioName).map(n => (
                 <Option key={n} value={n}>{n}</Option>
               ))}
