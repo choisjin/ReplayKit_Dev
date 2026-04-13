@@ -496,49 +496,400 @@ async def websocket_screen_mirror(websocket: WebSocket):
             recv_task.cancel()
 
 
+# 현재 백그라운드 재생 태스크 (단일 재생만 허용)
+_playback_bg_task: asyncio.Task | None = None
+
+
+async def _run_play_job(data: dict):
+    """백그라운드 태스크로 실행되는 play 로직. WebSocket과 무관하게 끝까지 실행된다.
+
+    이벤트는 playback_service.publish_event를 통해 broadcaster에 전달되고,
+    연결된 모든 WebSocket 구독자가 forward 태스크로 받아 전송한다.
+    """
+    from .services.playback_service import publish_event, clear_event_buffer
+    scenario_name = data.get("scenario")
+    verify = data.get("verify", True)
+    repeat = data.get("repeat", 1)
+    device_map_override = data.get("device_map")
+    skip_steps: set[int] = set(data.get("skip_steps", []))
+    _is_multi_cycle = False
+    try:
+        playback_service._should_stop = False
+        playback_service._pause_event.set()
+        clear_event_buffer()
+        publish_event({"type": "playback_reset", "scenario": scenario_name})
+
+        scen = await recording_service.load_scenario(scenario_name)
+        if skip_steps:
+            scen.steps = [s for s in scen.steps if s.id not in skip_steps]
+
+        preflight_errors = await playback_service.preflight_check(scen, device_map_override)
+        if preflight_errors:
+            publish_event({"type": "preflight_error", "errors": preflight_errors})
+            return
+
+        playback_service._monitor_state = {
+            "scenario_name": scenario_name,
+            "total_cycles": repeat,
+            "current_cycle": 0,
+            "current_step": 0,
+            "total_steps": len(scen.steps),
+            "passed": 0, "failed": 0, "warning": 0, "error": 0,
+        }
+
+        result = ScenarioResult(
+            scenario_name=scenario_name,
+            device_serial="multi-device",
+            status="pass",
+            total_steps=len(scen.steps),
+            total_repeat=repeat,
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+        _is_multi_cycle = repeat > 1
+        if _is_multi_cycle:
+            playback_service._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            playback_service._setup_run_output_dir(scenario_name)
+
+        global_step_seq = 0
+        last_completed_iteration = 0
+        for iteration in range(1, repeat + 1):
+            playback_service._monitor_state["current_cycle"] = iteration
+            if _is_multi_cycle:
+                publish_event({
+                    "type": "iteration_start",
+                    "iteration": iteration,
+                    "total": repeat,
+                })
+
+            _step_idx = 0
+            _pending_seq = 0
+            async for item in playback_service.execute_scenario_stream(
+                scen, verify=verify, repeat_index=iteration,
+                device_map_override=device_map_override,
+                group_scenario_index=iteration if _is_multi_cycle else 0,
+            ):
+                if isinstance(item, dict) and item.get("_type") == "step_start":
+                    _step_idx += 1
+                    playback_service._monitor_state["current_step"] = _step_idx
+                    start_data = {k: v for k, v in item.items() if k != "_type"}
+                    if _is_multi_cycle:
+                        global_step_seq += 1
+                        _pending_seq = global_step_seq
+                        start_data["step_id"] = _pending_seq
+                        start_data["description"] = f"[Cycle {iteration}] {start_data.get('description', '')}"
+                    publish_event({
+                        "type": "step_start",
+                        "data": start_data,
+                        "iteration": iteration,
+                    })
+                else:
+                    step_result = item
+                    if _is_multi_cycle:
+                        step_result.step_id = _pending_seq
+                        step_result.description = f"[Cycle {iteration}] {step_result.description}" if step_result.description else f"[Cycle {iteration}]"
+                    result.step_results.append(step_result)
+                    if step_result.status == "pass":
+                        result.passed_steps += 1
+                        playback_service._monitor_state["passed"] += 1
+                    elif step_result.status == "fail":
+                        result.failed_steps += 1
+                        playback_service._monitor_state["failed"] += 1
+                    else:
+                        result.error_steps += 1
+                        playback_service._monitor_state["error"] += 1
+                    publish_event({
+                        "type": "step_result",
+                        "data": step_result.model_dump(),
+                        "iteration": iteration,
+                    })
+
+            if playback_service._should_stop:
+                break
+            last_completed_iteration = iteration
+
+            if _is_multi_cycle:
+                _interim = ScenarioResult(
+                    scenario_name=scenario_name,
+                    device_serial="multi-device",
+                    status="fail" if result.failed_steps > 0 or result.error_steps > 0 else "pass",
+                    total_steps=global_step_seq if _is_multi_cycle else len(scen.steps),
+                    total_repeat=last_completed_iteration,
+                    started_at=result.started_at,
+                    finished_at=datetime.now(timezone.utc).isoformat(),
+                    step_results=list(result.step_results),
+                    passed_steps=result.passed_steps,
+                    failed_steps=result.failed_steps,
+                    error_steps=result.error_steps,
+                )
+                await playback_service._save_result(_interim, interim=True)
+
+        # 중단 처리
+        if playback_service._should_stop:
+            if last_completed_iteration == 0:
+                publish_event({"type": "playback_stopped", "result_filename": ""})
+            else:
+                if _is_multi_cycle:
+                    result.total_steps = global_step_seq
+                else:
+                    total_steps_per_cycle = len(scen.steps)
+                    keep_count = last_completed_iteration * total_steps_per_cycle
+                    result.step_results = result.step_results[:keep_count]
+                result.passed_steps = sum(1 for sr in result.step_results if sr.status == "pass")
+                result.failed_steps = sum(1 for sr in result.step_results if sr.status == "fail")
+                result.error_steps = sum(1 for sr in result.step_results if sr.status not in ("pass", "fail"))
+                result.total_repeat = last_completed_iteration
+                result.finished_at = datetime.now(timezone.utc).isoformat()
+                result.status = "fail" if (result.failed_steps > 0 or result.error_steps > 0) else "pass"
+                result_path = await playback_service._save_result(result)
+                publish_event({"type": "playback_stopped", "result_filename": _result_filename(result_path)})
+        else:
+            if _is_multi_cycle:
+                result.total_steps = global_step_seq
+            result.finished_at = datetime.now(timezone.utc).isoformat()
+            result.status = "fail" if (result.failed_steps > 0 or result.error_steps > 0) else "pass"
+            result_path = await playback_service._save_result(result)
+            publish_event({"type": "playback_complete", "result_filename": _result_filename(result_path)})
+    except Exception as e:
+        logger.exception("Play job failed")
+        publish_event({"type": "error", "message": str(e)})
+    finally:
+        if _is_multi_cycle:
+            playback_service._cleanup_run_output_dir()
+            playback_service._running = False
+
+
+async def _run_play_group_job(data: dict):
+    """백그라운드 태스크로 실행되는 play_group 로직."""
+    from .services.playback_service import publish_event, clear_event_buffer
+    group_members = data.get("scenarios", [])
+    verify = data.get("verify", True)
+    repeat = data.get("repeat", 1)
+    device_map_override = data.get("device_map")
+
+    entries: list[dict] = []
+    for m in group_members:
+        if isinstance(m, str):
+            entries.append({"name": m, "on_pass_goto": None, "on_fail_goto": None})
+        else:
+            entries.append(m)
+
+    try:
+        playback_service._should_stop = False
+        playback_service._pause_event.set()
+        clear_event_buffer()
+        publish_event({"type": "playback_reset", "group": True})
+
+        all_preflight_errors: list[str] = []
+        for entry in entries:
+            try:
+                scen = await recording_service.load_scenario(entry["name"])
+                errs = await playback_service.preflight_check(scen)
+                for e in errs:
+                    msg = f"[{entry['name']}] {e}"
+                    if msg not in all_preflight_errors:
+                        all_preflight_errors.append(msg)
+            except FileNotFoundError:
+                all_preflight_errors.append(f"시나리오 '{entry['name']}'을(를) 찾을 수 없습니다")
+        if all_preflight_errors:
+            publish_event({"type": "preflight_error", "errors": all_preflight_errors})
+            return
+
+        group_name = data.get("group_name", entries[0]["name"])
+        total_steps = 0
+        for entry in entries:
+            try:
+                scen = await recording_service.load_scenario(entry["name"])
+                total_steps += len(scen.steps)
+            except FileNotFoundError:
+                pass
+
+        playback_service._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        playback_service._setup_run_output_dir(group_name)
+
+        unified_result = ScenarioResult(
+            scenario_name=group_name,
+            device_serial="multi-device",
+            status="pass",
+            total_steps=total_steps,
+            total_repeat=repeat,
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
+        global_step_seq = 0
+
+        for iteration in range(1, repeat + 1):
+            if playback_service._should_stop:
+                break
+            if repeat > 1:
+                publish_event({
+                    "type": "iteration_start",
+                    "iteration": iteration,
+                    "total": repeat,
+                })
+
+            sc_idx = 0
+            start_step = 0
+            while sc_idx < len(entries):
+                if playback_service._should_stop:
+                    break
+                entry = entries[sc_idx]
+                sc_name = entry["name"]
+                scen = await recording_service.load_scenario(sc_name)
+                publish_event({
+                    "type": "group_scenario_start",
+                    "scenario_name": sc_name,
+                    "scenario_index": sc_idx + 1,
+                    "total_scenarios": len(entries),
+                    "start_step": start_step,
+                })
+
+                step_jumps = entry.get("step_jumps", {})
+                step_jump_target = None
+
+                _pending_seq = 0
+                async for item in playback_service.execute_scenario_stream(
+                    scen, verify=verify, repeat_index=iteration, start_step=start_step,
+                    device_map_override=device_map_override, group_scenario_index=sc_idx + 1,
+                ):
+                    if isinstance(item, dict) and item.get("_type") == "step_start":
+                        global_step_seq += 1
+                        _pending_seq = global_step_seq
+                        start_data = {k: v for k, v in item.items() if k != "_type"}
+                        start_data["step_id"] = _pending_seq
+                        start_data["description"] = f"[{sc_name}] {start_data.get('description', '')}" if start_data.get('description') else f"[{sc_name}]"
+                        publish_event({
+                            "type": "step_start",
+                            "data": start_data,
+                            "iteration": iteration,
+                            "scenario_name": sc_name,
+                        })
+                        continue
+                    step_result = item
+                    original_step_id = step_result.step_id
+                    step_result.step_id = _pending_seq
+                    step_result.description = f"[{sc_name}] {step_result.description}" if step_result.description else f"[{sc_name}]"
+
+                    unified_result.step_results.append(step_result)
+                    if step_result.status == "pass":
+                        unified_result.passed_steps += 1
+                    elif step_result.status == "fail":
+                        unified_result.failed_steps += 1
+                    else:
+                        unified_result.error_steps += 1
+                    publish_event({
+                        "type": "step_result",
+                        "data": step_result.model_dump(),
+                        "iteration": iteration,
+                        "scenario_name": sc_name,
+                    })
+
+                    sj = step_jumps.get(str(original_step_id))
+                    if sj:
+                        if step_result.status == "pass":
+                            sj_jump = sj.get("on_pass_goto")
+                        else:
+                            sj_jump = sj.get("on_fail_goto")
+                        if sj_jump is not None:
+                            step_jump_target = sj_jump
+                            break
+
+                if playback_service._should_stop:
+                    break
+
+                next_idx = sc_idx + 1
+                start_step = 0
+                jump = None
+
+                if step_jump_target is not None:
+                    jump = step_jump_target
+                else:
+                    last_sr = unified_result.step_results[-1] if unified_result.step_results else None
+                    last_status = last_sr.status if last_sr else "pass"
+                    if last_status == "pass":
+                        jump = entry.get("on_pass_goto")
+                    else:
+                        jump = entry.get("on_fail_goto")
+
+                if jump is not None:
+                    if isinstance(jump, dict):
+                        target_sc = jump.get("scenario", -1)
+                        target_step = jump.get("step", 0)
+                    else:
+                        target_sc = jump
+                        target_step = 0
+                    if target_sc == -1:
+                        break
+                    next_idx = target_sc
+                    start_step = target_step
+
+                sc_idx = next_idx
+
+            if repeat > 1 and not playback_service._should_stop:
+                _interim = ScenarioResult(
+                    scenario_name=group_name,
+                    device_serial="multi-device",
+                    status="fail" if unified_result.failed_steps > 0 or unified_result.error_steps > 0 else "pass",
+                    total_steps=global_step_seq,
+                    total_repeat=iteration,
+                    started_at=unified_result.started_at,
+                    finished_at=datetime.now(timezone.utc).isoformat(),
+                    step_results=list(unified_result.step_results),
+                    passed_steps=unified_result.passed_steps,
+                    failed_steps=unified_result.failed_steps,
+                    error_steps=unified_result.error_steps,
+                )
+                await playback_service._save_result(_interim, interim=True)
+
+        unified_result.finished_at = datetime.now(timezone.utc).isoformat()
+        unified_result.total_steps = global_step_seq
+        if unified_result.failed_steps > 0 or unified_result.error_steps > 0:
+            unified_result.status = "fail"
+        else:
+            unified_result.status = "pass"
+        result_path = await playback_service._save_result(unified_result)
+        rf = _result_filename(result_path)
+
+        if playback_service._should_stop:
+            publish_event({"type": "playback_stopped", "result_filename": rf})
+        else:
+            publish_event({"type": "playback_complete", "result_filename": rf})
+    except Exception as e:
+        logger.exception("Play group job failed")
+        publish_event({"type": "error", "message": str(e)})
+    finally:
+        playback_service._cleanup_run_output_dir()
+        playback_service._running = False
+
+
 @app.websocket("/ws/playback")
 async def websocket_playback(websocket: WebSocket):
-    """WebSocket endpoint for streaming playback results step by step."""
+    """WebSocket endpoint: subscribe to playback events + handle commands.
+
+    - WS가 닫혀도 백그라운드 재생 태스크는 계속 실행됨
+    - 새 WS가 연결되면 최근 이벤트 버퍼를 replay 받아 현재 상태를 복구
+    """
+    global _playback_bg_task
+    from .services.playback_service import subscribe_events, unsubscribe_events, publish_event
     await websocket.accept()
     logger.info("Playback WebSocket connected")
 
-    _ws_closed = False
+    # 구독 + forward task 생성
+    event_queue = subscribe_events()
 
-    async def _safe_send(data: dict):
-        """WebSocket이 끊겼으면 재생 중지."""
-        nonlocal _ws_closed
-        if _ws_closed:
-            return
-        try:
-            await websocket.send_json(data)
-        except Exception:
-            _ws_closed = True
-            logger.warning("Playback WebSocket closed — stopping playback")
-            await playback_service.stop()
-
-    # 재생 중 stop 메시지를 수신하기 위한 리스너 태스크
-    stop_listener_task: asyncio.Task | None = None
-
-    async def _listen_for_stop():
-        """재생 중 WebSocket에서 stop/pause/resume 명령을 대기."""
+    async def _forward_loop():
+        """event_queue → websocket으로 이벤트 forwarding."""
         try:
             while True:
-                msg = await websocket.receive_json()
-                cmd = msg.get("action")
-                if cmd == "stop":
-                    await playback_service.stop()
-                    logger.info("Stop command received during playback")
+                ev = await event_queue.get()
+                try:
+                    await websocket.send_json(ev)
+                except Exception:
+                    # WS 전송 실패 → forward 중단 (재생은 계속됨)
                     return
-                elif cmd == "pause":
-                    await playback_service.pause()
-                    await _safe_send({"type": "playback_paused"})
-                    logger.info("Playback paused")
-                elif cmd == "resume":
-                    await playback_service.resume()
-                    await _safe_send({"type": "playback_resumed"})
-                    logger.info("Playback resumed")
-        except Exception:
-            pass
+        except asyncio.CancelledError:
+            return
+
+    forward_task = asyncio.create_task(_forward_loop())
 
     try:
         while True:
@@ -546,400 +897,39 @@ async def websocket_playback(websocket: WebSocket):
             action = data.get("action")
 
             if action == "play":
-                scenario_name = data.get("scenario")
-                verify = data.get("verify", True)
-                repeat = data.get("repeat", 1)
-                device_map_override = data.get("device_map")  # optional override from frontend
-                skip_steps: set[int] = set(data.get("skip_steps", []))
-                try:
-                    if playback_service.is_running:
-                        await _safe_send({"type": "error", "message": "이미 재생 중입니다"})
-                        continue
-                    playback_service._should_stop = False
-                    playback_service._pause_event.set()
-                    stop_listener_task = asyncio.create_task(_listen_for_stop())
-
-                    scen = await recording_service.load_scenario(scenario_name)
-
-                    # 스킵할 스텝 제거
-                    if skip_steps:
-                        scen.steps = [s for s in scen.steps if s.id not in skip_steps]
-
-                    # Preflight device check
-                    preflight_errors = await playback_service.preflight_check(scen, device_map_override)
-                    if preflight_errors:
-                        await _safe_send({
-                            "type": "preflight_error",
-                            "errors": preflight_errors,
-                        })
-                        continue
-
-                    # 관제 모니터링 상태 초기화
-                    playback_service._monitor_state = {
-                        "scenario_name": scenario_name,
-                        "total_cycles": repeat,
-                        "current_cycle": 0,
-                        "current_step": 0,
-                        "total_steps": len(scen.steps),
-                        "passed": 0, "failed": 0, "warning": 0, "error": 0,
-                    }
-
-                    # Single result for ALL cycles
-                    result = ScenarioResult(
-                        scenario_name=scenario_name,
-                        device_serial="multi-device",
-                        status="pass",
-                        total_steps=len(scen.steps),
-                        total_repeat=repeat,
-                        started_at=datetime.now(timezone.utc).isoformat(),
-                    )
-
-                    # repeat > 1: 그룹 재생과 동일한 구조로 관리
-                    # 시나리오 이름으로 상위 폴더를 만들고 사이클별 하위 폴더 생성
-                    _is_multi_cycle = repeat > 1
-                    if _is_multi_cycle:
-                        playback_service._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        playback_service._setup_run_output_dir(scenario_name)
-
-                    global_step_seq = 0
-                    last_completed_iteration = 0
-                    for iteration in range(1, repeat + 1):
-                        playback_service._monitor_state["current_cycle"] = iteration
-                        if _is_multi_cycle:
-                            await _safe_send({
-                                "type": "iteration_start",
-                                "iteration": iteration,
-                                "total": repeat,
-                            })
-
-                        _step_idx = 0
-                        _pending_seq = 0
-                        async for item in playback_service.execute_scenario_stream(
-                            scen, verify=verify, repeat_index=iteration,
-                            device_map_override=device_map_override,
-                            group_scenario_index=iteration if _is_multi_cycle else 0,
-                        ):
-                            if isinstance(item, dict) and item.get("_type") == "step_start":
-                                _step_idx += 1
-                                playback_service._monitor_state["current_step"] = _step_idx
-                                start_data = {k: v for k, v in item.items() if k != "_type"}
-                                if _is_multi_cycle:
-                                    global_step_seq += 1
-                                    _pending_seq = global_step_seq
-                                    start_data["step_id"] = _pending_seq
-                                    start_data["description"] = f"[Cycle {iteration}] {start_data.get('description', '')}"
-                                await _safe_send({
-                                    "type": "step_start",
-                                    "data": start_data,
-                                    "iteration": iteration,
-                                })
-                            else:
-                                step_result = item
-                                if _is_multi_cycle:
-                                    step_result.step_id = _pending_seq
-                                    step_result.description = f"[Cycle {iteration}] {step_result.description}" if step_result.description else f"[Cycle {iteration}]"
-                                result.step_results.append(step_result)
-                                if step_result.status == "pass":
-                                    result.passed_steps += 1
-                                    playback_service._monitor_state["passed"] += 1
-                                elif step_result.status == "fail":
-                                    result.failed_steps += 1
-                                    playback_service._monitor_state["failed"] += 1
-                                else:
-                                    result.error_steps += 1
-                                    playback_service._monitor_state["error"] += 1
-                                await _safe_send({
-                                    "type": "step_result",
-                                    "data": step_result.model_dump(),
-                                    "iteration": iteration,
-                                })
-
-                        if playback_service._should_stop:
-                            break
-                        last_completed_iteration = iteration
-
-                        # 매 사이클 완료 시 중간 결과 저장 (비정상 종료 대비)
-                        if _is_multi_cycle:
-                            _interim = ScenarioResult(
-                                scenario_name=scenario_name,
-                                device_serial="multi-device",
-                                status="fail" if result.failed_steps > 0 or result.error_steps > 0 else "pass",
-                                total_steps=global_step_seq if _is_multi_cycle else len(scen.steps),
-                                total_repeat=last_completed_iteration,
-                                started_at=result.started_at,
-                                finished_at=datetime.now(timezone.utc).isoformat(),
-                                step_results=list(result.step_results),
-                                passed_steps=result.passed_steps,
-                                failed_steps=result.failed_steps,
-                                error_steps=result.error_steps,
-                            )
-                            await playback_service._save_result(_interim, interim=True)
-
-                    # 중단 처리
-                    if playback_service._should_stop:
-                        if last_completed_iteration == 0:
-                            await _safe_send({"type": "playback_stopped", "result_filename": ""})
-                        else:
-                            if _is_multi_cycle:
-                                result.total_steps = global_step_seq
-                            else:
-                                total_steps_per_cycle = len(scen.steps)
-                                keep_count = last_completed_iteration * total_steps_per_cycle
-                                result.step_results = result.step_results[:keep_count]
-                            result.passed_steps = sum(1 for sr in result.step_results if sr.status == "pass")
-                            result.failed_steps = sum(1 for sr in result.step_results if sr.status == "fail")
-                            result.error_steps = sum(1 for sr in result.step_results if sr.status not in ("pass", "fail"))
-                            result.total_repeat = last_completed_iteration
-                            result.finished_at = datetime.now(timezone.utc).isoformat()
-                            result.status = "fail" if (result.failed_steps > 0 or result.error_steps > 0) else "pass"
-                            result_path = await playback_service._save_result(result)
-                            await _safe_send({"type": "playback_stopped", "result_filename": _result_filename(result_path)})
-                    else:
-                        # 정상 완료 — 최종 결과 저장 (중간 결과 덮어쓰기)
-                        if _is_multi_cycle:
-                            result.total_steps = global_step_seq
-                        result.finished_at = datetime.now(timezone.utc).isoformat()
-                        result.status = "fail" if (result.failed_steps > 0 or result.error_steps > 0) else "pass"
-                        result_path = await playback_service._save_result(result)
-                        await _safe_send({"type": "playback_complete", "result_filename": _result_filename(result_path)})
-                except Exception as e:
-                    await _safe_send({"type": "error", "message": str(e)})
-                finally:
-                    if _is_multi_cycle:
-                        playback_service._cleanup_run_output_dir()
-                        playback_service._running = False
-                    if stop_listener_task and not stop_listener_task.done():
-                        stop_listener_task.cancel()
-                        try:
-                            await stop_listener_task
-                        except (asyncio.CancelledError, Exception):
-                            pass
-                        stop_listener_task = None
+                if playback_service.is_running or (_playback_bg_task and not _playback_bg_task.done()):
+                    publish_event({"type": "error", "message": "이미 재생 중입니다"})
+                    continue
+                _playback_bg_task = asyncio.create_task(_run_play_job(data))
 
             elif action == "play_group":
-                # Play scenarios in a group with conditional jump support
-                group_members = data.get("scenarios", [])  # list[str] or list[dict]
-                verify = data.get("verify", True)
-                repeat = data.get("repeat", 1)
-                device_map_override = data.get("device_map")
-
-                # Normalize to list[dict] for jump support
-                entries: list[dict] = []
-                for m in group_members:
-                    if isinstance(m, str):
-                        entries.append({"name": m, "on_pass_goto": None, "on_fail_goto": None})
-                    else:
-                        entries.append(m)
-
-                try:
-                    if playback_service.is_running:
-                        await _safe_send({"type": "error", "message": "이미 재생 중입니다"})
-                        continue
-                    playback_service._should_stop = False
-                    playback_service._pause_event.set()
-                    stop_listener_task = asyncio.create_task(_listen_for_stop())
-
-                    # Preflight: check all scenarios in the group
-                    all_preflight_errors: list[str] = []
-                    for entry in entries:
-                        try:
-                            scen = await recording_service.load_scenario(entry["name"])
-                            errs = await playback_service.preflight_check(scen)
-                            for e in errs:
-                                msg = f"[{entry['name']}] {e}"
-                                if msg not in all_preflight_errors:
-                                    all_preflight_errors.append(msg)
-                        except FileNotFoundError:
-                            all_preflight_errors.append(f"시나리오 '{entry['name']}'을(를) 찾을 수 없습니다")
-                    if all_preflight_errors:
-                        await _safe_send({
-                            "type": "preflight_error",
-                            "errors": all_preflight_errors,
-                        })
-                        continue
-
-                    # 그룹 전체를 하나의 통합 결과로 관리
-                    group_name = data.get("group_name", entries[0]["name"])
-                    # 전체 스텝 수 계산
-                    total_steps = 0
-                    for entry in entries:
-                        try:
-                            scen = await recording_service.load_scenario(entry["name"])
-                            total_steps += len(scen.steps)
-                        except FileNotFoundError:
-                            pass
-
-                    # 런 출력 디렉토리를 그룹 이름으로 한 번만 설정
-                    playback_service._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    playback_service._setup_run_output_dir(group_name)
-
-                    unified_result = ScenarioResult(
-                        scenario_name=group_name,
-                        device_serial="multi-device",
-                        status="pass",
-                        total_steps=total_steps,
-                        total_repeat=repeat,
-                        started_at=datetime.now(timezone.utc).isoformat(),
-                    )
-                    # 연속 step_id (시나리오 간 중복 방지)
-                    global_step_seq = 0
-
-                    for iteration in range(1, repeat + 1):
-                        if playback_service._should_stop:
-                            break
-                        if repeat > 1:
-                            await _safe_send({
-                                "type": "iteration_start",
-                                "iteration": iteration,
-                                "total": repeat,
-                            })
-
-                        sc_idx = 0
-                        start_step = 0
-                        while sc_idx < len(entries):
-                            if playback_service._should_stop:
-                                break
-                            entry = entries[sc_idx]
-                            sc_name = entry["name"]
-                            scen = await recording_service.load_scenario(sc_name)
-                            await _safe_send({
-                                "type": "group_scenario_start",
-                                "scenario_name": sc_name,
-                                "scenario_index": sc_idx + 1,
-                                "total_scenarios": len(entries),
-                                "start_step": start_step,
-                            })
-
-                            step_jumps = entry.get("step_jumps", {})
-                            step_jump_target = None
-
-                            _pending_seq = 0  # step_start에서 할당한 seq를 step_result에도 동일 적용
-                            async for item in playback_service.execute_scenario_stream(scen, verify=verify, repeat_index=iteration, start_step=start_step, device_map_override=device_map_override, group_scenario_index=sc_idx + 1):
-                                if isinstance(item, dict) and item.get("_type") == "step_start":
-                                    global_step_seq += 1
-                                    _pending_seq = global_step_seq
-                                    start_data = {k: v for k, v in item.items() if k != "_type"}
-                                    start_data["step_id"] = _pending_seq
-                                    start_data["description"] = f"[{sc_name}] {start_data.get('description', '')}" if start_data.get('description') else f"[{sc_name}]"
-                                    await _safe_send({
-                                        "type": "step_start",
-                                        "data": start_data,
-                                        "iteration": iteration,
-                                        "scenario_name": sc_name,
-                                    })
-                                    continue
-                                step_result = item
-                                # step_jumps 매칭은 원래 step_id로 해야 함
-                                original_step_id = step_result.step_id
-                                # step_start에서 할당한 연번을 동일하게 적용
-                                step_result.step_id = _pending_seq
-                                step_result.description = f"[{sc_name}] {step_result.description}" if step_result.description else f"[{sc_name}]"
-
-                                unified_result.step_results.append(step_result)
-                                if step_result.status == "pass":
-                                    unified_result.passed_steps += 1
-                                elif step_result.status == "fail":
-                                    unified_result.failed_steps += 1
-                                else:
-                                    unified_result.error_steps += 1
-                                await _safe_send({
-                                    "type": "step_result",
-                                    "data": step_result.model_dump(),
-                                    "iteration": iteration,
-                                    "scenario_name": sc_name,
-                                })
-
-                                sj = step_jumps.get(str(original_step_id))
-                                if sj:
-                                    if step_result.status == "pass":
-                                        sj_jump = sj.get("on_pass_goto")
-                                    else:
-                                        sj_jump = sj.get("on_fail_goto")
-                                    if sj_jump is not None:
-                                        step_jump_target = sj_jump
-                                        break
-
-                            if playback_service._should_stop:
-                                break
-
-                            # Determine jump target
-                            next_idx = sc_idx + 1
-                            start_step = 0
-                            jump = None
-
-                            if step_jump_target is not None:
-                                jump = step_jump_target
-                            else:
-                                last_sr = unified_result.step_results[-1] if unified_result.step_results else None
-                                last_status = last_sr.status if last_sr else "pass"
-                                if last_status == "pass":
-                                    jump = entry.get("on_pass_goto")
-                                else:
-                                    jump = entry.get("on_fail_goto")
-
-                            if jump is not None:
-                                if isinstance(jump, dict):
-                                    target_sc = jump.get("scenario", -1)
-                                    target_step = jump.get("step", 0)
-                                else:
-                                    target_sc = jump
-                                    target_step = 0
-                                if target_sc == -1:
-                                    break  # END
-                                next_idx = target_sc
-                                start_step = target_step
-
-                            sc_idx = next_idx
-
-                        # 매 사이클 완료 시 중간 결과 저장 (비정상 종료 대비)
-                        if repeat > 1 and not playback_service._should_stop:
-                            _interim = ScenarioResult(
-                                scenario_name=group_name,
-                                device_serial="multi-device",
-                                status="fail" if unified_result.failed_steps > 0 or unified_result.error_steps > 0 else "pass",
-                                total_steps=global_step_seq,
-                                total_repeat=iteration,
-                                started_at=unified_result.started_at,
-                                finished_at=datetime.now(timezone.utc).isoformat(),
-                                step_results=list(unified_result.step_results),
-                                passed_steps=unified_result.passed_steps,
-                                failed_steps=unified_result.failed_steps,
-                                error_steps=unified_result.error_steps,
-                            )
-                            await playback_service._save_result(_interim, interim=True)
-
-                    # 통합 결과 저장 (1개 파일)
-                    unified_result.finished_at = datetime.now(timezone.utc).isoformat()
-                    unified_result.total_steps = global_step_seq
-                    if unified_result.failed_steps > 0 or unified_result.error_steps > 0:
-                        unified_result.status = "fail"
-                    else:
-                        unified_result.status = "pass"
-                    result_path = await playback_service._save_result(unified_result)
-                    rf = _result_filename(result_path)
-
-                    if playback_service._should_stop:
-                        await _safe_send({"type": "playback_stopped", "result_filename": rf})
-                    else:
-                        await _safe_send({"type": "playback_complete", "result_filename": rf})
-                except Exception as e:
-                    await _safe_send({"type": "error", "message": str(e)})
-                finally:
-                    # 그룹 재생 종료: 통합 런 디렉토리 정리
-                    playback_service._cleanup_run_output_dir()
-                    playback_service._running = False
-                    if stop_listener_task and not stop_listener_task.done():
-                        stop_listener_task.cancel()
-                        try:
-                            await stop_listener_task
-                        except (asyncio.CancelledError, Exception):
-                            pass
-                        stop_listener_task = None
+                if playback_service.is_running or (_playback_bg_task and not _playback_bg_task.done()):
+                    publish_event({"type": "error", "message": "이미 재생 중입니다"})
+                    continue
+                _playback_bg_task = asyncio.create_task(_run_play_group_job(data))
 
             elif action == "stop":
-                # 재생 시작 전 stop이 올 경우 (리스너 태스크 없을 때)
                 await playback_service.stop()
-                await _safe_send({"type": "playback_stopped"})
+                publish_event({"type": "playback_stopped", "result_filename": ""})
+
+            elif action == "pause":
+                await playback_service.pause()
+                publish_event({"type": "playback_paused"})
+
+            elif action == "resume":
+                await playback_service.resume()
+                publish_event({"type": "playback_resumed"})
+
+            elif action == "subscribe":
+                # 재연결 → 이미 subscribe_events가 최근 버퍼를 replay함
+                pass
 
     except WebSocketDisconnect:
-        logger.info("Playback WebSocket disconnected")
+        logger.info("Playback WebSocket disconnected (playback continues in background)")
+    finally:
+        forward_task.cancel()
+        try:
+            await forward_task
+        except (asyncio.CancelledError, Exception):
+            pass
+        unsubscribe_events(event_queue)

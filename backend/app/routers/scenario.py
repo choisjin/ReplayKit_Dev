@@ -913,8 +913,11 @@ async def stop_playback():
 
 @router.get("/playback/status")
 async def playback_status():
-    """Check if playback is running."""
-    return {"running": playback_svc.is_running}
+    """Check if playback is running + current monitor state (scenario name, progress)."""
+    return {
+        "running": playback_svc.is_running,
+        "monitor": getattr(playback_svc, "_monitor_state", {}) or {},
+    }
 
 
 # ------------------------------------------------------------------

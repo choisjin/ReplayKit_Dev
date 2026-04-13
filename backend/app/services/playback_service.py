@@ -41,6 +41,59 @@ logger = logging.getLogger(__name__)
 SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent.parent / "screenshots"
 
 
+# ================================================================
+# Event Broadcaster — 재생 이벤트를 여러 WebSocket 구독자에게 fan-out
+# ================================================================
+# WebSocket이 끊어져도 백그라운드 재생은 계속 동작하고, 새로 연결된
+# client가 "subscribe" 하면 버퍼링된 최근 이벤트를 재전송 받아 상태를 복구할 수 있다.
+
+_EVENT_BUFFER_MAX = 2000  # 마지막 N개 이벤트만 유지 (long scenario 대비)
+_event_subscribers: set["asyncio.Queue[dict]"] = set()
+_event_buffer: list[dict] = []
+_event_buffer_lock = asyncio.Lock()
+
+
+def subscribe_events() -> "asyncio.Queue[dict]":
+    """재생 이벤트 구독 — 새 Queue를 생성하고 최근 버퍼를 replay한다.
+
+    호출 측은 이벤트 처리 후 unsubscribe_events를 반드시 호출해야 함.
+    """
+    q: asyncio.Queue = asyncio.Queue(maxsize=5000)
+    # 최근 버퍼 replay (새 구독자는 현재 진행 상태를 즉시 받음)
+    for ev in list(_event_buffer):
+        try:
+            q.put_nowait(ev)
+        except asyncio.QueueFull:
+            break
+    _event_subscribers.add(q)
+    logger.debug("Event subscriber added (total=%d)", len(_event_subscribers))
+    return q
+
+
+def unsubscribe_events(q: "asyncio.Queue[dict]") -> None:
+    """구독 해제."""
+    _event_subscribers.discard(q)
+    logger.debug("Event subscriber removed (total=%d)", len(_event_subscribers))
+
+
+def publish_event(event: dict) -> None:
+    """이벤트를 모든 구독자에게 브로드캐스트 + 버퍼에 추가."""
+    _event_buffer.append(event)
+    if len(_event_buffer) > _EVENT_BUFFER_MAX:
+        _event_buffer.pop(0)
+    for q in list(_event_subscribers):
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            # 느린 subscriber → 이벤트 drop (재접속 시 버퍼에서 복구)
+            pass
+
+
+def clear_event_buffer() -> None:
+    """새 재생 시작 시 버퍼 초기화 (구독자는 유지)."""
+    _event_buffer.clear()
+
+
 def _build_ctor_kwargs(dev) -> dict | None:
     """Build constructor kwargs from device info for module instantiation."""
     ct = dev.info.get("connect_type", "serial" if dev.type == "serial" else "none")
@@ -989,20 +1042,48 @@ class PlaybackService:
             if wait_mode == "cycle":
                 start_ms = params.get("wait_start", 3000)
                 interval_ms = params.get("wait_interval", 3000)
-                # current_iteration은 0-based (execute_scenario에서 설정)
                 cycle_idx = getattr(self, '_current_iteration', 0)
                 actual_ms = start_ms + interval_ms * cycle_idx
                 logger.info("Wait cycle: iteration=%d, wait=%dms (start=%d + interval=%d × %d)", cycle_idx, actual_ms, start_ms, interval_ms, cycle_idx)
-                await self._interruptible_sleep(actual_ms / 1000.0)
             elif wait_mode == "random":
                 import random
                 wait_min = params.get("wait_min", 0)
                 wait_max = params.get("wait_max", 10000)
                 actual_ms = random.randint(wait_min, wait_max)
                 logger.info("Wait random: %dms (range %d~%d)", actual_ms, wait_min, wait_max)
-                await self._interruptible_sleep(actual_ms / 1000.0)
             else:
-                await self._interruptible_sleep(params.get("duration_ms", 1000) / 1000.0)
+                actual_ms = params.get("duration_ms", 1000)
+            # 긴 wait는 1초 chunk로 분할하며 주기적으로 wait_progress 이벤트 발행
+            # → WebSocket idle 방지 + 프론트엔드 진행률 표시 가능
+            total_s = actual_ms / 1000.0
+            if total_s <= 2.0:
+                await self._interruptible_sleep(total_s)
+            else:
+                PROGRESS_INTERVAL_S = 5.0
+                CHUNK_S = 1.0
+                elapsed = 0.0
+                next_progress = PROGRESS_INTERVAL_S
+                # 시작 시점 이벤트
+                publish_event({
+                    "type": "wait_progress",
+                    "step_id": step.id,
+                    "elapsed_ms": 0,
+                    "total_ms": int(actual_ms),
+                })
+                while elapsed < total_s:
+                    if self._should_stop:
+                        return
+                    sleep_s = min(CHUNK_S, total_s - elapsed)
+                    await self._interruptible_sleep(sleep_s)
+                    elapsed += sleep_s
+                    if elapsed >= next_progress or elapsed >= total_s:
+                        publish_event({
+                            "type": "wait_progress",
+                            "step_id": step.id,
+                            "elapsed_ms": int(elapsed * 1000),
+                            "total_ms": int(actual_ms),
+                        })
+                        next_progress = elapsed + PROGRESS_INTERVAL_S
         else:
             # ADB actions — real_id를 ADB 시리얼(dev.address)로 변환
             adb_serial = real_id
