@@ -819,30 +819,38 @@ class PlaybackService:
             if not port:
                 return
             from .hkmc6th_service import HKMC6thService
-            for attempt in range(1, max_retries + 1):
-                if self._should_stop:
+            # device_manager와 동일한 재연결 락으로 직렬화 — race condition 제거.
+            # 잠긴 동안 monitor 루프가 같은 디바이스를 건드리지 못함.
+            lock = self.dm.get_reconnect_lock(device_id)
+            async with lock:
+                # 락 획득 후 재검사: 다른 경로가 이미 성공시켰을 수 있음
+                hkmc = self.dm.get_hkmc_service(device_id)
+                if hkmc and hkmc.is_connected:
                     return
-                logger.info("Playback: reconnect %s attempt %d/%d", device_id, attempt, max_retries)
-                try:
-                    hkmc = self.dm.get_hkmc_service(device_id)
-                    if hkmc:
-                        hkmc.disconnect()
-                    svc = HKMC6thService(dev.address, port, device_id=dev.id)
-                    ok = await svc.async_connect()
-                    if ok:
-                        self.dm._hkmc_conns[dev.id] = svc
-                        self.dm._hkmc_reconnect_attempts.pop(dev.id, None)
-                        dev.status = "connected"
-                        dev.info["agent_version"] = svc.agent_version
-                        dev.info["screens"] = svc.get_info()["screens"]
-                        logger.info("Playback: reconnected %s", device_id)
+                for attempt in range(1, max_retries + 1):
+                    if self._should_stop:
                         return
-                except Exception as e:
-                    logger.debug("Playback: reconnect %s failed: %s", device_id, e)
-                if attempt < max_retries:
-                    if await self._interruptible_sleep(retry_interval):
-                        return
-            dev.status = "disconnected"
+                    logger.info("Playback: reconnect %s attempt %d/%d", device_id, attempt, max_retries)
+                    try:
+                        hkmc = self.dm.get_hkmc_service(device_id)
+                        if hkmc:
+                            hkmc.disconnect()
+                        svc = HKMC6thService(dev.address, port, device_id=dev.id)
+                        ok = await svc.async_connect()
+                        if ok:
+                            self.dm._hkmc_conns[dev.id] = svc
+                            self.dm._hkmc_reconnect_attempts.pop(dev.id, None)
+                            dev.status = "connected"
+                            dev.info["agent_version"] = svc.agent_version
+                            dev.info["screens"] = svc.get_info()["screens"]
+                            logger.info("Playback: reconnected %s", device_id)
+                            return
+                    except Exception as e:
+                        logger.debug("Playback: reconnect %s failed: %s", device_id, e)
+                    if attempt < max_retries:
+                        if await self._interruptible_sleep(retry_interval):
+                            return
+                dev.status = "disconnected"
 
         elif dev.type == "isap_agent":
             isap = self.dm.get_isap_service(device_id)
@@ -852,30 +860,35 @@ class PlaybackService:
             if not port:
                 return
             from .isap_agent_service import ISAPAgentService
-            for attempt in range(1, max_retries + 1):
-                if self._should_stop:
+            lock = self.dm.get_reconnect_lock(device_id)
+            async with lock:
+                isap = self.dm.get_isap_service(device_id)
+                if isap and isap.is_connected:
                     return
-                logger.info("Playback: iSAP reconnect %s attempt %d/%d", device_id, attempt, max_retries)
-                try:
-                    isap = self.dm.get_isap_service(device_id)
-                    if isap:
-                        isap.disconnect()
-                    svc = ISAPAgentService(dev.address, port, device_id=dev.id)
-                    ok = await svc.async_connect()
-                    if ok:
-                        self.dm._isap_conns[dev.id] = svc
-                        self.dm._isap_reconnect_attempts.pop(dev.id, None)
-                        dev.status = "connected"
-                        dev.info["agent_version"] = svc.agent_version
-                        dev.info["screens"] = svc.get_info()["screens"]
-                        logger.info("Playback: iSAP reconnected %s", device_id)
+                for attempt in range(1, max_retries + 1):
+                    if self._should_stop:
                         return
-                except Exception as e:
-                    logger.debug("Playback: iSAP reconnect %s failed: %s", device_id, e)
-                if attempt < max_retries:
-                    if await self._interruptible_sleep(retry_interval):
-                        return
-            dev.status = "disconnected"
+                    logger.info("Playback: iSAP reconnect %s attempt %d/%d", device_id, attempt, max_retries)
+                    try:
+                        isap = self.dm.get_isap_service(device_id)
+                        if isap:
+                            isap.disconnect()
+                        svc = ISAPAgentService(dev.address, port, device_id=dev.id)
+                        ok = await svc.async_connect()
+                        if ok:
+                            self.dm._isap_conns[dev.id] = svc
+                            self.dm._isap_reconnect_attempts.pop(dev.id, None)
+                            dev.status = "connected"
+                            dev.info["agent_version"] = svc.agent_version
+                            dev.info["screens"] = svc.get_info()["screens"]
+                            logger.info("Playback: iSAP reconnected %s", device_id)
+                            return
+                    except Exception as e:
+                        logger.debug("Playback: iSAP reconnect %s failed: %s", device_id, e)
+                    if attempt < max_retries:
+                        if await self._interruptible_sleep(retry_interval):
+                            return
+                dev.status = "disconnected"
 
         elif dev.type == "adb":
             # 먼저 현재 상태 확인

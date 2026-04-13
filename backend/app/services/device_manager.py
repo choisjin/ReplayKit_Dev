@@ -691,6 +691,9 @@ class DeviceManager:
         self._isap_conns: dict[str, ISAPAgentService] = {}  # device_id -> ISAPAgentService
         self._isap_reconnect_attempts: dict[str, int] = {}
         self._adb_reconnect_attempts: dict[str, int] = {}  # device_id -> 연속 재연결 실패 횟수
+        # 디바이스별 재연결 락: playback의 _ensure_device_connected와 백그라운드 monitor 루프가
+        # 같은 디바이스를 동시에 재연결하지 못하도록 직렬화. race condition 제거용.
+        self._reconnect_locks: dict[str, asyncio.Lock] = {}
         self._vision_cams: dict[str, object] = {}  # device_id -> VisionCamera instance
         self._ssh_conns: dict[str, SSHConnection] = {}  # device_id -> SSHConnection
         self._ever_connected: set[str] = set()  # 사용자가 명시적으로 연결한 디바이스만 자동 재연결
@@ -1098,28 +1101,41 @@ class DeviceManager:
                     dev.status = "error"
                     logger.warning("HKMC reconnect give up after %d attempts: %s", attempts, dev.id)
                     continue
-                dev.status = "reconnecting"
-                try:
-                    if hkmc:
-                        hkmc.disconnect()
-                    svc = HKMC6thService(dev.address, port, device_id=dev.id)
-                    ok = await svc.async_connect()
-                    if ok:
-                        self._hkmc_conns[dev.id] = svc
+                # 재연결 락: playback의 _ensure_device_connected와 race 방지
+                lock = self.get_reconnect_lock(dev.id)
+                if lock.locked():
+                    # 다른 경로(주로 playback)가 이미 재연결 중 — 스킵하고 다음 주기에 확인
+                    continue
+                async with lock:
+                    # 락 획득 후 재검사: playback이 이미 성공시켰을 수 있음
+                    hkmc = self._hkmc_conns.get(dev.id)
+                    if hkmc and hkmc.is_connected:
                         self._hkmc_reconnect_attempts.pop(dev.id, None)
-                        dev.status = "connected"
-                        dev.info["agent_version"] = svc.agent_version
-                        dev.info["screens"] = svc.get_info()["screens"]
-                        dev.info["resolution"] = dev.info["screens"].get("front_center", {"width": 1920, "height": 720})
-                        logger.info("HKMC auto-reconnect success: %s (after %d attempts)", dev.id, attempts)
-                    else:
+                        if dev.status != "connected":
+                            dev.status = "connected"
+                        continue
+                    dev.status = "reconnecting"
+                    try:
+                        if hkmc:
+                            hkmc.disconnect()
+                        svc = HKMC6thService(dev.address, port, device_id=dev.id)
+                        ok = await svc.async_connect()
+                        if ok:
+                            self._hkmc_conns[dev.id] = svc
+                            self._hkmc_reconnect_attempts.pop(dev.id, None)
+                            dev.status = "connected"
+                            dev.info["agent_version"] = svc.agent_version
+                            dev.info["screens"] = svc.get_info()["screens"]
+                            dev.info["resolution"] = dev.info["screens"].get("front_center", {"width": 1920, "height": 720})
+                            logger.info("HKMC auto-reconnect success: %s (after %d attempts)", dev.id, attempts)
+                        else:
+                            self._hkmc_reconnect_attempts[dev.id] = attempts + 1
+                            dev.status = "disconnected"
+                    except Exception as e:
                         self._hkmc_reconnect_attempts[dev.id] = attempts + 1
                         dev.status = "disconnected"
-                except Exception as e:
-                    self._hkmc_reconnect_attempts[dev.id] = attempts + 1
-                    dev.status = "disconnected"
-                    logger.debug("HKMC auto-reconnect failed (%d/%d): %s: %s",
-                                 attempts + 1, self.HKMC_MAX_RECONNECT_ATTEMPTS, dev.id, e)
+                        logger.debug("HKMC auto-reconnect failed (%d/%d): %s: %s",
+                                     attempts + 1, self.HKMC_MAX_RECONNECT_ATTEMPTS, dev.id, e)
 
             if dev.type == "isap_agent":
                 isap = self._isap_conns.get(dev.id)
@@ -1138,30 +1154,40 @@ class DeviceManager:
                     dev.status = "error"
                     logger.warning("iSAP reconnect give up after %d attempts: %s", attempts, dev.id)
                     continue
-                dev.status = "reconnecting"
-                try:
-                    if isap:
-                        isap.disconnect()
-                    svc = ISAPAgentService(dev.address, port, device_id=dev.id)
-                    ok = await svc.async_connect()
-                    if ok:
-                        self._isap_conns[dev.id] = svc
+                lock = self.get_reconnect_lock(dev.id)
+                if lock.locked():
+                    continue
+                async with lock:
+                    isap = self._isap_conns.get(dev.id)
+                    if isap and isap.is_connected:
                         self._isap_reconnect_attempts.pop(dev.id, None)
-                        dev.status = "connected"
-                        dev.info["agent_version"] = svc.agent_version
-                        dev.info["screens"] = svc.get_info()["screens"]
-                        dev.info["resolution"] = dev.info["screens"].get(
-                            svc.default_screen, {"width": 1920, "height": 720}
-                        )
-                        logger.info("iSAP auto-reconnect success: %s", dev.id)
-                    else:
+                        if dev.status != "connected":
+                            dev.status = "connected"
+                        continue
+                    dev.status = "reconnecting"
+                    try:
+                        if isap:
+                            isap.disconnect()
+                        svc = ISAPAgentService(dev.address, port, device_id=dev.id)
+                        ok = await svc.async_connect()
+                        if ok:
+                            self._isap_conns[dev.id] = svc
+                            self._isap_reconnect_attempts.pop(dev.id, None)
+                            dev.status = "connected"
+                            dev.info["agent_version"] = svc.agent_version
+                            dev.info["screens"] = svc.get_info()["screens"]
+                            dev.info["resolution"] = dev.info["screens"].get(
+                                svc.default_screen, {"width": 1920, "height": 720}
+                            )
+                            logger.info("iSAP auto-reconnect success: %s", dev.id)
+                        else:
+                            self._isap_reconnect_attempts[dev.id] = attempts + 1
+                            dev.status = "disconnected"
+                    except Exception as e:
                         self._isap_reconnect_attempts[dev.id] = attempts + 1
                         dev.status = "disconnected"
-                except Exception as e:
-                    self._isap_reconnect_attempts[dev.id] = attempts + 1
-                    dev.status = "disconnected"
-                    logger.debug("iSAP auto-reconnect failed (%d/%d): %s: %s",
-                                 attempts + 1, self.ISAP_MAX_RECONNECT_ATTEMPTS, dev.id, e)
+                        logger.debug("iSAP auto-reconnect failed (%d/%d): %s: %s",
+                                     attempts + 1, self.ISAP_MAX_RECONNECT_ATTEMPTS, dev.id, e)
 
     def reset_reconnect_attempts(self, device_id: str) -> None:
         """수동 재연결 시 실패 카운터 리셋 (error 상태에서 복구 가능하게)."""
@@ -1171,6 +1197,18 @@ class DeviceManager:
         dev = self._devices.get(device_id)
         if dev and dev.status == "error":
             dev.status = "disconnected"
+
+    def get_reconnect_lock(self, device_id: str) -> asyncio.Lock:
+        """디바이스별 재연결 락 획득 (lazy 생성).
+
+        playback._ensure_device_connected와 monitor 루프의 재연결 블록이
+        동일 디바이스에 대해 동시에 실행되지 않도록 직렬화.
+        """
+        lock = self._reconnect_locks.get(device_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._reconnect_locks[device_id] = lock
+        return lock
 
     async def scan_serial(self) -> list[dict]:
         """Scan available serial ports."""

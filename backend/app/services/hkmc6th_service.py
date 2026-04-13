@@ -201,35 +201,62 @@ class HKMC6thService:
         try:
             self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self._socket.settimeout(timeout)
             self._socket.connect((self.host, self.port))
         except Exception as e:
             logger.error("Failed to connect to %s:%d: %s", self.host, self.port, e)
+            if self._socket:
+                try:
+                    self._socket.close()
+                except Exception:
+                    pass
             self._socket = None
             return False
 
-        # Wait for handshake (13 bytes)
+        # Wait for handshake (13 bytes) — 소켓 타임아웃으로 무한 블록 방지
         deadline = time.time() + timeout
         self._connected = False
         while not self._connected and time.time() < deadline:
             try:
+                remaining = max(0.1, deadline - time.time())
+                self._socket.settimeout(remaining)
                 raw = self._socket.recv(13)
-                if raw:
-                    hex_val = raw.hex()
-                    if hex_val in ("6161000000035e002185fd6f6f", "6161000000035e0000df856f6f"):
-                        self._connected = True
-                        logger.info("HKMC agent connected: %s:%d", self.host, self.port)
-                    else:
-                        logger.warning("Invalid handshake: %s", hex_val)
-                        break
+                if not raw:
+                    logger.error("HKMC handshake: peer closed before handshake (%s:%d)", self.host, self.port)
+                    break
+                hex_val = raw.hex()
+                if hex_val in ("6161000000035e002185fd6f6f", "6161000000035e0000df856f6f"):
+                    self._connected = True
+                    logger.info("HKMC agent connected: %s:%d", self.host, self.port)
+                else:
+                    logger.warning("Invalid handshake: %s", hex_val)
+                    break
+            except socket.timeout:
+                logger.error("HKMC handshake recv timeout (%s:%d)", self.host, self.port)
+                break
             except socket.error as e:
                 logger.error("Socket error during handshake: %s", e)
+                try:
+                    self._socket.close()
+                except Exception:
+                    pass
                 self._socket = None
                 return False
 
         if not self._connected:
-            logger.error("Handshake timeout for %s:%d", self.host, self.port)
+            logger.error("Handshake failed for %s:%d", self.host, self.port)
+            try:
+                self._socket.close()
+            except Exception:
+                pass
             self._socket = None
             return False
+
+        # 핸드셰이크 완료 — receive thread는 블로킹 모드로 동작
+        try:
+            self._socket.settimeout(None)
+        except Exception:
+            pass
 
         # Start receive thread
         self._exit_flag = False
