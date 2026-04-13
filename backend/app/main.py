@@ -541,8 +541,39 @@ def _webcam_session_start(iteration: int = 1) -> Optional[_WebcamPlaybackSession
         return None
 
 
+def _try_move_cycle_to_final(iteration: int, src: Path) -> Optional[Path]:
+    """완료된 cycle 녹화 파일을 가능한 경우 즉시 최종 recordings/ 위치로 이동한다.
+
+    `_run_output_dir`이 설정되어 있지 않으면 (single-cycle 초기 등) None을 반환하여
+    호출 측이 임시 경로를 그대로 유지하도록 한다.
+    """
+    try:
+        from .services.playback_service import get_run_output_dir
+        run_dir = get_run_output_dir()
+        if run_dir is None:
+            return None
+        final_dir = run_dir / "recordings"
+        final_dir.mkdir(parents=True, exist_ok=True)
+        dst = final_dir / f"webcam_r{iteration}.mp4"
+        if not src.exists():
+            return None
+        if src.resolve() == dst.resolve():
+            return dst
+        import shutil
+        shutil.move(str(src), str(dst))
+        logger.info("Webcam cycle %d published immediately: %s", iteration, dst)
+        return dst
+    except Exception as e:
+        logger.warning("Failed to publish webcam cycle %d: %s", iteration, e)
+        return None
+
+
 def _webcam_session_next_cycle(session: Optional[_WebcamPlaybackSession], iteration: int) -> None:
-    """현재 cycle 녹화 종료 + 다음 cycle 녹화 시작."""
+    """현재 cycle 녹화 종료 + 다음 cycle 녹화 시작.
+
+    완료된 이전 cycle 파일은 즉시 `run_dir/recordings/`로 이동하여
+    재생 중에도 결과 상세에서 해당 cycle의 영상을 조회할 수 있게 한다.
+    """
     if session is None or not session.is_active():
         return
     try:
@@ -550,7 +581,9 @@ def _webcam_session_next_cycle(session: Optional[_WebcamPlaybackSession], iterat
         svc = get_webcam_service()
         svc.stop_recording()
         if session.current_path is not None:
-            session.cycle_files.append((session.current_cycle, session.current_path))
+            # 완료된 cycle 파일을 즉시 최종 위치로 이동 시도
+            moved = _try_move_cycle_to_final(session.current_cycle, session.current_path)
+            session.cycle_files.append((session.current_cycle, moved or session.current_path))
         path = session.temp_dir / f"webcam_r{iteration}.mp4"  # type: ignore[union-attr]
         if svc.start_recording(str(path)):
             session.current_cycle = iteration
@@ -563,7 +596,11 @@ def _webcam_session_next_cycle(session: Optional[_WebcamPlaybackSession], iterat
 
 
 def _webcam_session_finalize(session: Optional[_WebcamPlaybackSession], result_path: Optional[str]) -> None:
-    """재생 종료 시 마지막 cycle 녹화 정지 + 모든 cycle 파일을 결과 폴더로 이동."""
+    """재생 종료 시 마지막 cycle 녹화 정지 + 남은 cycle 파일을 결과 폴더로 이동.
+
+    cycle별 파일은 이미 `_webcam_session_next_cycle`에서 즉시 최종 위치로 옮겨져 있는 경우가 많으며,
+    이 함수는 마지막(진행 중이던) cycle과 early-move가 실패했던 파일만 보완 이동한다.
+    """
     if session is None or not session.is_active():
         return
     try:
@@ -571,7 +608,9 @@ def _webcam_session_finalize(session: Optional[_WebcamPlaybackSession], result_p
         svc = get_webcam_service()
         svc.stop_recording()
         if session.current_path is not None:
-            session.cycle_files.append((session.current_cycle, session.current_path))
+            # 마지막 cycle도 즉시 이동 시도 (run_dir이 준비되어 있을 경우)
+            moved = _try_move_cycle_to_final(session.current_cycle, session.current_path)
+            session.cycle_files.append((session.current_cycle, moved or session.current_path))
     except Exception as e:
         logger.warning("Failed to stop webcam session: %s", e)
 
@@ -593,6 +632,12 @@ def _webcam_session_finalize(session: Optional[_WebcamPlaybackSession], result_p
                 if not src.exists():
                     continue
                 dst = final_dir / f"webcam_r{iteration}.mp4"
+                # 이미 최종 위치에 있으면 이동 생략 (early-move 성공 케이스)
+                try:
+                    if src.resolve() == dst.resolve():
+                        continue
+                except Exception:
+                    pass
                 try:
                     shutil.move(str(src), str(dst))
                     logger.info("Webcam recording moved: %s → %s", src.name, dst)
