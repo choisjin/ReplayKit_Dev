@@ -515,6 +515,16 @@ class PlaybackService:
                     logger.debug("Screenshot capture: device=%s adb_did=%s sf_did=%s",
                                  ss_device["id"], adb_did, sf_did)
                     await self.adb.screencap(actual_path, serial=adb_serial, sf_display_id=sf_did)
+                elif ss_device["type"] == "isap_agent":
+                    isap_svc = self.dm.get_isap_service(ss_device["id"])
+                    if isap_svc:
+                        img_bytes = await isap_svc.async_screencap_bytes(
+                            screen_type=ss_device.get("screen_type", "front_center"), fmt="png"
+                        )
+                        with open(actual_path, "wb") as f:
+                            f.write(img_bytes)
+                    else:
+                        raise RuntimeError(f"iSAP device {ss_device['id']} not connected")
                 elif ss_device["type"] == "hkmc6th":
                     hkmc_svc = self.dm.get_hkmc_service(ss_device["id"])
                     if hkmc_svc:
@@ -834,6 +844,39 @@ class PlaybackService:
                         return
             dev.status = "disconnected"
 
+        elif dev.type == "isap_agent":
+            isap = self.dm.get_isap_service(device_id)
+            if isap and isap.is_connected:
+                return
+            port = dev.info.get("port", 0)
+            if not port:
+                return
+            from .isap_agent_service import ISAPAgentService
+            for attempt in range(1, max_retries + 1):
+                if self._should_stop:
+                    return
+                logger.info("Playback: iSAP reconnect %s attempt %d/%d", device_id, attempt, max_retries)
+                try:
+                    isap = self.dm.get_isap_service(device_id)
+                    if isap:
+                        isap.disconnect()
+                    svc = ISAPAgentService(dev.address, port, device_id=dev.id)
+                    ok = await svc.async_connect()
+                    if ok:
+                        self.dm._isap_conns[dev.id] = svc
+                        self.dm._isap_reconnect_attempts.pop(dev.id, None)
+                        dev.status = "connected"
+                        dev.info["agent_version"] = svc.agent_version
+                        dev.info["screens"] = svc.get_info()["screens"]
+                        logger.info("Playback: iSAP reconnected %s", device_id)
+                        return
+                except Exception as e:
+                    logger.debug("Playback: iSAP reconnect %s failed: %s", device_id, e)
+                if attempt < max_retries:
+                    if await self._interruptible_sleep(retry_interval):
+                        return
+            dev.status = "disconnected"
+
         elif dev.type == "adb":
             # 먼저 현재 상태 확인
             try:
@@ -890,11 +933,24 @@ class PlaybackService:
         return self._resolve_alias(step.device_id, self._device_map)
 
     def _is_hkmc_device(self, device_id: Optional[str]) -> bool:
-        """디바이스가 HKMC 타입인지 확인."""
+        """디바이스가 HKMC/iSAP 에이전트 TCP 프로토콜 타입인지 확인."""
         if not device_id:
             return False
         dev = self.dm.get_device(device_id)
-        return dev is not None and dev.type == "hkmc6th"
+        return dev is not None and dev.type in ("hkmc6th", "isap_agent")
+
+    def _get_agent_service(self, device_id: Optional[str]):
+        """Return (svc, is_isap) for hkmc6th 또는 isap_agent device, or (None, False)."""
+        if not device_id:
+            return None, False
+        dev = self.dm.get_device(device_id)
+        if not dev:
+            return None, False
+        if dev.type == "isap_agent":
+            return self.dm.get_isap_service(device_id), True
+        if dev.type == "hkmc6th":
+            return self.dm.get_hkmc_service(device_id), False
+        return None, False
 
     def _resolve_screenshot_device(self, step: Step) -> Optional[dict]:
         """Resolve which device to take screenshots from.
@@ -920,6 +976,9 @@ class PlaybackService:
                 if ss_dev.type == "hkmc6th":
                     screen_type = step.screen_type or step.params.get("screen_type", "front_center")
                     return {"type": "hkmc6th", "id": ss_dev.id, "screen_type": screen_type}
+                if ss_dev.type == "isap_agent":
+                    screen_type = step.screen_type or step.params.get("screen_type", "front_center")
+                    return {"type": "isap_agent", "id": ss_dev.id, "screen_type": screen_type}
                 if ss_dev.type == "vision_camera":
                     return {"type": "vision_camera", "id": ss_dev.id}
                 if ss_dev.type == "adb":
@@ -938,6 +997,9 @@ class PlaybackService:
             elif dev and dev.type == "hkmc6th":
                 screen_type = step.screen_type or step.params.get("screen_type", "front_center")
                 return {"type": "hkmc6th", "id": dev.id, "screen_type": screen_type}
+            elif dev and dev.type == "isap_agent":
+                screen_type = step.screen_type or step.params.get("screen_type", "front_center")
+                return {"type": "isap_agent", "id": dev.id, "screen_type": screen_type}
             elif dev and dev.type == "vision_camera":
                 return {"type": "vision_camera", "id": dev.id}
             elif dev:
@@ -956,6 +1018,8 @@ class PlaybackService:
             dev = primary[0]
             if dev.type == "hkmc6th":
                 return {"type": "hkmc6th", "id": dev.id, "screen_type": "front_center"}
+            if dev.type == "isap_agent":
+                return {"type": "isap_agent", "id": dev.id, "screen_type": "front_center"}
             if dev.type == "vision_camera":
                 return {"type": "vision_camera", "id": dev.id}
             return {"type": "adb", "id": dev.id, "serial": dev.address}
@@ -1020,38 +1084,51 @@ class PlaybackService:
             )
         elif step.type in (StepType.HKMC_TOUCH, StepType.HKMC_SWIPE, StepType.HKMC_KEY) or (step.type == StepType.REPEAT_TAP and self._is_hkmc_device(real_id)):
             if not real_id:
-                raise ValueError("HKMC step requires device_id")
+                raise ValueError("HKMC/iSAP step requires device_id")
             # 액션 실행 중 연결 끊김 시 재연결 후 재시도 (최대 2회)
             for _hkmc_attempt in range(2):
-                hkmc = self.dm.get_hkmc_service(real_id)
-                if not hkmc or not hkmc.is_connected:
-                    raise ValueError(f"HKMC device {real_id} not connected")
+                svc, is_isap = self._get_agent_service(real_id)
+                if not svc or not svc.is_connected:
+                    raise ValueError(f"HKMC/iSAP device {real_id} not connected")
                 try:
                     screen_type = step.screen_type or params.get("screen_type", "front_center")
                     if step.type == StepType.REPEAT_TAP:
-                        await hkmc.async_repeat_tap(params["x"], params["y"],
-                                                     int(params.get("count", 5)),
-                                                     int(params.get("interval_ms", 100)), screen_type)
+                        await svc.async_repeat_tap(params["x"], params["y"],
+                                                   int(params.get("count", 5)),
+                                                   int(params.get("interval_ms", 100)), screen_type)
                     elif step.type == StepType.HKMC_TOUCH:
-                        await hkmc.async_tap(params["x"], params["y"], screen_type)
+                        await svc.async_tap(params["x"], params["y"], screen_type)
                     elif step.type == StepType.HKMC_SWIPE:
-                        await hkmc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"], screen_type)
+                        if is_isap:
+                            await svc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"],
+                                                  screen_type, int(params.get("duration_ms", 0)))
+                        else:
+                            await svc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"], screen_type)
                     elif step.type == StepType.HKMC_KEY:
                         key_name = params.get("key_name")
+                        direction = params.get("direction")
                         if key_name:
                             sub_cmd = params.get("sub_cmd", 0x43)
-                            monitor = params.get("monitor", 0x00)
-                            direction = params.get("direction")
-                            await hkmc.async_send_key_by_name(key_name, sub_cmd, monitor, direction)
+                            if is_isap:
+                                await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, direction)
+                            else:
+                                monitor = params.get("monitor", 0x00)
+                                await svc.async_send_key_by_name(key_name, sub_cmd, monitor, direction)
                         else:
-                            await hkmc.async_send_key(
-                                params["cmd"], params["sub_cmd"], params["key_data"],
-                                params.get("monitor", 0x00), params.get("direction"),
-                            )
+                            if is_isap:
+                                await svc.async_send_key(
+                                    params["cmd"], params["sub_cmd"], params["key_data"],
+                                    screen_type, direction,
+                                )
+                            else:
+                                await svc.async_send_key(
+                                    params["cmd"], params["sub_cmd"], params["key_data"],
+                                    params.get("monitor", 0x00), direction,
+                                )
                     break  # 성공 시 루프 탈출
                 except (ConnectionError, OSError) as ce:
                     if _hkmc_attempt == 0:
-                        logger.warning("HKMC action failed (connection lost), reconnecting: %s", ce)
+                        logger.warning("HKMC/iSAP action failed (connection lost), reconnecting: %s", ce)
                         await self._ensure_device_connected(real_id, max_retries=2, retry_interval=2.0)
                     else:
                         raise  # 재시도 후에도 실패 → 상위 except에서 "error" 처리

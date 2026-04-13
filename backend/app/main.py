@@ -395,9 +395,14 @@ async def websocket_screen_mirror(websocket: WebSocket):
     # 디바이스 타입 판별
     dev = device_manager.get_device(target_device_id) if target_device_id else None
     is_hkmc = dev and dev.type == "hkmc6th"
+    is_isap = dev and dev.type == "isap_agent"
     is_vision_camera = dev and dev.type == "vision_camera"
 
-    dev_type_label = "hkmc" if is_hkmc else ("vision_camera" if is_vision_camera else "adb")
+    dev_type_label = (
+        "hkmc" if is_hkmc else
+        ("isap" if is_isap else
+         ("vision_camera" if is_vision_camera else "adb"))
+    )
     logger.debug("Screen mirror: device=%s type=%s", target_device_id, dev_type_label)
 
     # scrcpy 제거 — 항상 JPEG screencap 사용
@@ -411,6 +416,7 @@ async def websocket_screen_mirror(websocket: WebSocket):
             try:
                 # 매 프레임마다 최신 서비스 인스턴스 조회 (재연결 대응)
                 hkmc = device_manager.get_hkmc_service(target_device_id) if is_hkmc else None
+                isap = device_manager.get_isap_service(target_device_id) if is_isap else None
                 if hkmc and hkmc.is_connected:
                     jpeg_bytes = await hkmc.async_screencap_bytes(
                         screen_type=screen_type, fmt="jpeg", timeout=3.0
@@ -418,6 +424,14 @@ async def websocket_screen_mirror(websocket: WebSocket):
                     await websocket.send_bytes(jpeg_bytes)
                 elif is_hkmc:
                     # HKMC 재연결 대기 중 — 빈 프레임 대신 잠시 대기
+                    await asyncio.sleep(0.3)
+                    continue
+                elif isap and isap.is_connected:
+                    jpeg_bytes = await isap.async_screencap_bytes(
+                        screen_type=screen_type, fmt="jpeg", timeout=3.0
+                    )
+                    await websocket.send_bytes(jpeg_bytes)
+                elif is_isap:
                     await asyncio.sleep(0.3)
                     continue
                 elif is_vision_camera:

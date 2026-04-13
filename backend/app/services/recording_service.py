@@ -917,27 +917,46 @@ class RecordingService:
             return response
         elif step_type in (StepType.HKMC_TOUCH, StepType.HKMC_SWIPE, StepType.HKMC_KEY):
             if not device_id:
-                raise ValueError("HKMC step requires a device_id")
-            hkmc = self.dm.get_hkmc_service(device_id)
-            if not hkmc:
-                raise ValueError(f"HKMC device {device_id} not connected")
+                raise ValueError("HKMC/iSAP step requires a device_id")
+            dev = self.dm.get_device(device_id)
+            svc = None
+            is_isap = dev and dev.type == "isap_agent"
+            if is_isap:
+                svc = self.dm.get_isap_service(device_id)
+            else:
+                svc = self.dm.get_hkmc_service(device_id)
+            if not svc:
+                raise ValueError(f"HKMC/iSAP device {device_id} not connected")
             screen_type = params.get("screen_type", "front_center")
             if step_type == StepType.HKMC_TOUCH:
-                await hkmc.async_tap(params["x"], params["y"], screen_type)
+                await svc.async_tap(params["x"], params["y"], screen_type)
             elif step_type == StepType.HKMC_SWIPE:
-                await hkmc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"], screen_type)
+                if is_isap:
+                    await svc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"],
+                                          screen_type, int(params.get("duration_ms", 0)))
+                else:
+                    await svc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"], screen_type)
             elif step_type == StepType.HKMC_KEY:
                 key_name = params.get("key_name")
                 if key_name:
                     sub_cmd = params.get("sub_cmd", 0x43)  # SHORT_KEY
-                    monitor = params.get("monitor", 0x00)
                     direction = params.get("direction")
-                    await hkmc.async_send_key_by_name(key_name, sub_cmd, monitor, direction)
+                    if is_isap:
+                        await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, direction)
+                    else:
+                        monitor = params.get("monitor", 0x00)
+                        await svc.async_send_key_by_name(key_name, sub_cmd, monitor, direction)
                 else:
-                    await hkmc.async_send_key(
-                        params["cmd"], params["sub_cmd"], params["key_data"],
-                        params.get("monitor", 0x00), params.get("direction"),
-                    )
+                    if is_isap:
+                        await svc.async_send_key(
+                            params["cmd"], params["sub_cmd"], params["key_data"],
+                            screen_type, params.get("direction"),
+                        )
+                    else:
+                        await svc.async_send_key(
+                            params["cmd"], params["sub_cmd"], params["key_data"],
+                            params.get("monitor", 0x00), params.get("direction"),
+                        )
         elif step_type == StepType.WAIT:
             await _async_sleep(params.get("duration_ms", 1000) / 1000.0)
         else:

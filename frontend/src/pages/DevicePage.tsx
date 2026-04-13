@@ -44,6 +44,7 @@ function getDevicePrefix(id: string): string {
 const GROUP_LABELS: Record<string, string> = {
   Android: 'Android (ADB)',
   HKMC: 'HKMC 6th',
+  iSAP: 'iSAP Agent',
   Serial: 'Serial',
   VisionCam: 'Vision Camera',
   Device: 'Device',
@@ -225,7 +226,7 @@ export default function DevicePage() {
   const [forceIpSubnet, setForceIpSubnet] = useState('255.255.255.0');
   const [forceIpGateway, setForceIpGateway] = useState('0.0.0.0');
   const [forceIpLoading, setForceIpLoading] = useState(false);
-  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th' | 'vision_camera' | 'ssh'>('adb');
+  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th' | 'isap_agent' | 'vision_camera' | 'ssh'>('adb');
   const [connectAddress, setConnectAddress] = useState('');
   const [baudrate, setBaudrate] = useState(115200);
   const [connecting, setConnecting] = useState(false);
@@ -502,8 +503,8 @@ export default function DevicePage() {
           extra[f.name] = extraFieldValues[f.name] ?? f.default ?? '';
         }
       }
-      const tcpPort = devType === 'hkmc6th' ? hkmcPort : undefined;
-      const model = (devType === 'adb' || devType === 'hkmc6th') ? (deviceModel || undefined) : undefined;
+      const tcpPort = (devType === 'hkmc6th' || devType === 'isap_agent') ? hkmcPort : undefined;
+      const model = (devType === 'adb' || devType === 'hkmc6th' || devType === 'isap_agent') ? (deviceModel || undefined) : undefined;
       const result = await connectDevice(devType, connectAddress.trim(), baudrate, '', modalCategory, selectedModule, moduleConnType, extra, '', tcpPort, model);
       message.success(result);
       setConnectAddress('');
@@ -705,7 +706,7 @@ export default function DevicePage() {
 
   const groupOrder = useMemo(() => {
     // primary 그룹(Android, HKMC, VisionCam) 우선, 나머지는 알파벳
-    const primary = ['Android', 'HKMC', 'VisionCam'];
+    const primary = ['Android', 'HKMC', 'iSAP', 'VisionCam'];
     const keys = Object.keys(deviceGroups);
     const first = primary.filter(k => keys.includes(k));
     const rest = keys.filter(k => !primary.includes(k)).sort();
@@ -1353,6 +1354,7 @@ export default function DevicePage() {
                       <Select value={connectType} onChange={setConnectType} style={{ width: '100%' }}>
                         <Option value="adb">ADB (WiFi / TCP)</Option>
                         {modalCategory === 'primary' && <Option value="hkmc6th">HKMC 6th (TCP)</Option>}
+                        {modalCategory === 'primary' && <Option value="isap_agent">iSAP Agent (TCP)</Option>}
                         {modalCategory === 'primary' && <Option value="vision_camera">Vision Camera</Option>}
                         <Option value="serial">{t('device.serialPort')}</Option>
                         <Option value="ssh">{t('device.ssh')}</Option>
@@ -1416,6 +1418,29 @@ export default function DevicePage() {
                             min={1} max={65535}
                             style={{ width: 150 }}
                           />
+                        </div>
+                      </>
+                    )}
+
+                    {!selectedModule && connectType === 'isap_agent' && (
+                      <>
+                        <Input
+                          placeholder="iSAP Agent IP (예: 192.168.105.1)"
+                          value={connectAddress}
+                          onChange={(e) => setConnectAddress(e.target.value)}
+                          onPressEnter={handleConnect}
+                        />
+                        <div>
+                          <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>TCP Port:</span>
+                          <InputNumber
+                            value={hkmcPort}
+                            onChange={(v) => setHkmcPort(v || 20000)}
+                            min={1} max={65535}
+                            style={{ width: 150 }}
+                          />
+                          <span style={{ fontSize: 11, color: '#888', marginLeft: 8 }}>
+                            20000=전석, 20003=클러스터, 20004=HUD
+                          </span>
                         </div>
                       </>
                     )}
@@ -1486,7 +1511,7 @@ export default function DevicePage() {
                       </>
                     )}
 
-                    {!selectedModule && connectType !== 'hkmc6th' && connectType !== 'vision_camera' && connectType !== 'ssh' && (
+                    {!selectedModule && connectType !== 'hkmc6th' && connectType !== 'isap_agent' && connectType !== 'vision_camera' && connectType !== 'ssh' && (
                       <>
                         <Input
                           placeholder={connectType === 'adb' ? t('device.adbPlaceholder') : t('device.comPlaceholder')}

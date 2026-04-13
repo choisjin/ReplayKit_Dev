@@ -4,7 +4,7 @@ import { deviceApi } from '../services/api';
 
 export interface ManagedDevice {
   id: string;
-  type: string; // "adb" | "serial" | "module" | "hkmc6th" | "vision_camera"
+  type: string; // "adb" | "serial" | "module" | "hkmc6th" | "isap_agent" | "vision_camera"
   category: string; // "primary" | "auxiliary"
   address: string;
   status: string;
@@ -169,7 +169,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     if (!screenshotDeviceId) return;
     const dev = primaryDevices.find(d => d.id === screenshotDeviceId);
     if (!dev) return;
-    if (dev.type === 'hkmc6th') {
+    if (dev.type === 'hkmc6th' || dev.type === 'isap_agent') {
       setScreenType('front_center');
     } else if (dev.type === 'vision_camera') {
       setScreenType('default');
@@ -203,10 +203,10 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     }
   }, [stopFpsCounter]);
 
-  // --- Check if device is HKMC ---
+  // --- Check if device is HKMC or iSAP Agent (both use TCP agent protocol) ---
   const isHkmcDevice = useCallback((deviceId: string) => {
     const dev = primaryDevices.find(d => d.id === deviceId);
-    return dev?.type === 'hkmc6th';
+    return dev?.type === 'hkmc6th' || dev?.type === 'isap_agent';
   }, [primaryDevices]);
 
   // --- Check if ADB device has multi-display ---

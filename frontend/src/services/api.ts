@@ -15,6 +15,7 @@ export const deviceApi = {
   connect: (type: string, address: string, baudrate?: number, name?: string, category?: string, module?: string, connect_type?: string, extra_fields?: Record<string, any>, device_id?: string, port?: number, device_model?: string) =>
     api.post('/device/connect', { type, address, baudrate, name, category, module, connect_type, extra_fields, device_id, port, device_model }),
   listHkmcKeys: () => api.get('/device/hkmc-keys'),
+  listIsapKeys: () => api.get('/device/isap-keys'),
   disconnect: (deviceId: string) => api.post('/device/disconnect', { address: deviceId }),
   updateDevice: (device_id: string, updates: Record<string, any>) =>
     api.post('/device/update', { device_id, ...updates }),

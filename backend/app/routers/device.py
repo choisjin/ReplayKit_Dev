@@ -98,7 +98,7 @@ def _build_constructor_kwargs(dev) -> dict | None:
 
 
 class ConnectRequest(BaseModel):
-    type: str  # "adb" | "serial" | "module" | "hkmc6th" | "vision_camera" | "ssh"
+    type: str  # "adb" | "serial" | "module" | "hkmc6th" | "isap_agent" | "vision_camera" | "ssh"
     category: str = ""  # "primary" | "auxiliary" — auto-detected if empty
     address: str = ""  # COM port for serial, IP for socket/HKMC/SSH, etc.
     baudrate: Optional[int] = 115200
@@ -315,6 +315,18 @@ async def connect_device(req: ConnectRequest):
             }
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
+    elif req.type == "isap_agent":
+        if not req.address or not req.port:
+            raise HTTPException(status_code=400, detail="iSAP Agent requires address (IP) and port (TCP port, default 20000)")
+        try:
+            dev = await dm.add_isap_agent_device(req.address, req.port, device_id=custom_id, name=req.name or "", device_model=req.device_model or "")
+            return {
+                "result": f"iSAP registered: {dev.name} (ID: {dev.id})",
+                "primary": _with_protected_flag(dm.list_primary()),
+                "auxiliary": _with_protected_flag(dm.list_auxiliary()),
+            }
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
     elif req.type == "module":
         category = req.category or "auxiliary"
         dev = await dm.add_module_device(
@@ -439,6 +451,12 @@ async def get_device_info(device_id: str):
         if hkmc:
             info["hkmc_info"] = hkmc.get_info()
         return info
+    elif dev.type == "isap_agent":
+        isap = dm.get_isap_service(device_id)
+        info = dev.to_dict()
+        if isap:
+            info["isap_info"] = isap.get_info()
+        return info
     else:
         return dev.to_dict()
 
@@ -474,6 +492,34 @@ async def device_input(req: InputRequest):
                 req.device_id, req.params.get("data", ""), req.params.get("read_timeout", 1.0)
             )
             return {"result": "ok", "response": response}
+
+        if req.action in ("hkmc_touch", "hkmc_swipe", "hkmc_key", "repeat_tap") and dev and dev.type == "isap_agent":
+            isap = dm.get_isap_service(req.device_id)
+            if not isap:
+                raise HTTPException(status_code=400, detail=f"iSAP device {req.device_id} not connected")
+            logger.info("[iSAP INPUT] device=%s action=%s params=%s connected=%s",
+                        req.device_id, req.action, req.params, isap.is_connected)
+            p = req.params
+            screen_type = p.get("screen_type", "front_center")
+            if req.action == "repeat_tap":
+                await isap.async_repeat_tap(p["x"], p["y"], int(p.get("count", 5)),
+                                            int(p.get("interval_ms", 100)), screen_type)
+            elif req.action == "hkmc_touch":
+                await isap.async_tap(p["x"], p["y"], screen_type)
+            elif req.action == "hkmc_swipe":
+                await isap.async_swipe(p["x1"], p["y1"], p["x2"], p["y2"], screen_type,
+                                       int(p.get("duration_ms", 0)))
+            elif req.action == "hkmc_key":
+                key_name = p.get("key_name")
+                if key_name:
+                    await isap.async_send_key_by_name(
+                        key_name, p.get("sub_cmd", 0x43), screen_type, p.get("direction")
+                    )
+                else:
+                    await isap.async_send_key(
+                        p["cmd"], p["sub_cmd"], p["key_data"], screen_type, p.get("direction")
+                    )
+            return {"result": "ok"}
 
         if req.action in ("hkmc_touch", "hkmc_swipe", "hkmc_key", "repeat_tap") and dev and dev.type == "hkmc6th":
             hkmc = dm.get_hkmc_service(req.device_id)
@@ -750,6 +796,35 @@ async def close_dlt_viewer():
     return {"result": result}
 
 
+@router.get("/isap-keys")
+async def list_isap_keys():
+    """List all available iSAP Agent hardware key names."""
+    from ..services.isap_agent_service import (
+        ISAP_KEYS, SHORT_KEY, LONG_KEY, PRESS_KEY, RELEASE_KEY, KNOB_KEY,
+        MONITOR_MAP, SCREEN_PORT_MAP,
+    )
+    keys = []
+    for name, info in ISAP_KEYS.items():
+        group = name.split("_")[0]  # MKBD, CCP, SWRC, ...
+        keys.append({
+            "name": name,
+            "group": group,
+            "is_dial": info.get("dial", False),
+        })
+    return {
+        "keys": keys,
+        "sub_commands": {
+            "SHORT_KEY": SHORT_KEY,
+            "LONG_KEY": LONG_KEY,
+            "PRESS_KEY": PRESS_KEY,
+            "RELEASE_KEY": RELEASE_KEY,
+            "KNOB_KEY": KNOB_KEY,
+        },
+        "monitors": MONITOR_MAP,
+        "screen_ports": SCREEN_PORT_MAP,
+    }
+
+
 @router.get("/hkmc-keys")
 async def list_hkmc_keys():
     """List all available HKMC hardware key names."""
@@ -789,6 +864,13 @@ async def get_screenshot(device_id: str, fmt: str = "jpeg", screen_type: str = "
             img_bytes = await hkmc.async_screencap_bytes(screen_type=screen_type, fmt=fmt)
             b64 = base64.b64encode(img_bytes).decode("ascii")
             return {"image": b64, "format": fmt}
+        elif dev and dev.type == "isap_agent":
+            isap = dm.get_isap_service(device_id)
+            if not isap:
+                raise HTTPException(status_code=400, detail=f"iSAP device {device_id} not connected")
+            img_bytes = await isap.async_screencap_bytes(screen_type=screen_type, fmt=fmt)
+            b64 = base64.b64encode(img_bytes).decode("ascii")
+            return {"image": b64, "format": fmt}
         elif dev and dev.type == "vision_camera":
             cam = dm.get_vision_camera(device_id)
             if not cam:
@@ -799,7 +881,7 @@ async def get_screenshot(device_id: str, fmt: str = "jpeg", screen_type: str = "
             b64 = base64.b64encode(img_bytes).decode("ascii")
             return {"image": b64, "format": fmt}
         elif dev and dev.type not in ("adb",):
-            raise HTTPException(status_code=400, detail="Screenshot only available for ADB, HKMC, or VisionCamera devices")
+            raise HTTPException(status_code=400, detail="Screenshot only available for ADB, HKMC, iSAP, or VisionCamera devices")
         else:
             # ADB device
             adb_serial = dev.address if dev else device_id

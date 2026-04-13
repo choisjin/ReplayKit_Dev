@@ -14,6 +14,7 @@ from typing import Optional
 
 from .adb_service import ADBService
 from .hkmc6th_service import HKMC6thService
+from .isap_agent_service import ISAPAgentService
 from .ssh_service import SSHConnection
 
 logger = logging.getLogger(__name__)
@@ -687,6 +688,8 @@ class DeviceManager:
         self._serial_conns: dict[str, "serial.Serial"] = {}  # device_id -> open serial connection
         self._hkmc_conns: dict[str, HKMC6thService] = {}  # device_id -> HKMC6thService
         self._hkmc_reconnect_attempts: dict[str, int] = {}  # device_id -> 연속 재연결 실패 횟수
+        self._isap_conns: dict[str, ISAPAgentService] = {}  # device_id -> ISAPAgentService
+        self._isap_reconnect_attempts: dict[str, int] = {}
         self._adb_reconnect_attempts: dict[str, int] = {}  # device_id -> 연속 재연결 실패 횟수
         self._vision_cams: dict[str, object] = {}  # device_id -> VisionCamera instance
         self._ssh_conns: dict[str, SSHConnection] = {}  # device_id -> SSHConnection
@@ -756,6 +759,8 @@ class DeviceManager:
             prefix = "Serial"
         elif dev_type == "hkmc6th":
             prefix = "HKMC"
+        elif dev_type == "isap_agent":
+            prefix = "iSAP"
         elif dev_type == "vision_camera":
             prefix = "VisionCam"
         elif dev_type == "ssh":
@@ -776,7 +781,7 @@ class DeviceManager:
         aux = [
             d.to_dict()
             for d in self._devices.values()
-            if d.category == "auxiliary" or d.type in ("adb", "hkmc6th", "vision_camera", "ssh")
+            if d.category == "auxiliary" or d.type in ("adb", "hkmc6th", "isap_agent", "vision_camera", "ssh")
         ]
         try:
             _AUX_DEVICES_FILE.write_text(json.dumps(aux, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -880,6 +885,38 @@ class DeviceManager:
             return self._hkmc_conns.get(dev.id)
         return None
 
+    async def add_isap_agent_device(self, host: str, port: int, device_id: str = "",
+                                    name: str = "", device_model: str = "") -> ManagedDevice:
+        """iSAP Agent 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행)."""
+        final_id = device_id or self._generate_device_id("isap_agent", device_model=device_model)
+        display_name = name or f"iSAP ({host}:{port})"
+        info: dict = {"port": port}
+        if device_model:
+            info["device_model"] = device_model
+
+        dev = ManagedDevice(
+            id=final_id,
+            type="isap_agent",
+            category="primary",
+            address=host,
+            status="disconnected",
+            name=display_name,
+            info=info,
+        )
+        self._devices[final_id] = dev
+        self._save_auxiliary_devices()
+        return dev
+
+    def get_isap_service(self, device_id: str) -> Optional[ISAPAgentService]:
+        """Get ISAPAgentService instance for a device. Returns None if not found."""
+        svc = self._isap_conns.get(device_id)
+        if svc:
+            return svc
+        dev = self.get_device(device_id)
+        if dev and dev.type == "isap_agent":
+            return self._isap_conns.get(dev.id)
+        return None
+
     async def add_vision_camera_device(self, mac: str, model: str = "", serial: str = "",
                                        ip: str = "", subnetmask: str = "255.255.0.0",
                                        device_id: str = "", name: str = "") -> ManagedDevice:
@@ -929,6 +966,13 @@ class DeviceManager:
                 elif dev.status != "reconnecting":
                     dev.status = "disconnected"
                 continue
+            if dev.type == "isap_agent":
+                isap = self._isap_conns.get(dev.id)
+                if isap and isap.is_connected:
+                    dev.status = "connected"
+                elif dev.status != "reconnecting":
+                    dev.status = "disconnected"
+                continue
             if dev.type == "vision_camera":
                 cam = self._vision_cams.get(dev.id)
                 if cam and cam.IsConnected():
@@ -949,6 +993,7 @@ class DeviceManager:
 
     # 최대 연속 재연결 실패 횟수 — 초과 시 "error" 상태로 전환
     HKMC_MAX_RECONNECT_ATTEMPTS = 12  # 5초 × 12 = 60초간 실패하면 error
+    ISAP_MAX_RECONNECT_ATTEMPTS = 12
     ADB_MAX_RECONNECT_ATTEMPTS = 12   # 5초 × 12 = 60초간 실패하면 error
 
     async def reconnect_disconnected(self, passive: bool = False) -> None:
@@ -1076,9 +1121,52 @@ class DeviceManager:
                     logger.debug("HKMC auto-reconnect failed (%d/%d): %s: %s",
                                  attempts + 1, self.HKMC_MAX_RECONNECT_ATTEMPTS, dev.id, e)
 
+            if dev.type == "isap_agent":
+                isap = self._isap_conns.get(dev.id)
+                if isap and isap.is_connected:
+                    self._isap_reconnect_attempts.pop(dev.id, None)
+                    if dev.status != "connected":
+                        dev.status = "connected"
+                    continue
+                port = dev.info.get("port", 0)
+                if not port:
+                    continue
+                if dev.status == "error":
+                    continue
+                attempts = self._isap_reconnect_attempts.get(dev.id, 0)
+                if attempts >= self.ISAP_MAX_RECONNECT_ATTEMPTS:
+                    dev.status = "error"
+                    logger.warning("iSAP reconnect give up after %d attempts: %s", attempts, dev.id)
+                    continue
+                dev.status = "reconnecting"
+                try:
+                    if isap:
+                        isap.disconnect()
+                    svc = ISAPAgentService(dev.address, port, device_id=dev.id)
+                    ok = await svc.async_connect()
+                    if ok:
+                        self._isap_conns[dev.id] = svc
+                        self._isap_reconnect_attempts.pop(dev.id, None)
+                        dev.status = "connected"
+                        dev.info["agent_version"] = svc.agent_version
+                        dev.info["screens"] = svc.get_info()["screens"]
+                        dev.info["resolution"] = dev.info["screens"].get(
+                            svc.default_screen, {"width": 1920, "height": 720}
+                        )
+                        logger.info("iSAP auto-reconnect success: %s", dev.id)
+                    else:
+                        self._isap_reconnect_attempts[dev.id] = attempts + 1
+                        dev.status = "disconnected"
+                except Exception as e:
+                    self._isap_reconnect_attempts[dev.id] = attempts + 1
+                    dev.status = "disconnected"
+                    logger.debug("iSAP auto-reconnect failed (%d/%d): %s: %s",
+                                 attempts + 1, self.ISAP_MAX_RECONNECT_ATTEMPTS, dev.id, e)
+
     def reset_reconnect_attempts(self, device_id: str) -> None:
         """수동 재연결 시 실패 카운터 리셋 (error 상태에서 복구 가능하게)."""
         self._hkmc_reconnect_attempts.pop(device_id, None)
+        self._isap_reconnect_attempts.pop(device_id, None)
         self._adb_reconnect_attempts.pop(device_id, None)
         dev = self._devices.get(device_id)
         if dev and dev.status == "error":
@@ -1264,7 +1352,7 @@ class DeviceManager:
         self._devices[id_b] = dev_a
         self._devices[id_a] = dev_b
         # 연결 객체도 교체
-        for store in (self._serial_conns, self._hkmc_conns, self._vision_cams):
+        for store in (self._serial_conns, self._hkmc_conns, self._isap_conns, self._vision_cams):
             a_val = store.pop(id_a, None)
             b_val = store.pop(id_b, None)
             if a_val is not None:
@@ -1288,6 +1376,8 @@ class DeviceManager:
             self._serial_conns[new_id] = self._serial_conns.pop(old_id)
         if old_id in self._hkmc_conns:
             self._hkmc_conns[new_id] = self._hkmc_conns.pop(old_id)
+        if old_id in self._isap_conns:
+            self._isap_conns[new_id] = self._isap_conns.pop(old_id)
         if old_id in self._vision_cams:
             self._vision_cams[new_id] = self._vision_cams.pop(old_id)
         if old_id in self._ever_connected:
@@ -1318,7 +1408,7 @@ class DeviceManager:
 
         # 3) 충돌 방지: 임시 ID로 이동
         temp_map: dict[str, str] = {}  # temp_id → new_id
-        stores = (self._serial_conns, self._hkmc_conns, self._vision_cams)
+        stores = (self._serial_conns, self._hkmc_conns, self._isap_conns, self._vision_cams)
         for old_id, new_id in remap.items():
             temp_id = f"__reorder_{old_id}__"
             dev = self._devices.pop(old_id)
@@ -1366,6 +1456,10 @@ class DeviceManager:
         hkmc = self._hkmc_conns.pop(dev.id, None)
         if hkmc:
             hkmc.disconnect()
+        # Close iSAP Agent connection if applicable
+        isap = self._isap_conns.pop(dev.id, None)
+        if isap:
+            isap.disconnect()
         # Close VisionCamera connection if applicable
         cam = self._vision_cams.pop(dev.id, None)
         if cam:
@@ -1485,6 +1579,27 @@ class DeviceManager:
                 except Exception as e:
                     dev.status = "disconnected"
                     logger.warning("Failed to open HKMC %s (%s:%d): %s", dev.id, dev.address, port, e)
+            elif dev.type == "isap_agent":
+                port = dev.info.get("port", 0)
+                if not port:
+                    continue
+                try:
+                    svc = ISAPAgentService(dev.address, port, device_id=dev.id)
+                    ok = await svc.async_connect()
+                    if ok:
+                        self._isap_conns[dev.id] = svc
+                        dev.status = "connected"
+                        dev.info["agent_version"] = svc.agent_version
+                        dev.info["screens"] = svc.get_info()["screens"]
+                        dev.info["resolution"] = dev.info["screens"].get(
+                            svc.default_screen, {"width": 1920, "height": 720}
+                        )
+                        logger.info("iSAP connection opened: %s (%s:%d)", dev.id, dev.address, port)
+                    else:
+                        dev.status = "disconnected"
+                except Exception as e:
+                    dev.status = "disconnected"
+                    logger.warning("Failed to open iSAP %s (%s:%d): %s", dev.id, dev.address, port, e)
             elif dev.type == "module":
                 # 모듈 디바이스: 서버 시작 시 인스턴스 생성 + 연결 시도
                 module_name = dev.info.get("module", "")
@@ -1607,6 +1722,30 @@ class DeviceManager:
             except Exception as e:
                 dev.status = "disconnected"
                 return f"HKMC connect failed: {dev.id} — {e}"
+
+        elif dev.type == "isap_agent":
+            port = dev.info.get("port", 0)
+            if not port:
+                return f"iSAP {dev.id}: no port configured"
+            try:
+                svc = ISAPAgentService(dev.address, port, device_id=dev.id)
+                ok = await svc.async_connect()
+                if ok:
+                    self._isap_conns[dev.id] = svc
+                    dev.status = "connected"
+                    _mark_connected()
+                    dev.info["agent_version"] = svc.agent_version
+                    dev.info["screens"] = svc.get_info()["screens"]
+                    dev.info["resolution"] = dev.info["screens"].get(
+                        svc.default_screen, {"width": 1920, "height": 720}
+                    )
+                    return f"iSAP connected: {dev.id} ({dev.address}:{port})"
+                else:
+                    dev.status = "disconnected"
+                    return f"iSAP connect failed: {dev.id}"
+            except Exception as e:
+                dev.status = "disconnected"
+                return f"iSAP connect failed: {dev.id} — {e}"
 
         elif dev.type == "module":
             module_name = dev.info.get("module", "")
@@ -1732,6 +1871,16 @@ class DeviceManager:
             dev.status = "disconnected"
             return f"Disconnected: {dev.id}"
 
+        elif dev.type == "isap_agent":
+            svc = self._isap_conns.pop(device_id, None)
+            if svc:
+                try:
+                    svc.disconnect()
+                except Exception:
+                    pass
+            dev.status = "disconnected"
+            return f"Disconnected: {dev.id}"
+
         elif dev.type == "vision_camera":
             cam = self._vision_cams.pop(device_id, None)
             if cam:
@@ -1768,6 +1917,10 @@ class DeviceManager:
             hkmc.disconnect()
             logger.info("HKMC connection closed: %s", device_id)
         self._hkmc_conns.clear()
+        for device_id, isap in list(self._isap_conns.items()):
+            isap.disconnect()
+            logger.info("iSAP connection closed: %s", device_id)
+        self._isap_conns.clear()
         for device_id in list(self._ssh_conns.keys()):
             self._close_ssh_conn(device_id)
             logger.info("SSH connection closed: %s", device_id)

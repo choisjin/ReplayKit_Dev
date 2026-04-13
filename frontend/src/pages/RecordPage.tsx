@@ -430,7 +430,7 @@ export default function RecordPage() {
     if (screenshotDeviceId) {
       try {
         const dev = primaryDevices.find(d => d.id === screenshotDeviceId);
-        const needsScreenType = dev?.type === 'hkmc6th' || (dev?.type === 'adb' && (dev.info?.displays?.length ?? 0) > 1);
+        const needsScreenType = (dev?.type === 'hkmc6th' || dev?.type === 'isap_agent') || (dev?.type === 'adb' && (dev.info?.displays?.length ?? 0) > 1);
         const res = await deviceApi.screenshot(screenshotDeviceId, needsScreenType ? screenType : undefined);
         if (res.data.image) {
           const fmt = res.data.format || 'jpeg';
@@ -498,7 +498,7 @@ export default function RecordPage() {
 
   // Get current screen device info
   const screenDevice = primaryDevices.find(d => d.id === screenshotDeviceId);
-  const isScreenHkmc = screenDevice?.type === 'hkmc6th';
+  const isScreenHkmc = screenDevice?.type === 'hkmc6th' || screenDevice?.type === 'isap_agent';
   const isScreenAdb = screenDevice?.type === 'adb';
   const adbDisplays: { id: number; name: string; sf_id?: string; width?: number; height?: number }[] = screenDevice?.info?.displays || [];
   const hasMultiDisplay = isScreenAdb && adbDisplays.length > 1;
@@ -546,8 +546,16 @@ export default function RecordPage() {
   // Fetch HKMC hardware keys once (when any HKMC device exists)
   useEffect(() => {
     const hasHkmc = primaryDevices.some(d => d.type === 'hkmc6th');
+    const hasIsap = primaryDevices.some(d => d.type === 'isap_agent');
     if (hasHkmc && hkmcKeys.length === 0) {
       deviceApi.listHkmcKeys().then(res => {
+        setHkmcKeys(res.data.keys || []);
+        setHkmcSubCommands(res.data.sub_commands || {});
+      }).catch(() => {});
+    }
+    if (hasIsap && hkmcKeys.length === 0) {
+      // iSAP Agent: use isap-keys endpoint. Reuses the hkmcKeys state/pickers.
+      deviceApi.listIsapKeys().then(res => {
         setHkmcKeys(res.data.keys || []);
         setHkmcSubCommands(res.data.sub_commands || {});
       }).catch(() => {});
@@ -591,17 +599,17 @@ export default function RecordPage() {
   // Map generic gesture actions to HKMC equivalents when target is HKMC device
   const resolveAction = useCallback((action: string, targetDevice: string): string => {
     const dev = allDevices.find(d => d.id === targetDevice);
-    if (dev?.type !== 'hkmc6th') return action;
+    if (dev?.type !== 'hkmc6th' && dev?.type !== 'isap_agent') return action;
     if (action === 'tap') return 'hkmc_touch';
     if (action === 'swipe') return 'hkmc_swipe';
-    if (action === 'long_press') return 'hkmc_touch'; // HKMC has no long_press, treat as touch
+    if (action === 'long_press') return 'hkmc_touch'; // Agent has no long_press, treat as touch
     return action;
   }, [allDevices]);
 
   // Inject screen_type into params for HKMC / ADB multi-display actions
   const resolveParams = useCallback((action: string, params: Record<string, any>, targetDevice: string): Record<string, any> => {
     const dev = allDevices.find(d => d.id === targetDevice);
-    if (dev?.type === 'hkmc6th' && (action === 'hkmc_touch' || action === 'hkmc_swipe' || action === 'hkmc_key' || action === 'repeat_tap')) {
+    if ((dev?.type === 'hkmc6th' || dev?.type === 'isap_agent') && (action === 'hkmc_touch' || action === 'hkmc_swipe' || action === 'hkmc_key' || action === 'repeat_tap')) {
       return { ...params, screen_type: screenType };
     }
     // ADB multi-display: 모든 디스플레이에 screen_type 주입 (display 0 포함 — screencap에 SF display ID 필요)
@@ -2557,6 +2565,7 @@ export default function RecordPage() {
                       <Option value="rear_left">{t('record.hkmcRearL')}</Option>
                       <Option value="rear_right">{t('record.hkmcRearR')}</Option>
                       <Option value="cluster">{t('record.hkmcCluster')}</Option>
+                      {screenDevice?.type === 'isap_agent' && <Option value="hud">HUD</Option>}
                     </Select>
                     <Select
                       size="small"
