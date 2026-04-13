@@ -129,3 +129,24 @@ async def set_overlay(req: OverlayRequest):
     svc = get_webcam_service()
     svc.set_overlay(position=req.position, color_hex=req.color_hex, font_scale=req.font_scale)
     return svc.status()
+
+
+@router.get("/exposure")
+async def get_exposure():
+    """현재 노출값/모드 + 카메라 지원 범위."""
+    svc = get_webcam_service()
+    return svc.get_exposure()
+
+
+class ExposureRequest(BaseModel):
+    value: Optional[float] = None  # manual 노출값 (DSHOW: 보통 -13 ~ 0)
+    auto: Optional[bool] = None    # True면 자동 모드
+
+
+@router.post("/exposure")
+async def set_exposure(req: ExposureRequest):
+    svc = get_webcam_service()
+    ok = svc.set_exposure(value=req.value, auto=req.auto)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Failed to set exposure (camera not open or unsupported)")
+    return svc.get_exposure()

@@ -35,18 +35,42 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
     timestampPosition, setTimestampPosition,
     timestampColor, setTimestampColor,
     timestampFontSize, setTimestampFontSize,
-  } = webcam;
+    exposureAuto, setExposureAutoMode,
+  } = webcam as any;
 
   const [minimized, setMinimized] = useState(false);
   const [now, setNow] = useState('');
-  // 백엔드 MJPEG 프리뷰 — 폴링 방식
-  const [previewUrl, setPreviewUrl] = useState('/api/webcam/preview.jpg?t=0');
+  // 백엔드 WebSocket 프리뷰 — JPEG binary frame 수신 → blob URL
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const previewWsRef = useRef<WebSocket | null>(null);
+  const previousBlobUrlRef = useRef<string>('');
   useEffect(() => {
     if (!webcamOpen) return;
-    const tick = () => setPreviewUrl(`/api/webcam/preview.jpg?t=${Date.now()}`);
-    tick();
-    const id = setInterval(tick, 200); // 5fps — CPU/네트워크 부담 적음
-    return () => clearInterval(id);
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/webcam`);
+    ws.binaryType = 'blob';
+    previewWsRef.current = ws;
+    ws.onopen = () => {
+      try { ws.send(JSON.stringify({ fps: 15, quality: 70 })); } catch { /* ignore */ }
+    };
+    ws.onmessage = (ev) => {
+      if (ev.data instanceof Blob) {
+        const url = URL.createObjectURL(ev.data);
+        // 직전 blob URL 해제
+        if (previousBlobUrlRef.current) URL.revokeObjectURL(previousBlobUrlRef.current);
+        previousBlobUrlRef.current = url;
+        setPreviewUrl(url);
+      }
+    };
+    ws.onerror = () => { /* 자동 정리 */ };
+    return () => {
+      try { ws.close(); } catch { /* ignore */ }
+      if (previousBlobUrlRef.current) {
+        URL.revokeObjectURL(previousBlobUrlRef.current);
+        previousBlobUrlRef.current = '';
+      }
+      previewWsRef.current = null;
+    };
   }, [webcamOpen]);
 
   // 프리뷰용 1초 타이머
@@ -218,7 +242,7 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
                     style={{ width: '100%' }}
                     placeholder={t('webcam.resolutionSelect')}
                     getPopupContainer={getContainer}
-                    options={webcamResolutions.map(r => {
+                    options={(webcamResolutions as string[]).map((r: string) => {
                       const [w, h] = r.split('x');
                       return { value: r, label: RESOLUTION_LABELS[r] ? `${RESOLUTION_LABELS[r]} (${w}×${h})` : `${w}×${h}` };
                     })}
@@ -268,20 +292,36 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
                   />
                 </div>
               </div>
-              {Object.keys(webcamCapabilities).length === 0 && webcamResolutions.length === 0 ? (
-                <div style={{ color: subColor, fontSize: 11, textAlign: 'center', padding: 4 }}>{t('webcam.noSettings')}</div>
-              ) : (
-                Object.entries(webcamCapabilities).map(([key, cap]) => (
-                  <div key={key} style={{ marginBottom: 4 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 1 }}>
-                      <span style={{ color: labelColor }}>{t((`webcam.${key}`) as any) !== `webcam.${key}` ? t((`webcam.${key}`) as any) : key}</span>
-                      <span style={{ color: subColor }}>{webcamSettings[key] ?? '-'}</span>
+              {/* 노출 설정 — 자동/수동 토글 + 슬라이더 */}
+              {webcamCapabilities.exposure ? (
+                <div style={{ marginBottom: 4 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginBottom: 2 }}>
+                    <span style={{ color: labelColor }}>{t('webcam.exposure')}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Button size="small"
+                        type={exposureAuto ? 'primary' : 'default'}
+                        onClick={() => setExposureAutoMode(!exposureAuto)}
+                        style={{ height: 18, padding: '0 6px', fontSize: 10 }}>
+                        {exposureAuto ? t('webcam.exposureAuto') : t('webcam.exposureManual')}
+                      </Button>
+                      <span style={{ color: subColor, minWidth: 30, textAlign: 'right' }}>
+                        {webcamSettings.exposure ?? '-'}
+                      </span>
                     </div>
-                    <Slider min={cap.min} max={cap.max} step={cap.step || 1} value={webcamSettings[key] ?? cap.min}
-                      onChange={(v: number) => applyWebcamSetting(key, v)} style={{ margin: '0 0 2px 0' }} />
                   </div>
-                ))
-              )}
+                  <Slider
+                    min={webcamCapabilities.exposure.min}
+                    max={webcamCapabilities.exposure.max}
+                    step={webcamCapabilities.exposure.step || 1}
+                    value={webcamSettings.exposure ?? webcamCapabilities.exposure.min}
+                    disabled={exposureAuto}
+                    onChange={(v: number) => applyWebcamSetting('exposure', v)}
+                    style={{ margin: '0 0 2px 0' }}
+                  />
+                </div>
+              ) : webcamResolutions.length === 0 ? (
+                <div style={{ color: subColor, fontSize: 11, textAlign: 'center', padding: 4 }}>{t('webcam.noSettings')}</div>
+              ) : null}
             </div>
           )}
         </div>

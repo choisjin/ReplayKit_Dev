@@ -320,6 +320,55 @@ class WebcamService:
         cv2.putText(frame, ts, (tx, ty), font, scale, self._overlay_color, thickness, cv2.LINE_AA)
 
     # ------------------------------------------------------------
+    # Exposure (Level 2 — 노출만 노출)
+    # ------------------------------------------------------------
+    def get_exposure(self) -> dict:
+        """현재 노출값/모드 + 카메라 지원 범위 반환.
+
+        OpenCV의 CAP_PROP_EXPOSURE 의미:
+        - DSHOW 백엔드 기준: 음수 값 (예: -13 ~ -1, log2 1/sec)
+        - CAP_PROP_AUTO_EXPOSURE: 0.25 = manual, 0.75 = auto (DSHOW)
+        - 카메라마다 다르므로 min/max는 set/get 시 cap.get으로 추정
+        """
+        if not self.is_open() or self._cap is None:
+            return {"supported": False}
+        try:
+            value = self._cap.get(cv2.CAP_PROP_EXPOSURE)
+            auto = self._cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)
+            return {
+                "supported": True,
+                "value": float(value),
+                "auto": auto >= 0.5,  # 0.75 = auto, 0.25 = manual
+                "min": -13.0,  # DSHOW 일반 범위
+                "max": 0.0,
+                "step": 1.0,
+            }
+        except Exception as e:
+            logger.warning("get_exposure failed: %s", e)
+            return {"supported": False}
+
+    def set_exposure(self, value: Optional[float] = None, auto: Optional[bool] = None) -> bool:
+        """노출값 설정. value를 주면 manual 모드로 전환 후 적용. auto=True면 자동 모드."""
+        if not self.is_open() or self._cap is None:
+            return False
+        try:
+            if auto is True:
+                # 자동 노출 모드 (DSHOW: 0.75)
+                self._cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)
+                logger.info("Webcam exposure: AUTO")
+                return True
+            if value is not None:
+                # 수동 모드 + 값 설정
+                self._cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)
+                self._cap.set(cv2.CAP_PROP_EXPOSURE, float(value))
+                actual = self._cap.get(cv2.CAP_PROP_EXPOSURE)
+                logger.info("Webcam exposure: MANUAL value=%.2f (actual=%.2f)", value, actual)
+                return True
+        except Exception as e:
+            logger.warning("set_exposure failed: %s", e)
+        return False
+
+    # ------------------------------------------------------------
     # Status
     # ------------------------------------------------------------
     def status(self) -> dict:

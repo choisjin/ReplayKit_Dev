@@ -35,10 +35,12 @@ export function useWebcam() {
   const [webcamDevices, setWebcamDevices] = useState<DeviceInfo[]>([]);
   const [webcamRecording, setWebcamRecording] = useState(false);
   const [webcamSettingsOpen, setWebcamSettingsOpen] = useState(false);
+  // 노출(exposure) 상태 — 다른 capability는 Level 2에서 추가
   const [webcamCapabilities, setWebcamCapabilities] = useState<Record<string, any>>({});
   const [webcamSettings, setWebcamSettings] = useState<Record<string, number>>({});
   const [webcamResolution, setWebcamResolution] = useState('');
   const [webcamResolutions, setWebcamResolutions] = useState<string[]>([]);
+  const [exposureAuto, setExposureAuto] = useState(true);
 
   // 타임스탬프 오버레이 설정 (프런트 ↔ 백엔드 sync)
   const [timestampPosition, setTimestampPositionState] = useState<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'off'>('bottom-right');
@@ -231,17 +233,49 @@ export function useWebcam() {
   }, []);
 
   // ------------------------------------------------------------
-  // 레거시 호환 stubs (브라우저 MediaRecorder 시절 API — 이제 더 이상 사용 안 됨)
+  // Exposure (Level 2 — 노출만 노출)
   // ------------------------------------------------------------
-  const loadWebcamCapabilities = useCallback(() => {
-    // 백엔드가 OpenCV로 직접 제어 — 세부 capabilities는 Level 2에서 노출 예정
-    setWebcamCapabilities({});
-    setWebcamSettings({});
+  const loadWebcamCapabilities = useCallback(async () => {
+    try {
+      const r = await axios.get('/api/webcam/exposure');
+      const data = r.data;
+      if (data?.supported) {
+        setWebcamCapabilities({
+          exposure: { min: data.min, max: data.max, step: data.step || 1 },
+        });
+        setWebcamSettings({ exposure: data.value });
+        setExposureAuto(!!data.auto);
+      } else {
+        setWebcamCapabilities({});
+        setWebcamSettings({});
+      }
+    } catch {
+      setWebcamCapabilities({});
+      setWebcamSettings({});
+    }
   }, []);
 
-  const applyWebcamSetting = useCallback(async (_key: string, _value: number) => {
-    // Level 2: backend set_camera_property
-  }, []);
+  const applyWebcamSetting = useCallback(async (key: string, value: number) => {
+    if (key !== 'exposure') return;
+    try {
+      const r = await axios.post('/api/webcam/exposure', { value, auto: false });
+      setWebcamSettings(prev => ({ ...prev, exposure: r.data?.value ?? value }));
+      setExposureAuto(false);
+    } catch (e: any) {
+      message.error(t('webcam.settingFailed') + ': ' + (e?.response?.data?.detail || e.message || e));
+    }
+  }, [message, t]);
+
+  const setExposureAutoMode = useCallback(async (auto: boolean) => {
+    try {
+      await axios.post('/api/webcam/exposure', { auto });
+      setExposureAuto(auto);
+      // auto on/off 후 현재 값 다시 조회
+      await loadWebcamCapabilities();
+    } catch (e: any) {
+      message.error(t('webcam.settingFailed') + ': ' + (e?.response?.data?.detail || e.message || e));
+    }
+  }, [message, t, loadWebcamCapabilities]);
 
   const uploadFnRef = useRef<((blob: Blob, filename: string) => Promise<string>) | null>(null);
   const setUploadFn = useCallback((fn: ((blob: Blob, filename: string) => Promise<string>) | null) => {
@@ -284,5 +318,7 @@ export function useWebcam() {
     pauseRecording,
     resumeRecording,
     isStreamReady,
+    exposureAuto,
+    setExposureAutoMode,
   };
 }
