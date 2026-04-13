@@ -512,8 +512,15 @@ export default function RecordPage() {
       ? { width: hkmcScreen.width, height: hkmcScreen.height }
       : screenDevice?.info?.resolution ?? { width: 1080, height: 1920 };
 
-  // 모듈이 매칭된 보조 디바이스 목록 (dropdown의 옵션)
-  const moduleDevices = auxiliaryDevices.filter(d => d.info?.module);
+  // 모듈이 매칭된 디바이스 목록 (dropdown의 옵션)
+  // - 보조 디바이스: info.module이 설정된 것
+  // - 주 디바이스(ADB): 가상 module="Android"로 노출 → Android 모듈의 함수 사용 가능
+  const moduleDevices = [
+    ...auxiliaryDevices.filter(d => d.info?.module),
+    ...primaryDevices
+      .filter(d => d.type === 'adb')
+      .map(d => ({ ...d, info: { ...d.info, module: 'Android' } })),
+  ];
 
   // 선택된 디바이스에서 모듈 이름 derive
   const selectedDevice = moduleDevices.find(d => d.id === selectedDeviceId);

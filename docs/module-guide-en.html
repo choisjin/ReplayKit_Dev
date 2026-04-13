@@ -183,7 +183,7 @@
     </div>
 
     <h2 id="overview">All Modules</h2>
-    <p>Total <strong>29</strong> modules, <strong>358</strong> functions registered.</p>
+    <p>Total <strong>29</strong> modules, <strong>359</strong> functions registered.</p>
     <table>
       <thead><tr><th>Module</th><th>Description</th><th>Functions</th></tr></thead>
       <tbody>
@@ -209,7 +209,7 @@
 <tr><td><a href="#mod-TigrisCheck"><strong>TigrisCheck</strong></a></td><td>Runs the Tigris test suite on a specific ADB device and checks results</td><td style="text-align:center">1</td></tr>
 <tr><td><a href="#mod-Trace"><strong>Trace</strong></a></td><td>Analyzes function call traces by comparing expected vs. actual call sequences</td><td style="text-align:center">7</td></tr>
 <tr><td><a href="#mod-COMMON_WINDOWS"><strong>COMMON_WINDOWS</strong></a></td><td>Utility module for saving Windows command output to files</td><td style="text-align:center">3</td></tr>
-<tr><td><a href="#mod-Android"><strong>Android</strong></a></td><td>Controls Android devices via ADB: touch, swipe, app install, screen capture, etc.</td><td style="text-align:center">18</td></tr>
+<tr><td><a href="#mod-Android"><strong>Android</strong></a></td><td>Controls Android devices via ADB: touch, swipe, app install, screen capture, etc.</td><td style="text-align:center">19</td></tr>
 <tr><td><a href="#mod-CCIC_BENCH"><strong>CCIC_BENCH</strong></a></td><td>Test bench equipment that controls vehicle power (IGN/ACC/Battery) via UDP communication</td><td style="text-align:center">16</td></tr>
 <tr><td><a href="#mod-SerialPlugin"><strong>SerialPlugin</strong></a></td><td>General-purpose plugin for sending and receiving data via RS-232 serial port</td><td style="text-align:center">15</td></tr>
 <tr><td><a href="#mod-CMD"><strong>CMD</strong></a></td><td>Executes Windows command prompt (CMD) commands. Used for running external programs or system commands</td><td style="text-align:center">7</td></tr>
@@ -2135,6 +2135,11 @@
 <td><code>adb_shell</code></td>
 <td>Executes an ADB shell command. Returns the result.</td>
 <td style="font-size:12px"><code>cmd</code>: Shell command. e.g. &#x27;getprop ro.build.version.release&#x27;, &#x27;pm list packages&#x27;<br><code>serial</code>: Device serial (optional)</td>
+</tr>
+<tr>
+<td><code>Send_adb_command</code></td>
+<td>Runs an arbitrary adb command via ReplayKit&#x27;s own ADBService (selected ADB device auto-applied). Returns the output. e.g. &#x27;shell pm list packages&#x27;, &#x27;install foo.apk&#x27;, &#x27;push file /sdcard/&#x27;</td>
+<td style="font-size:12px"><code>command</code>: adb command to run (the &#x27;adb -s {serial}&#x27; prefix is added automatically). e.g. &#x27;shell input keyevent KEYCODE_HOME&#x27;</td>
 </tr>
 <tr>
 <td><code>adb_screencap</code></td>

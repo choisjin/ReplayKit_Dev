@@ -971,6 +971,7 @@ class PlaybackService:
             ctor_kwargs = None
             shared_conn = None
             ssh_credentials = None
+            adb_serial: Optional[str] = None
             if real_id:
                 dev = self.dm.get_device(real_id)
                 if dev:
@@ -985,11 +986,15 @@ class PlaybackService:
                             "password": dev.info.get("password", ""),
                             "key_file_path": dev.info.get("key_file_path", ""),
                         }
-            logger.info("Module exec: %s.%s device=%s ctor=%s shared_conn=%s ssh=%s",
+                    # ADB 디바이스: Android 모듈의 Send_adb_command가 사용
+                    if dev.type == "adb":
+                        adb_serial = dev.address
+            logger.info("Module exec: %s.%s device=%s ctor=%s shared_conn=%s ssh=%s adb=%s",
                         module_name, func_name, real_id, ctor_kwargs,
-                        shared_conn is not None, ssh_credentials is not None)
+                        shared_conn is not None, ssh_credentials is not None, adb_serial)
             result = await execute_module_function(
-                module_name, func_name, func_args, ctor_kwargs, shared_conn, ssh_credentials,
+                module_name, func_name, func_args, ctor_kwargs, shared_conn,
+                ssh_credentials, adb_serial,
             )
             self._last_module_result = result
         elif step.type == StepType.SERIAL_COMMAND:

@@ -23,6 +23,50 @@ SCENARIOS_DIR = Path(__file__).resolve().parent.parent.parent / "scenarios"
 SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent.parent / "screenshots"
 
 
+def _migrate_legacy_step_types(data: dict) -> bool:
+    """레거시 cmd_send / cmd_check 스텝을 module_command (CMD 모듈)으로 변환.
+
+    매핑:
+      cmd_send (bg=False) → CMD.Run(command, timeout)
+      cmd_send (bg=True)  → CMD.RunCapture(command)
+      cmd_check (bg=False) → CMD.Check(command, expected, match_mode, timeout)
+      cmd_check (bg=True)  → CMD.CheckCapture(command, expected, match_mode)
+
+    device_id는 "Common"으로 변경 (기본 CMD 디바이스).
+    1개라도 변환되면 True 반환.
+    """
+    steps = data.get("steps", [])
+    changed = False
+    for s in steps:
+        st = s.get("type")
+        if st not in ("cmd_send", "cmd_check"):
+            continue
+        params = s.get("params", {}) or {}
+        cmd = params.get("command", "")
+        background = bool(params.get("background", False))
+        timeout = params.get("timeout")
+        new_args: dict = {"command": cmd}
+        if st == "cmd_send":
+            func = "RunCapture" if background else "Run"
+            if not background and timeout is not None:
+                new_args["timeout"] = int(timeout)
+        else:  # cmd_check
+            new_args["expected"] = params.get("expected", "")
+            new_args["match_mode"] = params.get("match_mode", "contains")
+            func = "CheckCapture" if background else "Check"
+            if not background and timeout is not None:
+                new_args["timeout"] = int(timeout)
+        s["type"] = "module_command"
+        s["device_id"] = "Common"
+        s["params"] = {"module": "CMD", "function": func, "args": new_args}
+        # 설명에 마이그레이션 표시 (선택)
+        if not s.get("description"):
+            s["description"] = f"CMD::{func}()"
+        changed = True
+        logger.info("Migrated legacy step %s → module_command CMD.%s", st, func)
+    return changed
+
+
 def _build_ctor_kwargs(dev) -> dict | None:
     """Build constructor kwargs from device info for module instantiation."""
     ct = dev.info.get("connect_type", "serial" if dev.type == "serial" else "none")
@@ -181,9 +225,11 @@ class RecordingService:
         if not filepath.exists():
             raise FileNotFoundError(f"Scenario not found: {name}")
         data = json.loads(filepath.read_text(encoding="utf-8"))
+        # 레거시 cmd_send / cmd_check → module_command CMD.* 로 자동 마이그레이션
+        migrated = _migrate_legacy_step_types(data)
         scenario = Scenario(**data)
         # 이미지 참조 자동 수리: 파일이 없으면 폴더 내에서 같은 step ID 파일 탐색
-        if self._repair_image_refs(name, scenario):
+        if self._repair_image_refs(name, scenario) or migrated:
             await self.save_scenario(scenario)
         return scenario
 

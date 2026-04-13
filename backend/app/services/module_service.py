@@ -316,6 +316,16 @@ def get_module_functions(module_name: str) -> list[dict]:
             ],
         })
 
+    # Android: ReplayKit 자체 ADBService를 통한 Send_adb_command 가상 함수 추가
+    # (Android 모듈 자체의 adb_shell 등은 그대로 유지)
+    if module_name == "Android":
+        functions.append({
+            "name": "Send_adb_command",
+            "params": [
+                {"name": "command", "required": True},
+            ],
+        })
+
     # 가이드 데이터 병합
     guides = _load_guides()
     mod_guide = guides.get(module_name, {})
@@ -531,8 +541,30 @@ def _get_instance(module_name: str, constructor_kwargs: Optional[dict] = None,
 
 def _execute_sync(module_name: str, function_name: str, args: dict,
                   constructor_kwargs: Optional[dict] = None,
-                  shared_serial_conn=None, ssh_credentials: Optional[dict] = None) -> Any:
+                  shared_serial_conn=None, ssh_credentials: Optional[dict] = None,
+                  adb_serial: Optional[str] = None) -> Any:
     """Execute a module function synchronously."""
+    # Android.Send_adb_command — ReplayKit 자체 ADBService로 라우팅 (가상 함수)
+    if module_name == "Android" and function_name == "Send_adb_command":
+        if not adb_serial:
+            raise RuntimeError("Send_adb_command requires an ADB device (adb_serial missing)")
+        from .adb_service import ADBService
+        from ..dependencies import adb_service as _adb
+        command = args.get("command", "")
+        if not command:
+            return "(empty command)"
+        # async 호출이지만 _execute_sync는 sync context (run_in_executor 안에서 호출됨)
+        # → asyncio.run을 사용할 수 없음 (이미 이벤트 루프 중). loop.run_until_complete도 위험.
+        # → ADBService 내부의 _run_device가 subprocess.run을 호출하는지 확인 필요.
+        # 안전한 방법: 별도 이벤트 루프에서 비동기 실행
+        import asyncio as _asyncio
+        loop = _asyncio.new_event_loop()
+        try:
+            output = loop.run_until_complete(_adb.run_shell_command(command, serial=adb_serial))
+        finally:
+            loop.close()
+        return output if output is not None else "(no output)"
+
     instance = _get_instance(module_name, constructor_kwargs, shared_serial_conn, ssh_credentials)
 
     # SSHManager.send_command 특수 처리: SSHManager가 UTF-8로 강제 디코딩하면서
@@ -754,6 +786,7 @@ async def execute_module_function(
     module_name: str, function_name: str, args: dict,
     constructor_kwargs: Optional[dict] = None,
     shared_serial_conn=None, ssh_credentials: Optional[dict] = None,
+    adb_serial: Optional[str] = None,
 ) -> str:
     """Execute a module function asynchronously (runs in thread pool)."""
     loop = asyncio.get_event_loop()
@@ -761,7 +794,8 @@ async def execute_module_function(
         result = await loop.run_in_executor(
             None,
             functools.partial(_execute_sync, module_name, function_name, args,
-                              constructor_kwargs, shared_serial_conn, ssh_credentials),
+                              constructor_kwargs, shared_serial_conn, ssh_credentials,
+                              adb_serial),
         )
         return str(result) if result is not None else "OK"
     except Exception as e:

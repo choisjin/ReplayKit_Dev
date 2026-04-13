@@ -1863,6 +1863,12 @@
           "serial": "Device serial (optional)"
         }
       },
+      "Send_adb_command": {
+        "description": "Runs an arbitrary adb command via ReplayKit's own ADBService (selected ADB device auto-applied). Returns the output. e.g. 'shell pm list packages', 'install foo.apk', 'push file /sdcard/'",
+        "params": {
+          "command": "adb command to run (the 'adb -s {serial}' prefix is added automatically). e.g. 'shell input keyevent KEYCODE_HOME'"
+        }
+      },
       "adb_screencap": {
         "description": "Captures the screen and saves it as an image file on the PC.",
         "params": {

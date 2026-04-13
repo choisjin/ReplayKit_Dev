@@ -183,7 +183,7 @@
     </div>
 
     <h2 id="overview">전체 모듈 목록</h2>
-    <p>총 <strong>29개</strong> 모듈, <strong>358개</strong> 함수가 등록되어 있습니다.</p>
+    <p>총 <strong>29개</strong> 모듈, <strong>359개</strong> 함수가 등록되어 있습니다.</p>
     <table>
       <thead><tr><th>모듈</th><th>설명</th><th>함수 수</th></tr></thead>
       <tbody>
@@ -209,7 +209,7 @@
 <tr><td><a href="#mod-TigrisCheck"><strong>TigrisCheck</strong></a></td><td>특정 ADB 디바이스에서 Tigris 테스트 스위트를 실행하고 결과를 확인하는 모듈</td><td style="text-align:center">1</td></tr>
 <tr><td><a href="#mod-Trace"><strong>Trace</strong></a></td><td>함수 호출 트레이스를 분석하여 예상 호출 순서와 실제 호출 순서를 비교하는 모듈</td><td style="text-align:center">7</td></tr>
 <tr><td><a href="#mod-COMMON_WINDOWS"><strong>COMMON_WINDOWS</strong></a></td><td>Windows 명령어 출력을 파일로 저장하는 유틸리티 모듈</td><td style="text-align:center">3</td></tr>
-<tr><td><a href="#mod-Android"><strong>Android</strong></a></td><td>ADB를 통해 Android 디바이스를 제어하는 모듈. 터치, 스와이프, 앱 설치, 스크린캡처 등</td><td style="text-align:center">18</td></tr>
+<tr><td><a href="#mod-Android"><strong>Android</strong></a></td><td>ADB를 통해 Android 디바이스를 제어하는 모듈. 터치, 스와이프, 앱 설치, 스크린캡처 등</td><td style="text-align:center">19</td></tr>
 <tr><td><a href="#mod-CCIC_BENCH"><strong>CCIC_BENCH</strong></a></td><td>UDP 통신으로 차량 전원(IGN/ACC/배터리)을 제어하는 테스트 벤치 장비</td><td style="text-align:center">16</td></tr>
 <tr><td><a href="#mod-SerialPlugin"><strong>SerialPlugin</strong></a></td><td>RS-232 시리얼 포트로 데이터를 송수신하는 범용 플러그인</td><td style="text-align:center">15</td></tr>
 <tr><td><a href="#mod-CMD"><strong>CMD</strong></a></td><td>Windows 명령 프롬프트(CMD) 명령을 실행하는 모듈. 외부 프로그램 실행이나 시스템 명령에 사용</td><td style="text-align:center">7</td></tr>
@@ -2135,6 +2135,11 @@
 <td><code>adb_shell</code></td>
 <td>ADB 셸 명령을 실행합니다. 결과를 반환합니다.</td>
 <td style="font-size:12px"><code>cmd</code>: 셸 명령어. 예: &#x27;getprop ro.build.version.release&#x27;, &#x27;pm list packages&#x27;<br><code>serial</code>: 디바이스 시리얼 (선택)</td>
+</tr>
+<tr>
+<td><code>Send_adb_command</code></td>
+<td>ReplayKit 자체 ADBService를 통해 임의의 adb 명령을 실행합니다 (선택된 ADB 디바이스 자동 적용). 출력 반환. 예: &#x27;shell pm list packages&#x27;, &#x27;install foo.apk&#x27;, &#x27;push file /sdcard/&#x27;</td>
+<td style="font-size:12px"><code>command</code>: 실행할 adb 명령 (adb -s {serial} 부분은 자동 추가). 예: &#x27;shell input keyevent KEYCODE_HOME&#x27;</td>
 </tr>
 <tr>
 <td><code>adb_screencap</code></td>

@@ -1863,6 +1863,12 @@
           "serial": "디바이스 시리얼 (선택)"
         }
       },
+      "Send_adb_command": {
+        "description": "ReplayKit 자체 ADBService를 통해 임의의 adb 명령을 실행합니다 (선택된 ADB 디바이스 자동 적용). 출력 반환. 예: 'shell pm list packages', 'install foo.apk', 'push file /sdcard/'",
+        "params": {
+          "command": "실행할 adb 명령 (adb -s {serial} 부분은 자동 추가). 예: 'shell input keyevent KEYCODE_HOME'"
+        }
+      },
       "adb_screencap": {
         "description": "화면을 캡처하여 PC에 이미지 파일로 저장합니다.",
         "params": {
