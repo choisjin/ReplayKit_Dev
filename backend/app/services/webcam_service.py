@@ -44,24 +44,55 @@ def _find_ffmpeg() -> Optional[str]:
     return None
 
 
-def _spawn_ffmpeg_writer(output_path: Path, width: int, height: int, fps: float) -> Optional[subprocess.Popen]:
+class _FfmpegProc:
+    """ffmpeg subprocess + stderr drain thread + 최근 로그 링버퍼."""
+    def __init__(self, proc: subprocess.Popen):
+        self.proc = proc
+        self._stderr_tail: list[bytes] = []
+        self._stderr_lock = threading.Lock()
+        self._drain_thread = threading.Thread(
+            target=self._drain_stderr, daemon=True, name="ffmpeg-stderr-drain"
+        )
+        self._drain_thread.start()
+
+    def _drain_stderr(self) -> None:
+        if self.proc.stderr is None:
+            return
+        try:
+            for line in iter(self.proc.stderr.readline, b""):
+                if not line:
+                    break
+                with self._stderr_lock:
+                    self._stderr_tail.append(line)
+                    if len(self._stderr_tail) > 40:
+                        self._stderr_tail.pop(0)
+        except Exception:
+            pass
+
+    def stderr_tail(self) -> bytes:
+        with self._stderr_lock:
+            return b"".join(self._stderr_tail)[-600:]
+
+
+def _spawn_ffmpeg_writer(output_path: Path, width: int, height: int, fps: float) -> Optional[_FfmpegProc]:
     """ffmpeg subprocess를 열어 raw BGR 프레임 → H.264 mp4 직접 인코딩.
 
-    캡처 스레드는 매 프레임마다 proc.stdin에 BGR bytes를 쓰면 ffmpeg가 실시간 인코딩.
-    종료 시 stdin을 닫으면 ffmpeg가 flush 후 종료.
+    stderr drain thread로 파이프 블로킹을 방지한다 (장시간 녹화 시 ffmpeg가 stall되는 것을 막음).
+    종료 시 stdin을 닫으면 ffmpeg가 flush 후 +faststart moov atom을 작성한다.
     """
     ffmpeg = _find_ffmpeg()
     if ffmpeg is None:
         logger.warning("ffmpeg not found — falling back to OpenCV mp4v writer (browser playback may fail)")
         return None
     creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    fps_val = fps if fps and fps > 0 else 30.0
     cmd = [
         ffmpeg, "-y",
         "-f", "rawvideo",
         "-vcodec", "rawvideo",
-        "-s", f"{width}x{height}",
+        "-s", f"{int(width)}x{int(height)}",
         "-pix_fmt", "bgr24",
-        "-r", f"{fps:.3f}",
+        "-r", f"{fps_val:.3f}",
         "-i", "-",  # stdin
         "-c:v", "libx264",
         "-preset", "veryfast",
@@ -78,9 +109,10 @@ def _spawn_ffmpeg_writer(output_path: Path, width: int, height: int, fps: float)
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
             creationflags=creationflags,
+            bufsize=0,  # stdin은 unbuffered — 프레임 즉시 전송
         )
-        logger.info("ffmpeg writer spawned: %s (%dx%d @%.1ffps)", output_path, width, height, fps)
-        return proc
+        logger.info("ffmpeg writer spawned: %s (%dx%d @%.1ffps)", output_path, width, height, fps_val)
+        return _FfmpegProc(proc)
     except Exception as e:
         logger.warning("Failed to spawn ffmpeg writer: %s", e)
         return None
@@ -102,7 +134,7 @@ class WebcamService:
         self._latest_frame_lock = threading.Lock()
 
         # Recording state — ffmpeg subprocess pipe (libx264 직접 인코딩)
-        self._ffmpeg_proc: Optional[subprocess.Popen] = None
+        self._ffmpeg_proc: Optional[_FfmpegProc] = None
         # OpenCV mp4v fallback (ffmpeg 없을 때만 사용)
         self._cv_writer: Optional[cv2.VideoWriter] = None
         self._recording_path: Optional[Path] = None
@@ -300,27 +332,32 @@ class WebcamService:
             self._recording_path = None
             self._recording_paused = False
 
-        # ffmpeg flush + 종료 대기 (lock 외부)
+        # ffmpeg flush + 종료 대기 (lock 외부) — +faststart moov atom 재작성 포함
         if proc is not None:
+            sp = proc.proc
             try:
-                if proc.stdin and not proc.stdin.closed:
+                if sp.stdin and not sp.stdin.closed:
                     try:
-                        proc.stdin.close()
+                        sp.stdin.flush()
                     except Exception:
                         pass
-                rc = proc.wait(timeout=10)
+                    try:
+                        sp.stdin.close()
+                    except Exception:
+                        pass
+                # +faststart는 녹화 종료 후 moov atom을 파일 앞쪽으로 이동시키므로
+                # 큰 파일은 수초가 걸릴 수 있음 → 넉넉하게 대기
+                rc = sp.wait(timeout=60)
                 if rc != 0:
-                    err_tail = b""
-                    try:
-                        if proc.stderr:
-                            err_tail = proc.stderr.read()[-300:]
-                    except Exception:
-                        pass
-                    logger.warning("ffmpeg writer exited with rc=%d: %s", rc, err_tail.decode(errors="replace"))
+                    logger.warning("ffmpeg writer exited with rc=%d: %s", rc,
+                                   proc.stderr_tail().decode(errors="replace"))
+                else:
+                    logger.debug("ffmpeg writer finalized: %s", proc.stderr_tail().decode(errors="replace"))
             except subprocess.TimeoutExpired:
-                logger.warning("ffmpeg writer flush timeout — killing")
+                logger.warning("ffmpeg writer flush timeout — killing (moov atom may be missing)")
                 try:
-                    proc.kill()
+                    sp.kill()
+                    sp.wait(timeout=3)
                 except Exception:
                     pass
             except Exception as e:
@@ -352,23 +389,36 @@ class WebcamService:
         """녹화 writer에 프레임 기록 (lock 내에서 호출). 오버레이 포함."""
         if self._ffmpeg_proc is None and self._cv_writer is None:
             return
-        display = frame.copy()
+        # ffmpeg에 전달할 프레임은 ffmpeg cmd에 지정된 `-s WxH`와 정확히 일치해야 함.
+        # 카메라가 요청과 다른 해상도를 반환하면 resize로 맞춤 (잘못된 크기는 ffmpeg를 즉시 죽임).
+        display = frame
+        if display.ndim != 3 or display.shape[2] != 3:
+            # BGRA/grayscale 등 → BGR로 변환
+            if display.ndim == 2:
+                display = cv2.cvtColor(display, cv2.COLOR_GRAY2BGR)
+            elif display.shape[2] == 4:
+                display = cv2.cvtColor(display, cv2.COLOR_BGRA2BGR)
+        if display.shape[0] != self._height or display.shape[1] != self._width:
+            display = cv2.resize(display, (self._width, self._height))
+        display = display.copy()  # contiguous 보장 + overlay가 원본을 건드리지 않게
         self._apply_overlay(display)
         # ffmpeg subprocess pipe 우선
-        if self._ffmpeg_proc is not None and self._ffmpeg_proc.stdin is not None:
-            try:
-                self._ffmpeg_proc.stdin.write(display.tobytes())
-                self._frames_written += 1
-            except (BrokenPipeError, OSError) as e:
-                logger.warning("ffmpeg pipe write failed: %s — recording aborted", e)
-                # Subprocess가 죽음 → recording 상태 정리 (다음 stop_recording 호출은 no-op)
+        if self._ffmpeg_proc is not None:
+            sp = self._ffmpeg_proc.proc
+            if sp.stdin is not None:
                 try:
-                    self._ffmpeg_proc.kill()
-                except Exception:
-                    pass
-                self._ffmpeg_proc = None
-            except Exception as e:
-                logger.warning("ffmpeg write error: %s", e)
+                    sp.stdin.write(display.tobytes())
+                    self._frames_written += 1
+                except (BrokenPipeError, OSError) as e:
+                    logger.warning("ffmpeg pipe write failed: %s — recording aborted (stderr: %s)",
+                                   e, self._ffmpeg_proc.stderr_tail().decode(errors="replace"))
+                    try:
+                        sp.kill()
+                    except Exception:
+                        pass
+                    self._ffmpeg_proc = None
+                except Exception as e:
+                    logger.warning("ffmpeg write error: %s", e)
         elif self._cv_writer is not None:
             try:
                 self._cv_writer.write(display)
