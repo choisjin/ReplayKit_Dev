@@ -54,11 +54,16 @@ export function useWebcam() {
   // 상태 폴링
   const statusTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // 캡처 상태를 ref로도 노출 — stale closure 방지 (isStreamReady 등에서 사용)
+  const webcamOpenRef = useRef(false);
+  useEffect(() => { webcamOpenRef.current = webcamOpen; }, [webcamOpen]);
+
   const fetchStatus = useCallback(async (): Promise<WebcamStatus | null> => {
     try {
       const r = await axios.get('/api/webcam/status');
       const s: WebcamStatus = r.data;
       setWebcamOpen(s.open);
+      webcamOpenRef.current = s.open;  // 즉시 ref도 업데이트 (다음 React render 기다리지 않음)
       setWebcamRecording(s.recording);
       if (s.width && s.height) setWebcamResolution(`${s.width}x${s.height}`);
       return s;
@@ -283,8 +288,9 @@ export function useWebcam() {
   }, []);
 
   const isStreamReady = useCallback(() => {
-    return webcamOpen;
-  }, [webcamOpen]);
+    // ref 기반 — stale closure 방지. ensureWebcamOpen에서 폴링하면서 호출됨
+    return webcamOpenRef.current;
+  }, []);
 
   return {
     webcamOpen,
