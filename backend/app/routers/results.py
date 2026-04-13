@@ -313,14 +313,15 @@ async def export_result_bundle(filename: str, export_path: str = ""):
         except Exception:
             pass
 
-        # 웹캠 녹화 복사
+        # 웹캠 녹화 복사 (webm + mp4)
         base = filename.replace(".json", "")
         if RECORDINGS_DIR.is_dir():
-            for rec in sorted(RECORDINGS_DIR.glob(f"{base}_webcam_*.webm")):
-                try:
-                    shutil.copy2(str(rec), str(run_dir / rec.name))
-                except Exception:
-                    pass
+            for pattern in (f"{base}_webcam_*.webm", f"{base}_webcam_*.mp4"):
+                for rec in sorted(RECORDINGS_DIR.glob(pattern)):
+                    try:
+                        shutil.copy2(str(rec), str(run_dir / rec.name))
+                    except Exception:
+                        pass
 
     # ZIP 압축
     if export_path:
@@ -408,18 +409,20 @@ async def delete_result(filename: str):
         run_dir = filepath.parent
         folder_name = run_dir.name
         shutil.rmtree(str(run_dir), ignore_errors=True)
-        # 연결된 웹캠 녹화 파일도 삭제
+        # 연결된 웹캠 녹화 파일도 삭제 (webm + mp4)
         if RECORDINGS_DIR.is_dir():
-            for rec in RECORDINGS_DIR.glob(f"{folder_name}_webcam_*.webm"):
-                rec.unlink()
-                deleted_recordings.append(rec.name)
+            for pattern in (f"{folder_name}_webcam_*.webm", f"{folder_name}_webcam_*.mp4"):
+                for rec in RECORDINGS_DIR.glob(pattern):
+                    rec.unlink()
+                    deleted_recordings.append(rec.name)
     else:
         filepath.unlink()
         base = filename.replace(".json", "")
         if RECORDINGS_DIR.is_dir():
-            for rec in RECORDINGS_DIR.glob(f"{base}_webcam_*.webm"):
-                rec.unlink()
-                deleted_recordings.append(rec.name)
+            for pattern in (f"{base}_webcam_*.webm", f"{base}_webcam_*.mp4"):
+                for rec in RECORDINGS_DIR.glob(pattern):
+                    rec.unlink()
+                    deleted_recordings.append(rec.name)
 
     return {"status": "deleted", "deleted_recordings": deleted_recordings}
 
@@ -460,29 +463,38 @@ async def upload_webcam_recording(
 
 @router.get("/recordings-for/{result_filename:path}")
 async def list_recordings_for_result(result_filename: str):
-    """List webcam recordings linked to a test result."""
+    """List webcam recordings linked to a test result (both .webm and .mp4)."""
     RECORDINGS_DIR.mkdir(parents=True, exist_ok=True)
     base = result_filename.replace(".json", "").replace("/result", "")
     recordings = []
+    seen: set[str] = set()
 
-    # 런 폴더 내 recordings/ 확인
+    # 런 폴더 내 recordings/ 확인 (webm + mp4)
     run_dir = RESULTS_DIR / base
     rec_dir = run_dir / "recordings" if run_dir.is_dir() else None
     if rec_dir and rec_dir.is_dir():
-        for f in sorted(rec_dir.glob("*.webm")):
+        for pattern in ("*.webm", "*.mp4"):
+            for f in sorted(rec_dir.glob(pattern)):
+                if f.name in seen:
+                    continue
+                seen.add(f.name)
+                recordings.append({
+                    "filename": f.name,
+                    "size": f.stat().st_size,
+                    "url": f"/results-files/{base}/recordings/{f.name}",
+                })
+
+    # 레거시: Results/Video/ 에서도 탐색 (webm + mp4)
+    for pattern in (f"{base}_webcam_*.webm", f"{base}_webcam_*.mp4"):
+        for f in sorted(RECORDINGS_DIR.glob(pattern)):
+            if f.name in seen:
+                continue
+            seen.add(f.name)
             recordings.append({
                 "filename": f.name,
                 "size": f.stat().st_size,
-                "url": f"/results-files/{base}/recordings/{f.name}",
+                "url": f"/recordings/{f.name}",
             })
-
-    # 레거시: Results/Video/ 에서도 탐색
-    for f in sorted(RECORDINGS_DIR.glob(f"{base}_webcam_*.webm")):
-        recordings.append({
-            "filename": f.name,
-            "size": f.stat().st_size,
-            "url": f"/recordings/{f.name}",
-        })
     return {"recordings": recordings}
 
 
