@@ -58,3 +58,4 @@ frontend/.claude/
 .playwright-mcp/
 DLL_DEBUG/
 References/
+frontend/package-lock.json
