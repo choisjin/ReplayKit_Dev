@@ -620,7 +620,7 @@ async def _run_play_job(data: dict):
     이벤트는 playback_service.publish_event를 통해 broadcaster에 전달되고,
     연결된 모든 WebSocket 구독자가 forward 태스크로 받아 전송한다.
     """
-    from .services.playback_service import publish_event, clear_event_buffer
+    from .services.playback_service import publish_event, clear_event_buffer, mark_playback_active
     scenario_name = data.get("scenario")
     verify = data.get("verify", True)
     repeat = data.get("repeat", 1)
@@ -633,6 +633,7 @@ async def _run_play_job(data: dict):
         playback_service._should_stop = False
         playback_service._pause_event.set()
         clear_event_buffer()
+        mark_playback_active(True)
         publish_event({"type": "playback_reset", "scenario": scenario_name})
         # 웹캠 녹화 시작 (열려 있을 때만)
         webcam_session = _webcam_session_start(iteration=1)
@@ -779,11 +780,12 @@ async def _run_play_job(data: dict):
         if _is_multi_cycle:
             playback_service._cleanup_run_output_dir()
             playback_service._running = False
+        mark_playback_active(False)
 
 
 async def _run_play_group_job(data: dict):
     """백그라운드 태스크로 실행되는 play_group 로직."""
-    from .services.playback_service import publish_event, clear_event_buffer
+    from .services.playback_service import publish_event, clear_event_buffer, mark_playback_active
     group_members = data.get("scenarios", [])
     verify = data.get("verify", True)
     repeat = data.get("repeat", 1)
@@ -802,6 +804,7 @@ async def _run_play_group_job(data: dict):
         playback_service._should_stop = False
         playback_service._pause_event.set()
         clear_event_buffer()
+        mark_playback_active(True)
         publish_event({"type": "playback_reset", "group": True})
         webcam_session = _webcam_session_start(iteration=1)
 
@@ -988,6 +991,7 @@ async def _run_play_group_job(data: dict):
         _webcam_session_finalize(webcam_session, result_path)
         playback_service._cleanup_run_output_dir()
         playback_service._running = False
+        mark_playback_active(False)
 
 
 @app.websocket("/ws/webcam")
@@ -1047,7 +1051,7 @@ async def websocket_playback(websocket: WebSocket):
     - 새 WS가 연결되면 최근 이벤트 버퍼를 replay 받아 현재 상태를 복구
     """
     global _playback_bg_task
-    from .services.playback_service import subscribe_events, unsubscribe_events, publish_event
+    from .services.playback_service import subscribe_events, unsubscribe_events, publish_event, mark_playback_active
     await websocket.accept()
     logger.info("Playback WebSocket connected")
 
@@ -1088,6 +1092,9 @@ async def websocket_playback(websocket: WebSocket):
 
             elif action == "stop":
                 await playback_service.stop()
+                # 중단 즉시 inactive로 표시 — 새 WS가 연결되어도 이전 run의 버퍼가 replay되지 않도록.
+                # 백그라운드 태스크의 finally에서도 다시 False로 설정되지만 여기서 먼저 걸어야 race가 없다.
+                mark_playback_active(False)
                 publish_event({"type": "playback_stopped", "result_filename": ""})
 
             elif action == "pause":
