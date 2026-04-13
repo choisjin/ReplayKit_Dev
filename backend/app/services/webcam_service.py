@@ -12,6 +12,9 @@ Frontend MediaRecorder를 대체하여 WebSocket 연결 상태와 무관하게
 from __future__ import annotations
 
 import logging
+import shutil
+import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -22,6 +25,65 @@ import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+_TOOLS_DIR = Path(__file__).resolve().parent.parent.parent.parent / "tools"
+
+
+def _find_ffmpeg() -> Optional[str]:
+    """ffmpeg 실행 파일 경로 — 시스템 PATH → tools/ 폴더 순으로 탐색."""
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    local = _TOOLS_DIR / "ffmpeg.exe"
+    if local.is_file():
+        return str(local)
+    local_bin = _TOOLS_DIR / "ffmpeg" / "bin" / "ffmpeg.exe"
+    if local_bin.is_file():
+        return str(local_bin)
+    return None
+
+
+def _spawn_ffmpeg_writer(output_path: Path, width: int, height: int, fps: float) -> Optional[subprocess.Popen]:
+    """ffmpeg subprocess를 열어 raw BGR 프레임 → H.264 mp4 직접 인코딩.
+
+    캡처 스레드는 매 프레임마다 proc.stdin에 BGR bytes를 쓰면 ffmpeg가 실시간 인코딩.
+    종료 시 stdin을 닫으면 ffmpeg가 flush 후 종료.
+    """
+    ffmpeg = _find_ffmpeg()
+    if ffmpeg is None:
+        logger.warning("ffmpeg not found — falling back to OpenCV mp4v writer (browser playback may fail)")
+        return None
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    cmd = [
+        ffmpeg, "-y",
+        "-f", "rawvideo",
+        "-vcodec", "rawvideo",
+        "-s", f"{width}x{height}",
+        "-pix_fmt", "bgr24",
+        "-r", f"{fps:.3f}",
+        "-i", "-",  # stdin
+        "-c:v", "libx264",
+        "-preset", "veryfast",
+        "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
+        "-an",  # 오디오 없음
+        str(output_path),
+    ]
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            creationflags=creationflags,
+        )
+        logger.info("ffmpeg writer spawned: %s (%dx%d @%.1ffps)", output_path, width, height, fps)
+        return proc
+    except Exception as e:
+        logger.warning("Failed to spawn ffmpeg writer: %s", e)
+        return None
 
 
 class WebcamService:
@@ -39,8 +101,10 @@ class WebcamService:
         self._latest_frame: Optional[np.ndarray] = None
         self._latest_frame_lock = threading.Lock()
 
-        # Recording state
-        self._writer: Optional[cv2.VideoWriter] = None
+        # Recording state — ffmpeg subprocess pipe (libx264 직접 인코딩)
+        self._ffmpeg_proc: Optional[subprocess.Popen] = None
+        # OpenCV mp4v fallback (ffmpeg 없을 때만 사용)
+        self._cv_writer: Optional[cv2.VideoWriter] = None
         self._recording_path: Optional[Path] = None
         self._recording_paused = False
         self._recording_lock = threading.Lock()
@@ -156,7 +220,7 @@ class WebcamService:
                 self._latest_frame = frame
             # 녹화 중이면 오버레이 후 writer 기록
             with self._recording_lock:
-                if self._writer is not None and not self._recording_paused:
+                if (self._ffmpeg_proc is not None or self._cv_writer is not None) and not self._recording_paused:
                     self._write_frame_unlocked(frame)
             # 간이 frame pacing (과도한 CPU 방지)
             now = time.monotonic()
@@ -188,9 +252,9 @@ class WebcamService:
     # Recording
     # ------------------------------------------------------------
     def start_recording(self, output_path: str | Path) -> bool:
-        """녹화 시작. output_path의 상위 폴더는 미리 존재해야 함."""
+        """녹화 시작. output_path의 상위 폴더는 자동 생성. 우선 ffmpeg subprocess로 H.264 인코딩 시도, 실패 시 cv2.VideoWriter(mp4v)로 폴백."""
         with self._recording_lock:
-            if self._writer is not None:
+            if self._ffmpeg_proc is not None or self._cv_writer is not None:
                 logger.warning("Webcam recording already in progress")
                 return False
             if not self.is_open():
@@ -198,62 +262,119 @@ class WebcamService:
                 return False
             path = Path(output_path)
             path.parent.mkdir(parents=True, exist_ok=True)
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            writer = cv2.VideoWriter(str(path), fourcc, self._actual_fps, (self._width, self._height))
-            if not writer.isOpened():
-                logger.error("Failed to open VideoWriter: %s", path)
-                return False
-            self._writer = writer
+
+            # 1순위: ffmpeg subprocess (브라우저 호환 H.264)
+            proc = _spawn_ffmpeg_writer(path, self._width, self._height, self._actual_fps)
+            if proc is not None:
+                self._ffmpeg_proc = proc
+            else:
+                # 폴백: cv2.VideoWriter mp4v
+                fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                writer = cv2.VideoWriter(str(path), fourcc, self._actual_fps, (self._width, self._height))
+                if not writer.isOpened():
+                    logger.error("Failed to open VideoWriter: %s", path)
+                    return False
+                self._cv_writer = writer
+
             self._recording_path = path
             self._recording_paused = False
             self._record_start_ts = time.monotonic()
             self._frames_written = 0
-            logger.info("Webcam recording started: %s (%dx%d @%.1ffps)", path, self._width, self._height, self._actual_fps)
+            logger.info("Webcam recording started: %s (%dx%d @%.1ffps, mode=%s)",
+                        path, self._width, self._height, self._actual_fps,
+                        "ffmpeg-h264" if self._ffmpeg_proc else "cv2-mp4v")
             return True
 
     def stop_recording(self) -> Optional[str]:
-        """녹화 정지 + 파일 경로 반환. 녹화 중이 아니면 None."""
+        """녹화 정지 + 파일 경로 반환. ffmpeg를 사용 중이면 stdin close + flush 대기."""
         with self._recording_lock:
-            if self._writer is None:
+            if self._ffmpeg_proc is None and self._cv_writer is None:
                 return None
-            try:
-                self._writer.release()
-            except Exception as e:
-                logger.warning("VideoWriter release error: %s", e)
             path = self._recording_path
             duration = time.monotonic() - self._record_start_ts
-            logger.info("Webcam recording stopped: %s frames=%d duration=%.1fs",
-                        path, self._frames_written, duration)
-            self._writer = None
+            frames = self._frames_written
+            proc = self._ffmpeg_proc
+            cv_writer = self._cv_writer
+            self._ffmpeg_proc = None
+            self._cv_writer = None
             self._recording_path = None
             self._recording_paused = False
-            return str(path) if path else None
+
+        # ffmpeg flush + 종료 대기 (lock 외부)
+        if proc is not None:
+            try:
+                if proc.stdin and not proc.stdin.closed:
+                    try:
+                        proc.stdin.close()
+                    except Exception:
+                        pass
+                rc = proc.wait(timeout=10)
+                if rc != 0:
+                    err_tail = b""
+                    try:
+                        if proc.stderr:
+                            err_tail = proc.stderr.read()[-300:]
+                    except Exception:
+                        pass
+                    logger.warning("ffmpeg writer exited with rc=%d: %s", rc, err_tail.decode(errors="replace"))
+            except subprocess.TimeoutExpired:
+                logger.warning("ffmpeg writer flush timeout — killing")
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning("ffmpeg writer stop error: %s", e)
+        if cv_writer is not None:
+            try:
+                cv_writer.release()
+            except Exception as e:
+                logger.warning("VideoWriter release error: %s", e)
+
+        logger.info("Webcam recording stopped: %s frames=%d duration=%.1fs", path, frames, duration)
+        return str(path) if path else None
 
     def pause_recording(self) -> None:
         with self._recording_lock:
-            if self._writer is not None:
+            if self._ffmpeg_proc is not None or self._cv_writer is not None:
                 self._recording_paused = True
 
     def resume_recording(self) -> None:
         with self._recording_lock:
-            if self._writer is not None:
+            if self._ffmpeg_proc is not None or self._cv_writer is not None:
                 self._recording_paused = False
 
     def is_recording(self) -> bool:
         with self._recording_lock:
-            return self._writer is not None
+            return self._ffmpeg_proc is not None or self._cv_writer is not None
 
     def _write_frame_unlocked(self, frame: np.ndarray) -> None:
         """녹화 writer에 프레임 기록 (lock 내에서 호출). 오버레이 포함."""
-        if self._writer is None:
+        if self._ffmpeg_proc is None and self._cv_writer is None:
             return
         display = frame.copy()
         self._apply_overlay(display)
-        try:
-            self._writer.write(display)
-            self._frames_written += 1
-        except Exception as e:
-            logger.warning("VideoWriter write error: %s", e)
+        # ffmpeg subprocess pipe 우선
+        if self._ffmpeg_proc is not None and self._ffmpeg_proc.stdin is not None:
+            try:
+                self._ffmpeg_proc.stdin.write(display.tobytes())
+                self._frames_written += 1
+            except (BrokenPipeError, OSError) as e:
+                logger.warning("ffmpeg pipe write failed: %s — recording aborted", e)
+                # Subprocess가 죽음 → recording 상태 정리 (다음 stop_recording 호출은 no-op)
+                try:
+                    self._ffmpeg_proc.kill()
+                except Exception:
+                    pass
+                self._ffmpeg_proc = None
+            except Exception as e:
+                logger.warning("ffmpeg write error: %s", e)
+        elif self._cv_writer is not None:
+            try:
+                self._cv_writer.write(display)
+                self._frames_written += 1
+            except Exception as e:
+                logger.warning("VideoWriter write error: %s", e)
 
     # ------------------------------------------------------------
     # Overlay
@@ -373,7 +494,8 @@ class WebcamService:
     # ------------------------------------------------------------
     def status(self) -> dict:
         with self._recording_lock:
-            recording = self._writer is not None
+            recording = self._ffmpeg_proc is not None or self._cv_writer is not None
+            mode = "ffmpeg-h264" if self._ffmpeg_proc is not None else ("cv2-mp4v" if self._cv_writer is not None else "")
             rec_path = str(self._recording_path) if self._recording_path else ""
             duration = time.monotonic() - self._record_start_ts if recording else 0.0
             frames = self._frames_written
@@ -384,6 +506,7 @@ class WebcamService:
             "height": self._height,
             "fps": self._actual_fps,
             "recording": recording,
+            "recording_mode": mode,
             "recording_path": rec_path,
             "recording_duration_s": duration,
             "frames_written": frames,
