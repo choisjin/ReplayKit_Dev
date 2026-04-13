@@ -257,6 +257,28 @@ export default function ScenarioPage() {
 
   // 웹캠 자동 녹화
   const [webcamAutoRecord, setWebcamAutoRecord] = useState(true);
+  // 재생 직전 어떤 웹캠 index로 녹화할지 선택하는 모달.
+  // pickWebcamDevice()가 이 모달을 띄우고 사용자 선택(또는 취소)을 Promise로 반환.
+  const [webcamPickerOpen, setWebcamPickerOpen] = useState(false);
+  const [webcamPickerDevices, setWebcamPickerDevices] = useState<{ index: number; label: string }[]>([]);
+  const [webcamPickerValue, setWebcamPickerValue] = useState<number>(0);
+  const webcamPickerResolveRef = useRef<((idx: number | null) => void) | null>(null);
+
+  /** 현재 웹캠 목록을 enumerate하여 1개 이상이면 그대로 사용, 2개 이상이면 모달로 선택 받음.
+   *  반환값: 선택된 device_index (null = 사용자 취소 또는 목록 비어있음) */
+  const pickWebcamDevice = useCallback(async (): Promise<number | null> => {
+    const list = await webcam.listWebcamDevices();
+    if (!list || list.length === 0) return null;
+    if (list.length === 1) return list[0].index;
+    // 기본 선택: 현재 webcamIndex (없으면 첫 항목)
+    const defaultIdx = list.find(d => d.index === webcam.webcamIndex)?.index ?? list[0].index;
+    setWebcamPickerDevices(list);
+    setWebcamPickerValue(defaultIdx);
+    setWebcamPickerOpen(true);
+    return new Promise<number | null>((resolve) => {
+      webcamPickerResolveRef.current = resolve;
+    });
+  }, [webcam]);
   const webcamBlobsRef = useRef<{ repeatIndex: number; blob: Blob }[]>([]);
   const webcamRecordingActiveRef = useRef(false);
   const playbackScrollRef = useRef<HTMLDivElement>(null);
@@ -749,10 +771,15 @@ export default function ScenarioPage() {
 
     pauseScreenStream();
     const repeat = getRepeatCount(name);
-    // 웹캠 자동녹화: 웹캠 열기 + 연결 확인
+    // 웹캠 자동녹화: 복수 웹캠이 있으면 사용자에게 index 선택 받기 + 웹캠 열기 + 연결 확인
     let doAutoRecord = false;
     if (webcamAutoRecord) {
-      const ready = await ensureWebcamOpen();
+      const pickedIdx = await pickWebcamDevice();
+      if (pickedIdx === null) {
+        message.error(t('webcam.webcamNotOpen'));
+        return;
+      }
+      const ready = await ensureWebcamOpen(pickedIdx);
       if (!ready) {
         message.error(t('webcam.webcamNotOpen'));
         return;
@@ -979,10 +1006,15 @@ export default function ScenarioPage() {
     pauseScreenStream();
     const members = groups[gName] || [];
     const repeat = getRepeatCount(gName);
-    // 웹캠 자동녹화: 웹캠 열기 + 연결 확인
+    // 웹캠 자동녹화: 복수 웹캠이 있으면 사용자에게 index 선택 받기 + 웹캠 열기 + 연결 확인
     let doAutoRecord = false;
     if (webcamAutoRecord) {
-      const ready = await ensureWebcamOpen();
+      const pickedIdx = await pickWebcamDevice();
+      if (pickedIdx === null) {
+        message.error(t('webcam.webcamNotOpen'));
+        return;
+      }
+      const ready = await ensureWebcamOpen(pickedIdx);
       if (!ready) {
         message.error(t('webcam.webcamNotOpen'));
         return;
@@ -2283,6 +2315,46 @@ export default function ScenarioPage() {
             )}
           </>
         )}
+      </Modal>
+
+      {/* 재생 직전 웹캠 index 선택 모달 */}
+      <Modal
+        open={webcamPickerOpen}
+        title={<><VideoCameraOutlined style={{ marginRight: 6 }} />{t('webcam.pickDevice')}</>}
+        okText={t('common.confirm')}
+        cancelText={t('common.cancel')}
+        onOk={() => {
+          setWebcamPickerOpen(false);
+          const resolve = webcamPickerResolveRef.current;
+          webcamPickerResolveRef.current = null;
+          resolve?.(webcamPickerValue);
+        }}
+        onCancel={() => {
+          setWebcamPickerOpen(false);
+          const resolve = webcamPickerResolveRef.current;
+          webcamPickerResolveRef.current = null;
+          resolve?.(null);
+        }}
+        destroyOnClose
+        width={420}
+      >
+        <div style={{ marginBottom: 8, color: '#888', fontSize: 12 }}>
+          {t('webcam.pickDeviceHint')}
+        </div>
+        <Radio.Group
+          value={webcamPickerValue}
+          onChange={(e) => setWebcamPickerValue(e.target.value)}
+          style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+        >
+          {webcamPickerDevices.map(d => (
+            <Radio key={d.index} value={d.index}>
+              <span style={{ fontSize: 13 }}>
+                <Tag color="blue" style={{ marginRight: 4 }}>#{d.index}</Tag>
+                {d.label}
+              </span>
+            </Radio>
+          ))}
+        </Radio.Group>
       </Modal>
 
       <style>{`

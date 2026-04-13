@@ -292,6 +292,19 @@ export function useWebcam() {
     return webcamOpenRef.current;
   }, []);
 
+  // 외부(ScenarioPage 등)에서 모달용으로 직접 목록을 조회할 때 사용.
+  // setState 반영을 기다릴 필요 없이 즉시 최신 목록을 반환한다.
+  const listWebcamDevices = useCallback(async (): Promise<DeviceInfo[]> => {
+    try {
+      const r = await axios.get('/api/webcam/devices');
+      const list: DeviceInfo[] = r.data.devices || [];
+      setWebcamDevices(list);
+      return list;
+    } catch {
+      return [];
+    }
+  }, []);
+
   return {
     webcamOpen,
     webcamIndex,
@@ -307,6 +320,9 @@ export function useWebcam() {
     handleWebcamToggle,
     handleWebcamChange,
     handleWebcamResolutionChange,
+    startWebcam,
+    enumerateWebcams,
+    listWebcamDevices,
     startWebcamRecording,
     stopWebcamRecording,
     loadWebcamCapabilities,

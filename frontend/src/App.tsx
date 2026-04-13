@@ -146,12 +146,21 @@ function AppContent() {
     }
   };
 
-  /** 웹캠 PiP 열기 + 실제 비디오 스트림 준비 대기. 이미 스트림 활성이면 즉시 true */
-  const ensureWebcamOpen = async (): Promise<boolean> => {
-    // 이미 스트림이 준비되어 있으면 즉시 성공
-    if (webcamVisible && webcam.isStreamReady()) return true;
-    // PiP 닫혀있으면 열기
-    if (!webcamVisible) {
+  /** 웹캠 PiP 열기 + 실제 비디오 스트림 준비 대기. 이미 스트림 활성이면 즉시 true.
+   *  deviceIndex를 전달하면 해당 index로 전환 후 오픈한다 (다른 index가 이미 열려 있으면 교체).
+   */
+  const ensureWebcamOpen = async (deviceIndex?: number): Promise<boolean> => {
+    // 지정된 index가 있고, 현재 열린 index와 다르면 먼저 해당 index로 전환
+    if (deviceIndex !== undefined && deviceIndex !== webcam.webcamIndex) {
+      try {
+        await webcam.startWebcam(deviceIndex);
+      } catch { /* fall through */ }
+      if (!webcamVisible) setWebcamVisible(true);
+    } else if (webcamVisible && webcam.isStreamReady()) {
+      // 이미 원하는 index로 스트림이 준비되어 있으면 즉시 성공
+      return true;
+    } else if (!webcamVisible) {
+      // PiP 닫혀있으면 열기 (현재 webcamIndex 사용)
       webcam.handleWebcamToggle(['webcam']);
       setWebcamVisible(true);
     }
