@@ -1,406 +1,261 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { App } from 'antd';
 import { useTranslation } from '../i18n';
+import axios from 'axios';
+
+// 백엔드 OpenCV 기반 webcam service 클라이언트.
+// 이전의 브라우저 MediaRecorder 버전을 대체. 녹화/프리뷰 모두 백엔드에서 수행됨.
+// 외부 API 시그니처는 유지되어 호출 측 코드 변경 최소화.
+
+interface WebcamStatus {
+  open: boolean;
+  device_index: number;
+  width: number;
+  height: number;
+  fps: number;
+  recording: boolean;
+  recording_path: string;
+  recording_duration_s: number;
+  frames_written: number;
+  overlay_position: string;
+}
+
+interface DeviceInfo {
+  index: number;
+  label: string;
+}
 
 export function useWebcam() {
   const { t } = useTranslation();
   const { message } = App.useApp();
+
+  // UI state
   const [webcamOpen, setWebcamOpen] = useState(false);
   const [webcamIndex, setWebcamIndex] = useState(0);
-  const [webcamDevices, setWebcamDevices] = useState<MediaDeviceInfo[]>([]);
-  const webcamVideoRef = useRef<HTMLVideoElement>(null);
-  const webcamStreamRef = useRef<MediaStream | null>(null);
+  const [webcamDevices, setWebcamDevices] = useState<DeviceInfo[]>([]);
   const [webcamRecording, setWebcamRecording] = useState(false);
-  const webcamRecorderRef = useRef<MediaRecorder | null>(null);
-  const webcamChunksRef = useRef<Blob[]>([]);
-  const webcamFileHandleRef = useRef<FileSystemFileHandle | null>(null);
   const [webcamSettingsOpen, setWebcamSettingsOpen] = useState(false);
   const [webcamCapabilities, setWebcamCapabilities] = useState<Record<string, any>>({});
   const [webcamSettings, setWebcamSettings] = useState<Record<string, number>>({});
   const [webcamResolution, setWebcamResolution] = useState('');
   const [webcamResolutions, setWebcamResolutions] = useState<string[]>([]);
 
-  // Cleanup on unmount
+  // 타임스탬프 오버레이 설정 (프런트 ↔ 백엔드 sync)
+  const [timestampPosition, setTimestampPositionState] = useState<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'off'>('bottom-right');
+  const [timestampColor, setTimestampColorState] = useState('#ffffff');
+  const [timestampFontSize, setTimestampFontSizeState] = useState(0); // 0 = auto
+
+  // 프런트 측 레거시 호환: WebcamPip가 여전히 webcamVideoRef를 사용할 수 있음.
+  // 백엔드 전환 후에는 실제로 참조하지 않음 (WebcamPip는 img 태그로 교체됨).
+  const webcamVideoRef = useRef<HTMLVideoElement>(null);
+
+  // 상태 폴링
+  const statusTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchStatus = useCallback(async (): Promise<WebcamStatus | null> => {
+    try {
+      const r = await axios.get('/api/webcam/status');
+      const s: WebcamStatus = r.data;
+      setWebcamOpen(s.open);
+      setWebcamRecording(s.recording);
+      if (s.width && s.height) setWebcamResolution(`${s.width}x${s.height}`);
+      return s;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // 주기적으로 백엔드 상태 폴링 (recording 상태 반영)
+  useEffect(() => {
+    statusTimerRef.current = setInterval(() => { fetchStatus(); }, 2000);
+    return () => {
+      if (statusTimerRef.current) clearInterval(statusTimerRef.current);
+    };
+  }, [fetchStatus]);
+
+  // Cleanup
   useEffect(() => {
     return () => {
-      if (overlayAnimFrameRef.current) cancelAnimationFrame(overlayAnimFrameRef.current);
-      if (webcamStreamRef.current) {
-        webcamStreamRef.current.getTracks().forEach(t => t.stop());
-        webcamStreamRef.current = null;
-      }
+      if (statusTimerRef.current) clearInterval(statusTimerRef.current);
     };
   }, []);
 
   const enumerateWebcams = useCallback(async () => {
     try {
-      const tempStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      tempStream.getTracks().forEach(t => t.stop());
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(d => d.kind === 'videoinput');
-      setWebcamDevices(videoDevices);
+      const r = await axios.get('/api/webcam/devices');
+      setWebcamDevices(r.data.devices || []);
     } catch {
       setWebcamDevices([]);
     }
   }, []);
 
-  const probeWebcamResolutions = useCallback(async (deviceId?: string) => {
-    const candidates = [
-      { w: 3840, h: 2160 }, { w: 2560, h: 1440 }, { w: 1920, h: 1080 },
-      { w: 1280, h: 720 }, { w: 960, h: 540 }, { w: 640, h: 480 }, { w: 320, h: 240 },
-    ];
-    const supported: string[] = [];
-    for (const c of candidates) {
-      try {
-        const s = await navigator.mediaDevices.getUserMedia({
-          video: {
-            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-            width: { exact: c.w },
-            height: { exact: c.h },
-          },
-        });
-        s.getTracks().forEach(t => t.stop());
-        supported.push(`${c.w}x${c.h}`);
-      } catch { /* not supported */ }
+  const probeWebcamResolutions = useCallback(async (deviceIndex: number) => {
+    try {
+      const r = await axios.get(`/api/webcam/resolutions/${deviceIndex}`);
+      const list: string[] = r.data.resolutions || [];
+      setWebcamResolutions(list);
+      return list;
+    } catch {
+      setWebcamResolutions([]);
+      return [];
     }
-    setWebcamResolutions(supported);
-    return supported;
   }, []);
 
   const startWebcam = useCallback(async (deviceIndex: number, resolution?: string) => {
-    if (webcamStreamRef.current) {
-      webcamStreamRef.current.getTracks().forEach(t => t.stop());
-      webcamStreamRef.current = null;
-      // OS가 카메라를 해제할 시간 확보
-      await new Promise(r => setTimeout(r, 300));
-    }
     try {
-      const devices = webcamDevices.length > 0 ? webcamDevices : [];
-      const videoConstraints: any = devices[deviceIndex]
-        ? { deviceId: { exact: devices[deviceIndex].deviceId } }
-        : {};
+      let w = 640, h = 480;
       if (resolution) {
-        const [w, h] = resolution.split('x').map(Number);
-        videoConstraints.width = { ideal: w };
-        videoConstraints.height = { ideal: h };
+        const [ws, hs] = resolution.split('x').map(Number);
+        if (ws && hs) { w = ws; h = hs; }
       }
-      const constraints: MediaStreamConstraints = {
-        video: Object.keys(videoConstraints).length > 0 ? videoConstraints : true,
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      webcamStreamRef.current = stream;
-      if (webcamVideoRef.current) {
-        webcamVideoRef.current.srcObject = stream;
-      }
-      const track = stream.getVideoTracks()[0];
-      if (track) {
-        const settings = track.getSettings();
-        setWebcamResolution(`${settings.width}x${settings.height}`);
-      }
+      await axios.post('/api/webcam/open', { device_index: deviceIndex, width: w, height: h });
+      await fetchStatus();
     } catch (e: any) {
-      message.error(t('webcam.openFailed') + ': ' + (e.message || e));
+      message.error(t('webcam.openFailed') + ': ' + (e?.response?.data?.detail || e.message || e));
     }
-  }, [webcamDevices, t]);
+  }, [fetchStatus, message, t]);
 
-  const stopWebcam = useCallback(() => {
-    if (webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') {
-      webcamRecorderRef.current.stop();
-      webcamRecorderRef.current = null;
-      setWebcamRecording(false);
-    }
-    if (webcamStreamRef.current) {
-      webcamStreamRef.current.getTracks().forEach(t => t.stop());
-      webcamStreamRef.current = null;
-    }
-    if (webcamVideoRef.current) {
-      webcamVideoRef.current.srcObject = null;
-    }
+  const stopWebcam = useCallback(async () => {
+    try {
+      await axios.post('/api/webcam/close');
+    } catch { /* ignore */ }
+    setWebcamOpen(false);
+    setWebcamRecording(false);
   }, []);
 
   const handleWebcamToggle = useCallback(async (keys: string | string[]) => {
     const isOpen = Array.isArray(keys) ? keys.includes('webcam') : keys === 'webcam';
-    setWebcamOpen(isOpen);
     if (isOpen) {
       await enumerateWebcams();
       await startWebcam(webcamIndex);
-      const devices = webcamDevices.length > 0 ? webcamDevices : [];
-      probeWebcamResolutions(devices[webcamIndex]?.deviceId);
+      await probeWebcamResolutions(webcamIndex);
     } else {
-      stopWebcam();
+      await stopWebcam();
     }
-  }, [webcamIndex, webcamDevices, enumerateWebcams, startWebcam, stopWebcam, probeWebcamResolutions]);
+  }, [webcamIndex, enumerateWebcams, startWebcam, stopWebcam, probeWebcamResolutions]);
 
   const handleWebcamChange = useCallback(async (idx: number) => {
     setWebcamIndex(idx);
     if (webcamOpen) {
       await startWebcam(idx);
-      const devices = webcamDevices.length > 0 ? webcamDevices : [];
-      probeWebcamResolutions(devices[idx]?.deviceId);
+      await probeWebcamResolutions(idx);
     }
-  }, [webcamOpen, webcamDevices, startWebcam, probeWebcamResolutions]);
+  }, [webcamOpen, startWebcam, probeWebcamResolutions]);
 
   const handleWebcamResolutionChange = useCallback(async (res: string) => {
     setWebcamResolution(res);
     await startWebcam(webcamIndex, res);
   }, [webcamIndex, startWebcam]);
 
-  // 타임스탬프 오버레이
-  const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const overlayAnimFrameRef = useRef<number>(0);
-  const [timestampPosition, setTimestampPosition] = useState<'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'off'>('bottom-right');
-  const [timestampColor, setTimestampColor] = useState('#ffffff');
-  const [timestampFontSize, setTimestampFontSize] = useState(0); // 0 = auto
-  const timestampPosRef = useRef(timestampPosition);
-  const timestampColorRef = useRef(timestampColor);
-  const timestampFontSizeRef = useRef(timestampFontSize);
-  timestampPosRef.current = timestampPosition;
-  timestampColorRef.current = timestampColor;
-  timestampFontSizeRef.current = timestampFontSize;
-
-  /**
-   * 웹캠 스트림 위에 타임스탬프를 오버레이하여 새 MediaStream을 반환.
-   * 우측 하단에 yyyy-MM-dd HH:mm:ss 형식으로 표시.
-   */
-  const createOverlayStream = useCallback((sourceStream: MediaStream): MediaStream => {
-    const videoTrack = sourceStream.getVideoTracks()[0];
-    if (!videoTrack) return sourceStream;
-
-    const settings = videoTrack.getSettings();
-    const w = settings.width || 640;
-    const h = settings.height || 480;
-
-    let canvas = overlayCanvasRef.current;
-    if (!canvas) {
-      canvas = document.createElement('canvas');
-      overlayCanvasRef.current = canvas;
-    }
-    canvas.width = w;
-    canvas.height = h;
-
-    const ctx = canvas.getContext('2d')!;
-    const video = webcamVideoRef.current;
-
-    const drawFrame = () => {
-      if (!video || video.paused || video.ended) {
-        overlayAnimFrameRef.current = requestAnimationFrame(drawFrame);
-        return;
-      }
-      ctx.drawImage(video, 0, 0, w, h);
-
-      const pos = timestampPosRef.current;
-      if (pos !== 'off') {
-        const now = new Date();
-        const ts = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-
-        const fontSize = timestampFontSizeRef.current || Math.max(14, Math.round(h * 0.03));
-        const color = timestampColorRef.current || '#ffffff';
-        ctx.font = `${fontSize}px monospace`;
-        const metrics = ctx.measureText(ts);
-        const pad = 4;
-        const margin = 6;
-        const boxW = metrics.width + pad * 2;
-        const boxH = fontSize + pad * 2;
-
-        let bx: number, by: number, tx: number, ty: number;
-        if (pos === 'top-left') {
-          bx = margin; by = margin;
-          ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-          tx = margin + pad; ty = margin + pad;
-        } else if (pos === 'top-right') {
-          bx = w - boxW - margin; by = margin;
-          ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-          tx = w - margin - pad; ty = margin + pad;
-        } else if (pos === 'bottom-left') {
-          bx = margin; by = h - boxH - margin;
-          ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
-          tx = margin + pad; ty = h - margin - pad;
-        } else {
-          bx = w - boxW - margin; by = h - boxH - margin;
-          ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-          tx = w - margin - pad; ty = h - margin - pad;
-        }
-
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(bx, by, boxW, boxH);
-        ctx.fillStyle = color;
-        ctx.fillText(ts, tx, ty);
-      }
-
-      overlayAnimFrameRef.current = requestAnimationFrame(drawFrame);
-    };
-
-    overlayAnimFrameRef.current = requestAnimationFrame(drawFrame);
-    return canvas.captureStream(30);
+  // 타임스탬프 오버레이 설정 — 백엔드로 전달
+  const syncOverlayToBackend = useCallback(async (pos?: string, color?: string, fontSize?: number) => {
+    try {
+      await axios.post('/api/webcam/overlay', {
+        position: pos,
+        color_hex: color,
+        font_scale: fontSize !== undefined ? (fontSize || 0) / 24.0 : undefined, // 대략 24px = scale 1.0
+      });
+    } catch { /* ignore */ }
   }, []);
 
-  const stopOverlay = useCallback(() => {
-    if (overlayAnimFrameRef.current) {
-      cancelAnimationFrame(overlayAnimFrameRef.current);
-      overlayAnimFrameRef.current = 0;
-    }
-  }, []);
+  const setTimestampPosition = useCallback((pos: typeof timestampPosition) => {
+    setTimestampPositionState(pos);
+    syncOverlayToBackend(pos);
+  }, [syncOverlayToBackend]);
 
-  // Auto-recording: resolve promise with blob when stopped
-  const autoRecordResolveRef = useRef<((blob: Blob) => void) | null>(null);
+  const setTimestampColor = useCallback((color: string) => {
+    setTimestampColorState(color);
+    syncOverlayToBackend(undefined, color);
+  }, [syncOverlayToBackend]);
 
+  const setTimestampFontSize = useCallback((size: number) => {
+    setTimestampFontSizeState(size);
+    syncOverlayToBackend(undefined, undefined, size);
+  }, [syncOverlayToBackend]);
+
+  // ------------------------------------------------------------
+  // 자동 녹화 (재생 시 호출됨) — 이제 백엔드 재생 태스크가 자동으로 처리하므로
+  // 프런트 호출은 no-op으로 유지해 호출 측 코드 변경 없이 작동하게 함.
+  // 실제 녹화 시작/종료는 backend main.py의 _start_webcam_recording_for_playback에서.
+  // ------------------------------------------------------------
   const startRecordingAuto = useCallback(async (): Promise<boolean> => {
-    if (!webcamStreamRef.current) return false;
-    // Stop any existing recording
-    if (webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') {
-      webcamRecorderRef.current.stop();
-    }
-    stopOverlay();
-    webcamChunksRef.current = [];
-    const overlayStream = createOverlayStream(webcamStreamRef.current);
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-      ? 'video/webm;codecs=vp9' : 'video/webm';
-    const recorder = new MediaRecorder(overlayStream, { mimeType });
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) webcamChunksRef.current.push(e.data);
-    };
-    recorder.onstop = () => {
-      stopOverlay();
-      const blob = new Blob(webcamChunksRef.current, { type: mimeType });
-      webcamChunksRef.current = [];
-      if (autoRecordResolveRef.current) {
-        autoRecordResolveRef.current(blob);
-        autoRecordResolveRef.current = null;
-      }
-    };
-    recorder.start(1000);
-    webcamRecorderRef.current = recorder;
-    setWebcamRecording(true);
-    return true;
-  }, [createOverlayStream, stopOverlay]);
+    // 백엔드가 playback 시작 시 자동으로 녹화 시작 → 여기는 상태 확인만
+    const s = await fetchStatus();
+    return !!(s && s.open);
+  }, [fetchStatus]);
 
   const stopRecordingAuto = useCallback((): Promise<Blob> => {
-    return new Promise((resolve) => {
-      autoRecordResolveRef.current = resolve;
-      if (webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') {
-        webcamRecorderRef.current.stop();
-        webcamRecorderRef.current = null;
-      } else {
-        // recorder가 없거나 이미 inactive → 빈 blob으로 즉시 resolve
-        resolve(new Blob([], { type: 'video/webm' }));
-        autoRecordResolveRef.current = null;
-      }
-      setWebcamRecording(false);
-    });
+    // 백엔드가 playback 종료 시 자동으로 녹화 정지 → 여기는 빈 blob 반환 (호환성용)
+    return Promise.resolve(new Blob([], { type: 'video/mp4' }));
   }, []);
 
-  // Optional uploader: set by the consuming component to upload to server
-  const uploadFnRef = useRef<((blob: Blob, filename: string) => Promise<string>) | null>(null);
+  // 수동 녹화 — 사용자가 WebcamPip에서 Record 버튼 클릭
+  const startWebcamRecording = useCallback(async () => {
+    if (!webcamOpen) {
+      message.error(t('webcam.notActive'));
+      return;
+    }
+    try {
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      // 상대 경로: backend가 해석해서 기본 위치에 저장 (manual_webcam 폴더)
+      const outputPath = `manual_webcam/${ts}.mp4`;
+      await axios.post('/api/webcam/record/start', { output_path: outputPath });
+      setWebcamRecording(true);
+      message.success(t('webcam.recordStart'));
+    } catch (e: any) {
+      message.error((e?.response?.data?.detail || e.message || e));
+    }
+  }, [webcamOpen, message, t]);
 
+  const stopWebcamRecording = useCallback(async () => {
+    try {
+      const r = await axios.post('/api/webcam/record/stop');
+      setWebcamRecording(false);
+      const savedPath = r.data?.path || '';
+      if (savedPath) {
+        message.success(t('webcam.recordSaveCompletePath', { path: savedPath }));
+      } else {
+        message.success(t('webcam.recordSaveComplete'));
+      }
+    } catch (e: any) {
+      message.error((e?.response?.data?.detail || e.message || e));
+    }
+  }, [message, t]);
+
+  const pauseRecording = useCallback(async () => {
+    try { await axios.post('/api/webcam/record/pause'); } catch { /* ignore */ }
+  }, []);
+
+  const resumeRecording = useCallback(async () => {
+    try { await axios.post('/api/webcam/record/resume'); } catch { /* ignore */ }
+  }, []);
+
+  // ------------------------------------------------------------
+  // 레거시 호환 stubs (브라우저 MediaRecorder 시절 API — 이제 더 이상 사용 안 됨)
+  // ------------------------------------------------------------
+  const loadWebcamCapabilities = useCallback(() => {
+    // 백엔드가 OpenCV로 직접 제어 — 세부 capabilities는 Level 2에서 노출 예정
+    setWebcamCapabilities({});
+    setWebcamSettings({});
+  }, []);
+
+  const applyWebcamSetting = useCallback(async (_key: string, _value: number) => {
+    // Level 2: backend set_camera_property
+  }, []);
+
+  const uploadFnRef = useRef<((blob: Blob, filename: string) => Promise<string>) | null>(null);
   const setUploadFn = useCallback((fn: ((blob: Blob, filename: string) => Promise<string>) | null) => {
     uploadFnRef.current = fn;
   }, []);
 
-  const startWebcamRecording = useCallback(async () => {
-    if (!webcamStreamRef.current) {
-      message.error(t('webcam.notActive'));
-      return;
-    }
-
-    const useServerUpload = !!uploadFnRef.current;
-
-    // If no server upload configured, use file picker as fallback
-    if (!useServerUpload) {
-      try {
-        const fileHandle = await (window as any).showSaveFilePicker({
-          suggestedName: `webcam_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`,
-          types: [{ description: 'WebM Video', accept: { 'video/webm': ['.webm'] } }],
-        });
-        webcamFileHandleRef.current = fileHandle;
-      } catch {
-        return;
-      }
-    }
-
-    stopOverlay();
-    webcamChunksRef.current = [];
-    const overlayStream = createOverlayStream(webcamStreamRef.current);
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-      ? 'video/webm;codecs=vp9'
-      : 'video/webm';
-    const recorder = new MediaRecorder(overlayStream, { mimeType });
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) webcamChunksRef.current.push(e.data);
-    };
-    recorder.onstop = async () => {
-      stopOverlay();
-      const blob = new Blob(webcamChunksRef.current, { type: mimeType });
-      webcamChunksRef.current = [];
-      try {
-        if (uploadFnRef.current) {
-          const filename = `webcam_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
-          const path = await uploadFnRef.current(blob, filename);
-          message.success(t('webcam.recordSaveCompletePath', { path }));
-        } else {
-          const handle = webcamFileHandleRef.current;
-          if (handle) {
-            const writable = await (handle as any).createWritable();
-            await writable.write(blob);
-            await writable.close();
-            message.success(t('webcam.recordSaveComplete'));
-          }
-        }
-      } catch (e: any) {
-        message.error(t('webcam.fileSaveFailed') + ': ' + (e.message || e));
-      }
-      webcamFileHandleRef.current = null;
-    };
-    recorder.start(1000);
-    webcamRecorderRef.current = recorder;
-    setWebcamRecording(true);
-    message.success(t('webcam.recordStart'));
-  }, [t, createOverlayStream, stopOverlay]);
-
-  const stopWebcamRecording = useCallback(() => {
-    if (webcamRecorderRef.current && webcamRecorderRef.current.state !== 'inactive') {
-      webcamRecorderRef.current.stop();
-      webcamRecorderRef.current = null;
-    }
-    setWebcamRecording(false);
-  }, []);
-
-  const loadWebcamCapabilities = useCallback(() => {
-    if (!webcamStreamRef.current) return;
-    const track = webcamStreamRef.current.getVideoTracks()[0];
-    if (!track) return;
-    const caps = (track as any).getCapabilities?.() || {};
-    const settings = (track as any).getSettings?.() || {};
-    const supported: Record<string, any> = {};
-    const current: Record<string, number> = {};
-    const WEBCAM_SETTING_KEYS = ['brightness', 'contrast', 'sharpness', 'exposureTime'];
-    for (const key of WEBCAM_SETTING_KEYS) {
-      if (caps[key] && typeof caps[key] === 'object' && 'min' in caps[key]) {
-        supported[key] = caps[key];
-        current[key] = settings[key] ?? caps[key].min;
-      }
-    }
-    setWebcamCapabilities(supported);
-    setWebcamSettings(current);
-  }, []);
-
-  const applyWebcamSetting = useCallback(async (key: string, value: number) => {
-    if (!webcamStreamRef.current) return;
-    const track = webcamStreamRef.current.getVideoTracks()[0];
-    if (!track) return;
-    try {
-      if (key === 'exposureTime') {
-        await (track as any).applyConstraints({ advanced: [{ exposureMode: 'manual', exposureTime: value }] });
-      } else {
-        await (track as any).applyConstraints({ advanced: [{ [key]: value }] });
-      }
-      setWebcamSettings(prev => ({ ...prev, [key]: value }));
-    } catch (e: any) {
-      message.error(t('webcam.settingFailed') + ': ' + (e.message || e));
-    }
-  }, [t]);
+  const isStreamReady = useCallback(() => {
+    return webcamOpen;
+  }, [webcamOpen]);
 
   return {
     webcamOpen,
     webcamIndex,
-    webcamDevices,
+    webcamDevices: webcamDevices.map(d => ({ deviceId: String(d.index), label: d.label, kind: 'videoinput' })) as any,
     webcamVideoRef,
     webcamRecording,
     webcamSettingsOpen,
@@ -426,22 +281,8 @@ export function useWebcam() {
     setTimestampFontSize,
     startRecordingAuto,
     stopRecordingAuto,
-    pauseRecording: useCallback(() => {
-      if (webcamRecorderRef.current && webcamRecorderRef.current.state === 'recording') {
-        webcamRecorderRef.current.pause();
-      }
-    }, []),
-    resumeRecording: useCallback(() => {
-      if (webcamRecorderRef.current && webcamRecorderRef.current.state === 'paused') {
-        webcamRecorderRef.current.resume();
-      }
-    }, []),
-    /** 스트림이 활성 상태인지 확인 */
-    isStreamReady: useCallback(() => {
-      const stream = webcamStreamRef.current;
-      if (!stream) return false;
-      const tracks = stream.getVideoTracks();
-      return tracks.length > 0 && tracks[0].readyState === 'live';
-    }, []),
+    pauseRecording,
+    resumeRecording,
+    isStreamReady,
   };
 }

@@ -7,6 +7,12 @@ import {
 import { useWebcam } from '../hooks/useWebcam';
 import { useTranslation } from '../i18n';
 
+interface WebcamDeviceLike {
+  deviceId: string;
+  label: string;
+  kind?: string;
+}
+
 interface WebcamPipProps {
   webcam: ReturnType<typeof useWebcam>;
   onClose: () => void;
@@ -21,7 +27,7 @@ const RESOLUTION_LABELS: Record<string, string> = {
 export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
   const { t } = useTranslation();
   const {
-    webcamIndex, webcamDevices, webcamVideoRef, webcamRecording,
+    webcamIndex, webcamDevices, webcamOpen, webcamRecording,
     webcamSettingsOpen, setWebcamSettingsOpen, webcamCapabilities, webcamSettings,
     webcamResolution, webcamResolutions,
     handleWebcamChange, handleWebcamResolutionChange,
@@ -33,6 +39,15 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
 
   const [minimized, setMinimized] = useState(false);
   const [now, setNow] = useState('');
+  // 백엔드 MJPEG 프리뷰 — 폴링 방식
+  const [previewUrl, setPreviewUrl] = useState('/api/webcam/preview.jpg?t=0');
+  useEffect(() => {
+    if (!webcamOpen) return;
+    const tick = () => setPreviewUrl(`/api/webcam/preview.jpg?t=${Date.now()}`);
+    tick();
+    const id = setInterval(tick, 200); // 5fps — CPU/네트워크 부담 적음
+    return () => clearInterval(id);
+  }, [webcamOpen]);
 
   // 프리뷰용 1초 타이머
   useEffect(() => {
@@ -124,12 +139,14 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
         </div>
 
         <div style={{ padding: 8, display: minimized ? 'none' : undefined }}>
-          {/* Video */}
+          {/* Preview (backend MJPEG polling) */}
           <div style={{ position: 'relative', marginBottom: 8 }}>
-            <video
-              ref={webcamVideoRef}
-              autoPlay playsInline muted
+            <img
+              src={previewUrl}
+              alt="webcam"
               style={{ width: '100%', borderRadius: 4, background: '#000', display: 'block' }}
+              onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+              onLoad={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'visible'; }}
             />
             {webcamRecording && (
               <span style={{
@@ -165,7 +182,7 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
               style={{ flex: 1 }}
               placeholder={t('webcam.select')}
               getPopupContainer={getContainer}
-              options={webcamDevices.map((d, i) => ({
+              options={(webcamDevices as WebcamDeviceLike[]).map((d, i) => ({
                 value: i,
                 label: d.label || t('webcam.camera', { index: String(i) }),
               }))}

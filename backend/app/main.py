@@ -7,13 +7,14 @@ import base64
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
-from .routers import device, results, scenario, settings
+from .routers import device, results, scenario, settings, webcam
 from .dependencies import adb_service, device_manager, playback_service, recording_service, monitor_client
 from .services.adb_service import resolve_sf_display_id
 from .models.scenario import ScenarioResult
@@ -318,6 +319,7 @@ app.include_router(device.router)
 app.include_router(scenario.router)
 app.include_router(results.router)
 app.include_router(settings.router)
+app.include_router(webcam.router)
 
 # Serve screenshots statically
 screenshots_dir = Path(__file__).resolve().parent.parent / "screenshots"
@@ -500,6 +502,70 @@ async def websocket_screen_mirror(websocket: WebSocket):
 _playback_bg_task: asyncio.Task | None = None
 
 
+def _start_webcam_recording_for_playback() -> Path | None:
+    """재생 시작 시 웹캠 녹화를 임시 경로에 시작. 웹캠이 닫혀 있으면 None 반환."""
+    try:
+        from .services.webcam_service import get_webcam_service
+        svc = get_webcam_service()
+        if not svc.is_open():
+            return None
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        temp_dir = _RESULTS_DIR / f"_tmp_webcam_{ts}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_path = temp_dir / "webcam_r1.mp4"
+        if svc.start_recording(str(temp_path)):
+            logger.info("Webcam recording started for playback: %s", temp_path)
+            return temp_path
+    except Exception as e:
+        logger.warning("Failed to start webcam recording: %s", e)
+    return None
+
+
+def _finalize_webcam_recording(temp_path: Path | None, result_path: str | None) -> None:
+    """재생 종료 시 웹캠 녹화 정지 + 결과 폴더로 이동."""
+    if temp_path is None:
+        return
+    try:
+        from .services.webcam_service import get_webcam_service
+        svc = get_webcam_service()
+        svc.stop_recording()
+    except Exception as e:
+        logger.warning("Failed to stop webcam recording: %s", e)
+    import shutil
+    try:
+        if not temp_path.exists():
+            logger.warning("Webcam temp recording missing: %s", temp_path)
+            return
+        # 결과 폴더 내 recordings/webcam_r1.mp4로 이동
+        if result_path:
+            result_file = Path(result_path)
+            # 런 폴더 스타일 (result.json이 폴더 안에 있음) / 레거시 (results/{name}.json)
+            if result_file.name == "result.json":
+                run_dir = result_file.parent
+            else:
+                # 레거시: 파일 옆에 폴더 생성
+                run_dir = result_file.parent / result_file.stem
+                run_dir.mkdir(parents=True, exist_ok=True)
+            final_dir = run_dir / "recordings"
+            final_dir.mkdir(parents=True, exist_ok=True)
+            final_path = final_dir / "webcam_r1.mp4"
+            shutil.move(str(temp_path), str(final_path))
+            logger.info("Webcam recording moved to: %s", final_path)
+        else:
+            # 결과 저장 실패 — 임시 파일 유지 (수동 복구용)
+            logger.warning("Result path unknown — webcam recording left at %s", temp_path)
+            return
+    except Exception as e:
+        logger.warning("Failed to finalize webcam recording: %s", e)
+    finally:
+        # 임시 폴더 정리
+        try:
+            if temp_path.parent.exists() and not any(temp_path.parent.iterdir()):
+                temp_path.parent.rmdir()
+        except Exception:
+            pass
+
+
 async def _run_play_job(data: dict):
     """백그라운드 태스크로 실행되는 play 로직. WebSocket과 무관하게 끝까지 실행된다.
 
@@ -513,11 +579,15 @@ async def _run_play_job(data: dict):
     device_map_override = data.get("device_map")
     skip_steps: set[int] = set(data.get("skip_steps", []))
     _is_multi_cycle = False
+    result_path: Optional[str] = None
+    webcam_temp_path: Optional[Path] = None
     try:
         playback_service._should_stop = False
         playback_service._pause_event.set()
         clear_event_buffer()
         publish_event({"type": "playback_reset", "scenario": scenario_name})
+        # 웹캠 녹화 시작 (열려 있을 때만)
+        webcam_temp_path = _start_webcam_recording_for_playback()
 
         scen = await recording_service.load_scenario(scenario_name)
         if skip_steps:
@@ -654,6 +724,7 @@ async def _run_play_job(data: dict):
         logger.exception("Play job failed")
         publish_event({"type": "error", "message": str(e)})
     finally:
+        _finalize_webcam_recording(webcam_temp_path, result_path)
         if _is_multi_cycle:
             playback_service._cleanup_run_output_dir()
             playback_service._running = False
@@ -674,11 +745,14 @@ async def _run_play_group_job(data: dict):
         else:
             entries.append(m)
 
+    result_path: Optional[str] = None
+    webcam_temp_path: Optional[Path] = None
     try:
         playback_service._should_stop = False
         playback_service._pause_event.set()
         clear_event_buffer()
         publish_event({"type": "playback_reset", "group": True})
+        webcam_temp_path = _start_webcam_recording_for_playback()
 
         all_preflight_errors: list[str] = []
         for entry in entries:
@@ -857,6 +931,7 @@ async def _run_play_group_job(data: dict):
         logger.exception("Play group job failed")
         publish_event({"type": "error", "message": str(e)})
     finally:
+        _finalize_webcam_recording(webcam_temp_path, result_path)
         playback_service._cleanup_run_output_dir()
         playback_service._running = False
 
