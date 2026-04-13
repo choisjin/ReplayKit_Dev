@@ -30,6 +30,7 @@ import SettingsPage from './pages/SettingsPage';
 import ChangelogPage from './pages/ChangelogPage';
 import WebcamPip from './components/WebcamPip';
 import AnnouncementBanner from './components/AnnouncementBanner';
+import PlaybackStatusBanner from './components/PlaybackStatusBanner';
 import ChatWidget from './components/ChatWidget';
 import { WebcamProvider } from './context/WebcamContext';
 
@@ -355,6 +356,7 @@ function AppContent() {
         <Layout style={layoutBg ? { background: layoutBg } : undefined}>
           <Content style={{ margin: 8, padding: 12, background: contentBg, borderRadius: 8 }}>
             <AnnouncementBanner />
+            <PlaybackStatusBanner />
             {backendReady ? (
               pages.map(({ key, component }) => (
                 <div key={key} style={{ display: activeKey === key ? 'block' : 'none' }}>

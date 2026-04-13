@@ -906,9 +906,21 @@ class PlaybackRequest(BaseModel):
 
 @router.post("/playback/stop")
 async def stop_playback():
-    """Stop the currently running playback."""
+    """Stop the currently running playback.
+
+    WebSocket과 무관하게 REST로도 호출 가능 — 프론트엔드가 죽거나
+    연결이 끊어진 상태에서 백그라운드 재생을 강제 중단할 때 사용.
+    """
+    from ..services.playback_service import (
+        publish_event, mark_playback_active,
+    )
+    was_running = playback_svc.is_running
     await playback_svc.stop()
-    return {"status": "stopping"}
+    # 새 WS 연결 시 이전 run의 버퍼가 replay되지 않도록 즉시 inactive 처리
+    mark_playback_active(False)
+    # 연결되어 있는 기존 subscriber들에게도 알림
+    publish_event({"type": "playback_stopped", "result_filename": "", "source": "rest"})
+    return {"status": "stopping", "was_running": was_running}
 
 
 @router.get("/playback/status")
