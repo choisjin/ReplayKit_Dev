@@ -782,22 +782,39 @@ def _redirect_path_args_to_run_dir(call_args: dict, module_name: str, function_n
                 call_args[param_name] = str(log_dir / f"{safe_mod}_{safe_func}_{ts}{ext}")
 
 
+DEFAULT_MODULE_TIMEOUT_S = 120.0
+
+
 async def execute_module_function(
     module_name: str, function_name: str, args: dict,
     constructor_kwargs: Optional[dict] = None,
     shared_serial_conn=None, ssh_credentials: Optional[dict] = None,
     adb_serial: Optional[str] = None,
+    timeout_s: float = DEFAULT_MODULE_TIMEOUT_S,
 ) -> str:
-    """Execute a module function asynchronously (runs in thread pool)."""
+    """Execute a module function asynchronously (runs in thread pool).
+
+    timeout_s: 모듈 함수 실행 상한(초). 초과 시 TimeoutError 발생하여 playback이 좀비 상태에
+    빠지지 않음. 단, run_in_executor는 cancel 시 백그라운드 스레드를 강제 종료할 수 없으므로
+    hang된 스레드는 백그라운드에 남음(스레드풀 슬롯 1개 소모). 모듈 자체의 내부 타임아웃과
+    이중 안전장치로 동작.
+    """
     loop = asyncio.get_event_loop()
     try:
-        result = await loop.run_in_executor(
+        future = loop.run_in_executor(
             None,
             functools.partial(_execute_sync, module_name, function_name, args,
                               constructor_kwargs, shared_serial_conn, ssh_credentials,
                               adb_serial),
         )
+        result = await asyncio.wait_for(future, timeout=timeout_s)
         return str(result) if result is not None else "OK"
+    except asyncio.TimeoutError:
+        logger.error("Module execution timeout (%.1fs): %s.%s",
+                     timeout_s, module_name, function_name)
+        raise TimeoutError(
+            f"Module {module_name}.{function_name} exceeded {timeout_s:.0f}s timeout"
+        )
     except Exception as e:
         logger.error("Module execution error: %s.%s -> %s", module_name, function_name, e)
         raise

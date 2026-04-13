@@ -345,10 +345,18 @@ class HKMC6thService:
     def _receive_thread(self) -> None:
         """Background thread that receives and decodes packets."""
         logger.info("Receive thread started for %s:%d", self.host, self.port)
+        # 주기적 타임아웃으로 _exit_flag 검사 + 피어 silent 시 무한 블록 방지
+        try:
+            self._socket.settimeout(1.0)
+        except Exception:
+            pass
         while not self._exit_flag:
             try:
                 if self._recv_complete:
-                    header = self._socket.recv(6)
+                    try:
+                        header = self._socket.recv(6)
+                    except socket.timeout:
+                        continue
                     if self._exit_flag or not header:
                         break
                     header_str = header.decode("iso-8859-1")
@@ -366,7 +374,10 @@ class HKMC6thService:
                         self._recv_data = ""
                 else:
                     remaining = self._recv_packet_len + 4  # cmd+crc+end
-                    payload = self._socket.recv(remaining)
+                    try:
+                        payload = self._socket.recv(remaining)
+                    except socket.timeout:
+                        continue
                     if self._exit_flag or not payload:
                         break
                     payload_str = payload.decode("iso-8859-1")
@@ -391,8 +402,6 @@ class HKMC6thService:
                 if not self._exit_flag:
                     logger.error("Receive thread error: %s", e)
                 break
-
-            time.sleep(0)
 
         logger.info("Receive thread ended for %s:%d", self.host, self.port)
 
