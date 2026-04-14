@@ -218,6 +218,7 @@ export default function DevicePage() {
   const [scannedBench, setScannedBench] = useState<{ ip: string; port: number; verified?: boolean }[]>([]);
   const [scannedVision, setScannedVision] = useState<{ id: string; mac: string; model: string; serial: string; vendor: string; tl_type: string; ip: string; subnet?: string; gateway?: string }[]>([]);
   const [scannedWebcams, setScannedWebcams] = useState<{ index: number; label: string; width: number; height: number; already_registered?: boolean; in_use_by_recording?: boolean }[]>([]);
+  const [hasScanned, setHasScanned] = useState(false);
   const [scannedDlt, setScannedDlt] = useState<{ ip: string; port: number }[]>([]);
   const [scannedSmartbench, setScannedSmartbench] = useState<{ ip: string; port: number; label: string; module: string }[]>([]);
   const [scannedSsh, setScannedSsh] = useState<{ ip: string; port: number }[]>([]);
@@ -408,7 +409,19 @@ export default function DevicePage() {
     setDeviceModel('');
     setModalTabKey('scan');
     setModalOpen(true);
-    handleScan();
+    // 네트워크 스캔은 사용자가 명시적으로 버튼을 눌렀을 때만 수행 (IDS 오탐 방지)
+    // 이전 스캔 결과를 초기화해서 stale 결과가 보이지 않도록 함
+    setScannedAdb([]);
+    setScannedSerial([]);
+    setScannedHkmc([]);
+    setScannedBench([]);
+    setScannedVision([]);
+    setScannedWebcams([]);
+    setScannedDlt([]);
+    setScannedSmartbench([]);
+    setScannedSsh([]);
+    setScannedCustom([]);
+    setHasScanned(false);
     if (category === 'auxiliary') {
       deviceApi.listModules().then(res => setModules((res.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => a.label.localeCompare(b.label)))).catch(() => {});
     }
@@ -429,6 +442,7 @@ export default function DevicePage() {
       setScannedSsh(res.data.ssh_hosts || []);
       setScannedCustom(res.data.custom_results || []);
       setPcInterfaces(ifRes.data.interfaces || []);
+      setHasScanned(true);
     } catch {
       message.error(t('device.scanFailed'));
     }
@@ -935,8 +949,13 @@ export default function DevicePage() {
               children: (
                 <div>
                   <Space style={{ marginBottom: 8 }} wrap>
-                    <Button icon={<ReloadOutlined />} onClick={handleScan} loading={scanning}>
-                      {t('device.rescan')}
+                    <Button
+                      type={hasScanned ? 'default' : 'primary'}
+                      icon={hasScanned ? <ReloadOutlined /> : <SearchOutlined />}
+                      onClick={handleScan}
+                      loading={scanning}
+                    >
+                      {hasScanned ? t('device.rescan') : t('device.scan')}
                     </Button>
                     {modalCategory === 'primary' && (
                       <>
@@ -1358,6 +1377,14 @@ export default function DevicePage() {
                     });
 
                     if (scanTabs.length === 0 && !scanning) {
+                      if (!hasScanned) {
+                        return (
+                          <div style={{ color: '#888', textAlign: 'center', padding: 32 }}>
+                            <SearchOutlined style={{ fontSize: 28, marginBottom: 8 }} />
+                            <div style={{ fontSize: 14 }}>{t('device.clickToScan')}</div>
+                          </div>
+                        );
+                      }
                       return (
                         <div style={{ color: '#666', textAlign: 'center', padding: 24 }}>
                           {t('device.noDevicesFound')}
