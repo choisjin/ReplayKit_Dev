@@ -782,7 +782,35 @@ def _redirect_path_args_to_run_dir(call_args: dict, module_name: str, function_n
                 call_args[param_name] = str(log_dir / f"{safe_mod}_{safe_func}_{ts}{ext}")
 
 
-DEFAULT_MODULE_TIMEOUT_S = 120.0
+DEFAULT_MODULE_TIMEOUT_S = 600.0  # 10분 — 플러그인이 retry 기반 장시간 작업을 할 수 있음
+MODULE_TIMEOUT_BUFFER_S = 60.0     # 네트워크/초기화 오버헤드 여유
+
+
+def _compute_module_timeout(args: dict, user_timeout: Optional[float]) -> float:
+    """모듈 함수 실행의 유효 타임아웃 계산.
+
+    우선순위:
+    1. 호출자가 명시적으로 `user_timeout`을 넘기면 그 값 사용
+    2. args에 `timeout` 키가 있으면 `timeout * max_retries * 1.5 + buffer`로 계산
+       - 예: DLTLogging.ExpectFound(timeout=60, max_retries=5) → 60*5*1.5+60 = 510s
+    3. 그 외에는 DEFAULT_MODULE_TIMEOUT_S 사용
+
+    주의: 모든 플러그인이 동일한 key 네이밍을 쓰지 않을 수 있으므로 이건 힌트일 뿐.
+    감지 실패 시에도 default가 충분히 크도록(10분) 잡아 정당한 작업을 끊지 않음.
+    """
+    if user_timeout is not None and user_timeout > 0:
+        return float(user_timeout)
+    if not isinstance(args, dict):
+        return DEFAULT_MODULE_TIMEOUT_S
+    t = args.get("timeout")
+    if not isinstance(t, (int, float)) or t <= 0:
+        return DEFAULT_MODULE_TIMEOUT_S
+    retries = args.get("max_retries") or args.get("retries") or 1
+    if not isinstance(retries, (int, float)) or retries <= 0:
+        retries = 1
+    computed = float(t) * float(retries) * 1.5 + MODULE_TIMEOUT_BUFFER_S
+    # 추정치가 default보다 작으면 default가 우선 (너무 짧은 것 방지)
+    return max(computed, DEFAULT_MODULE_TIMEOUT_S)
 
 
 async def execute_module_function(
@@ -790,15 +818,17 @@ async def execute_module_function(
     constructor_kwargs: Optional[dict] = None,
     shared_serial_conn=None, ssh_credentials: Optional[dict] = None,
     adb_serial: Optional[str] = None,
-    timeout_s: float = DEFAULT_MODULE_TIMEOUT_S,
+    timeout_s: Optional[float] = None,
 ) -> str:
     """Execute a module function asynchronously (runs in thread pool).
 
-    timeout_s: 모듈 함수 실행 상한(초). 초과 시 TimeoutError 발생하여 playback이 좀비 상태에
-    빠지지 않음. 단, run_in_executor는 cancel 시 백그라운드 스레드를 강제 종료할 수 없으므로
-    hang된 스레드는 백그라운드에 남음(스레드풀 슬롯 1개 소모). 모듈 자체의 내부 타임아웃과
-    이중 안전장치로 동작.
+    timeout_s: 모듈 함수 실행 상한(초). None이면 args 힌트로 자동 계산.
+    초과 시 TimeoutError 발생하여 playback이 좀비 상태에 빠지지 않음.
+    단, run_in_executor는 cancel 시 백그라운드 스레드를 강제 종료할 수 없으므로
+    hang된 스레드는 백그라운드에 남음(스레드풀 슬롯 1개 소모). 모듈 자체의 내부
+    타임아웃과 이중 안전장치로 동작.
     """
+    effective_timeout = _compute_module_timeout(args, timeout_s)
     loop = asyncio.get_event_loop()
     try:
         future = loop.run_in_executor(
@@ -807,13 +837,13 @@ async def execute_module_function(
                               constructor_kwargs, shared_serial_conn, ssh_credentials,
                               adb_serial),
         )
-        result = await asyncio.wait_for(future, timeout=timeout_s)
+        result = await asyncio.wait_for(future, timeout=effective_timeout)
         return str(result) if result is not None else "OK"
     except asyncio.TimeoutError:
         logger.error("Module execution timeout (%.1fs): %s.%s",
-                     timeout_s, module_name, function_name)
+                     effective_timeout, module_name, function_name)
         raise TimeoutError(
-            f"Module {module_name}.{function_name} exceeded {timeout_s:.0f}s timeout"
+            f"Module {module_name}.{function_name} exceeded {effective_timeout:.0f}s timeout"
         )
     except Exception as e:
         logger.error("Module execution error: %s.%s -> %s", module_name, function_name, e)
