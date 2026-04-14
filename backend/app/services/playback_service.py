@@ -393,11 +393,21 @@ class PlaybackService:
                 self._cleanup_run_output_dir()
 
     async def execute_single_step(self, step: Step, scenario_name: str, device_map: Optional[dict[str, str]] = None) -> StepResult:
-        """Execute a single step with verification (for testing individual steps)."""
+        """Execute a single step with verification (for testing individual steps).
+
+        이전 full playback이 중간에 끊겨 _run_output_dir이 남아 있으면 스크린샷이
+        results 폴더로 저장되어 프론트엔드(/screenshots/ 기준)에서 404가 난다.
+        테스트 모드는 항상 SCREENSHOTS_DIR/{scenario}/actual/ 경로를 쓰도록 상태 리셋.
+        """
         self._should_stop = False  # 이전 재생 중단 플래그 초기화
         self._paused = False
         self._device_map = device_map or {}
         self._current_iteration = 0  # 단일 테스트는 항상 0번째
+        # 이전 run의 stale 상태 제거 — 프론트 이미지 URL 일관성 보장
+        self._run_output_dir = None
+        self._run_output_dir_owned = False
+        self._result_timestamp = ""
+        self._group_scenario_index = 0
         return await self._execute_step(step, scenario_name, verify=True)
 
     # ------------------------------------------------------------------
@@ -532,6 +542,8 @@ class PlaybackService:
                             screen_type=ss_device.get("screen_type", "front_center"), fmt="png"
                         )
                         Path(actual_path).write_bytes(img_bytes)
+                    else:
+                        raise RuntimeError(f"HKMC device {ss_device['id']} not connected")
                 elif ss_device["type"] == "vision_camera":
                     cam = self.dm.get_vision_camera(ss_device["id"])
                     if cam:
