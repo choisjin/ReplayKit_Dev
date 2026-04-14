@@ -36,6 +36,7 @@ _DEFAULT_SCAN_SETTINGS = {
         "dlt":            {"enabled": True,  "module": "DLTLogging"},
         "bench":          {"enabled": True,  "module": "CCIC_BENCH"},
         "vision_camera":  {"enabled": False, "module": "VisionCamera"},
+        "webcam":         {"enabled": False, "module": "WebcamDevice"},
         "ssh":            {"enabled": True,  "module": "SSHManager", "port": 22},
     },
     # type: "tcp" | "udp"
@@ -98,7 +99,7 @@ def _build_constructor_kwargs(dev) -> dict | None:
 
 
 class ConnectRequest(BaseModel):
-    type: str  # "adb" | "serial" | "module" | "hkmc6th" | "isap_agent" | "vision_camera" | "ssh"
+    type: str  # "adb" | "serial" | "module" | "hkmc6th" | "isap_agent" | "vision_camera" | "webcam" | "ssh"
     category: str = ""  # "primary" | "auxiliary" — auto-detected if empty
     address: str = ""  # COM port for serial, IP for socket/HKMC/SSH, etc.
     baudrate: Optional[int] = 115200
@@ -106,8 +107,8 @@ class ConnectRequest(BaseModel):
     name: Optional[str] = ""
     device_id: Optional[str] = ""  # custom device ID/alias (e.g. "Android_1", "HKMC_1")
     module: Optional[str] = None  # lge.auto module name (e.g. "POWER", "CAN")
-    connect_type: Optional[str] = None  # "serial" | "socket" | "can" | "none" | "vision_camera" | "ssh"
-    extra_fields: Optional[dict] = None  # Additional module-specific fields (SSH: username, password, key_file_path)
+    connect_type: Optional[str] = None  # "serial" | "socket" | "can" | "none" | "vision_camera" | "webcam" | "ssh"
+    extra_fields: Optional[dict] = None  # Additional module-specific fields (SSH: username, password, key_file_path; webcam: device_index, width, height)
     device_model: Optional[str] = None  # 장비 모델 (GVM, ccNC, Phone 등) — 하드키 매칭용
 
 
@@ -178,6 +179,12 @@ async def scan_ports():
         tasks["bench_devices"] = asyncio.ensure_future(dm.scan_bench())
     if _enabled("vision_camera"):
         tasks["vision_cameras"] = asyncio.ensure_future(dm.scan_vision_cameras())
+    if _enabled("webcam"):
+        async def _scan_webcams():
+            from ..plugins.WebcamDevice import WebcamDevice
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, WebcamDevice.list_available)
+        tasks["webcams"] = asyncio.ensure_future(_scan_webcams())
     if _enabled("dlt"):
         tasks["dlt_devices"] = asyncio.ensure_future(dm.scan_dlt())
     if _enabled("smartbench"):
@@ -214,6 +221,7 @@ async def scan_ports():
         "hkmc_devices": [],
         "bench_devices": [],
         "vision_cameras": [],
+        "webcams": [],
         "dlt_devices": [],
         "smartbench_devices": [],
         "ssh_hosts": [],
@@ -396,6 +404,37 @@ async def connect_device(req: ConnectRequest):
             }
         except Exception as e:
             logger.error("[VisionCamera] connect failed: %s", e, exc_info=True)
+            raise HTTPException(status_code=400, detail=str(e))
+
+    elif req.type == "webcam":
+        ef = req.extra_fields or {}
+        # address 또는 extra_fields.device_index 중 하나로 카메라 인덱스 전달
+        try:
+            device_index = int(ef.get("device_index", req.address or 0))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Webcam requires numeric device_index")
+        width = int(ef.get("width") or 0)
+        height = int(ef.get("height") or 0)
+        logger.info("[Webcam] connect request: index=%d %dx%d", device_index, width, height)
+        try:
+            dev = await dm.add_webcam_device(
+                device_index=device_index,
+                width=width,
+                height=height,
+                device_id=custom_id,
+                name=req.name or "",
+            )
+            # 즉시 연결 시도 (VisionCamera와 동일한 패턴 — 등록 후 connect)
+            result = await dm.connect_device_by_id(dev.id)
+            return {
+                "result": result,
+                "primary": _with_protected_flag(dm.list_primary()),
+                "auxiliary": _with_protected_flag(dm.list_auxiliary()),
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("[Webcam] connect failed: %s", e, exc_info=True)
             raise HTTPException(status_code=400, detail=str(e))
     else:
         raise HTTPException(status_code=400, detail=f"Unknown type: {req.type}")
@@ -880,8 +919,17 @@ async def get_screenshot(device_id: str, fmt: str = "jpeg", screen_type: str = "
             img_bytes = await loop.run_in_executor(None, cam.CaptureBytes, fmt)
             b64 = base64.b64encode(img_bytes).decode("ascii")
             return {"image": b64, "format": fmt}
+        elif dev and dev.type == "webcam":
+            cam = dm.get_webcam_device(device_id)
+            if not cam:
+                raise HTTPException(status_code=400, detail=f"Webcam {device_id} not connected")
+            import asyncio
+            loop = asyncio.get_event_loop()
+            img_bytes = await loop.run_in_executor(None, cam.CaptureBytes, fmt)
+            b64 = base64.b64encode(img_bytes).decode("ascii")
+            return {"image": b64, "format": fmt}
         elif dev and dev.type not in ("adb",):
-            raise HTTPException(status_code=400, detail="Screenshot only available for ADB, HKMC, iSAP, or VisionCamera devices")
+            raise HTTPException(status_code=400, detail="Screenshot only available for ADB, HKMC, iSAP, VisionCamera, or Webcam devices")
         else:
             # ADB device
             adb_serial = dev.address if dev else device_id

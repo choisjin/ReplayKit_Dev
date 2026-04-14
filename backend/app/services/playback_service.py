@@ -551,6 +551,15 @@ class PlaybackService:
                         saved = await loop.run_in_executor(
                             None, cam.CaptureToFile, actual_path
                         )
+                elif ss_device["type"] == "webcam":
+                    cam = self.dm.get_webcam_device(ss_device["id"])
+                    if cam:
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(
+                            None, cam.CaptureToFile, actual_path
+                        )
+                    else:
+                        raise RuntimeError(f"Webcam device {ss_device['id']} not connected")
 
                 step_result.actual_image = self._rel_path(actual_path, scenario_name)
 
@@ -1006,6 +1015,8 @@ class PlaybackService:
                     return {"type": "isap_agent", "id": ss_dev.id, "screen_type": screen_type}
                 if ss_dev.type == "vision_camera":
                     return {"type": "vision_camera", "id": ss_dev.id}
+                if ss_dev.type == "webcam":
+                    return {"type": "webcam", "id": ss_dev.id}
                 if ss_dev.type == "adb":
                     result = {"type": "adb", "id": ss_dev.id, "serial": ss_dev.address}
                     adb_screen = step.screen_type or step.params.get("screen_type")
@@ -1027,6 +1038,8 @@ class PlaybackService:
                 return {"type": "isap_agent", "id": dev.id, "screen_type": screen_type}
             elif dev and dev.type == "vision_camera":
                 return {"type": "vision_camera", "id": dev.id}
+            elif dev and dev.type == "webcam":
+                return {"type": "webcam", "id": dev.id}
             elif dev:
                 # ADB — dev.address가 실제 ADB 시리얼
                 adb_screen = step.screen_type or step.params.get("screen_type")
@@ -1047,6 +1060,8 @@ class PlaybackService:
                 return {"type": "isap_agent", "id": dev.id, "screen_type": "front_center"}
             if dev.type == "vision_camera":
                 return {"type": "vision_camera", "id": dev.id}
+            if dev.type == "webcam":
+                return {"type": "webcam", "id": dev.id}
             return {"type": "adb", "id": dev.id, "serial": dev.address}
         return None
 

@@ -47,6 +47,7 @@ const GROUP_LABELS: Record<string, string> = {
   iSAP: 'iSAP Agent',
   Serial: 'Serial',
   VisionCam: 'Vision Camera',
+  Webcam: 'Webcam',
   Device: 'Device',
 };
 
@@ -216,6 +217,7 @@ export default function DevicePage() {
   const [scannedHkmc, setScannedHkmc] = useState<{ ip: string; port: number; raw: string }[]>([]);
   const [scannedBench, setScannedBench] = useState<{ ip: string; port: number; verified?: boolean }[]>([]);
   const [scannedVision, setScannedVision] = useState<{ id: string; mac: string; model: string; serial: string; vendor: string; tl_type: string; ip: string; subnet?: string; gateway?: string }[]>([]);
+  const [scannedWebcams, setScannedWebcams] = useState<{ index: number; label: string; width: number; height: number }[]>([]);
   const [scannedDlt, setScannedDlt] = useState<{ ip: string; port: number }[]>([]);
   const [scannedSmartbench, setScannedSmartbench] = useState<{ ip: string; port: number; label: string; module: string }[]>([]);
   const [scannedSsh, setScannedSsh] = useState<{ ip: string; port: number }[]>([]);
@@ -226,7 +228,7 @@ export default function DevicePage() {
   const [forceIpSubnet, setForceIpSubnet] = useState('255.255.255.0');
   const [forceIpGateway, setForceIpGateway] = useState('0.0.0.0');
   const [forceIpLoading, setForceIpLoading] = useState(false);
-  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th' | 'isap_agent' | 'vision_camera' | 'ssh'>('adb');
+  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th' | 'isap_agent' | 'vision_camera' | 'webcam' | 'ssh'>('adb');
   const [connectAddress, setConnectAddress] = useState('');
   const [baudrate, setBaudrate] = useState(115200);
   const [connecting, setConnecting] = useState(false);
@@ -275,6 +277,11 @@ export default function DevicePage() {
   const [vcSerial, setVcSerial] = useState('');
   const [vcSubnet, setVcSubnet] = useState('255.255.0.0');
 
+  // Webcam
+  const [webcamIndex, setWebcamIndex] = useState<number>(0);
+  const [webcamWidth, setWebcamWidth] = useState<number>(0);
+  const [webcamHeight, setWebcamHeight] = useState<number>(0);
+
   // Module
   const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [selectedModule, setSelectedModule] = useState<string | undefined>(undefined);
@@ -300,6 +307,7 @@ export default function DevicePage() {
     dlt: { enabled: true, module: 'DLTLogging' },
     bench: { enabled: true, module: 'CCIC_BENCH' },
     vision_camera: { enabled: false, module: 'VisionCamera' },
+    webcam: { enabled: false, module: 'WebcamDevice' },
     ssh: { enabled: true, module: 'SSHManager', port: 22 },
   });
   const [scanCustom, setScanCustom] = useState<{ label: string; type: string; port: number; module: string; enabled: boolean }[]>([]);
@@ -415,6 +423,7 @@ export default function DevicePage() {
       setScannedHkmc(res.data.hkmc_devices || []);
       setScannedBench(res.data.bench_devices || []);
       setScannedVision(res.data.vision_cameras || []);
+      setScannedWebcams(res.data.webcams || []);
       setScannedDlt(res.data.dlt_devices || []);
       setScannedSmartbench(res.data.smartbench_devices || []);
       setScannedSsh(res.data.ssh_hosts || []);
@@ -477,6 +486,25 @@ export default function DevicePage() {
         message.success(result);
         setConnectAddress('');
         setVcMac('');
+        closeAddModal();
+      } catch (e: any) {
+        message.error(e.response?.data?.detail || t('device.connectFailed'));
+      }
+      setConnecting(false);
+      return;
+    }
+
+    // Webcam 전용 처리
+    if (connectType === 'webcam') {
+      setConnecting(true);
+      try {
+        const extra = {
+          device_index: webcamIndex,
+          width: webcamWidth,
+          height: webcamHeight,
+        };
+        const result = await connectDevice('webcam', String(webcamIndex), undefined, '', 'primary', undefined, 'webcam', extra);
+        message.success(result);
         closeAddModal();
       } catch (e: any) {
         message.error(e.response?.data?.detail || t('device.connectFailed'));
@@ -706,7 +734,7 @@ export default function DevicePage() {
 
   const groupOrder = useMemo(() => {
     // primary 그룹(Android, HKMC, VisionCam) 우선, 나머지는 알파벳
-    const primary = ['Android', 'HKMC', 'iSAP', 'VisionCam'];
+    const primary = ['Android', 'HKMC', 'iSAP', 'VisionCam', 'Webcam'];
     const keys = Object.keys(deviceGroups);
     const first = primary.filter(k => keys.includes(k));
     const rest = keys.filter(k => !primary.includes(k)).sort();
@@ -1141,6 +1169,37 @@ export default function DevicePage() {
                       });
                     }
 
+                    if (modalCategory === 'primary' && scannedWebcams.length > 0) {
+                      scanTabs.push({
+                        key: 'webcam',
+                        label: <span>{t('device.detectedWebcam')} <Tag style={{ marginLeft: 4 }}>{scannedWebcams.length}</Tag></span>,
+                        children: (
+                          <List
+                            size="small"
+                            dataSource={scannedWebcams}
+                            pagination={scannedWebcams.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                            renderItem={(w) => (
+                              <List.Item actions={[
+                                <Button size="small" type="primary" loading={connecting} onClick={() => {
+                                  setConnectType('webcam');
+                                  setWebcamIndex(w.index);
+                                  setWebcamWidth(w.width || 0);
+                                  setWebcamHeight(w.height || 0);
+                                  setModalTabKey('manual');
+                                }}>{t('common.connect')}</Button>
+                              ]}>
+                                <div>
+                                  <Tag color="purple">{t('device.webcam')}</Tag>
+                                  <strong>{w.label}</strong>
+                                  {w.width > 0 && <Tag style={{ marginLeft: 8 }}>{w.width}×{w.height}</Tag>}
+                                </div>
+                              </List.Item>
+                            )}
+                          />
+                        ),
+                      });
+                    }
+
                     if (scannedDlt.length > 0) {
                       const dltModule = (scanBuiltin.dlt as any)?.module || 'DLTLogging';
                       scanTabs.push({
@@ -1356,6 +1415,7 @@ export default function DevicePage() {
                         {modalCategory === 'primary' && <Option value="hkmc6th">HKMC 6th (TCP)</Option>}
                         {modalCategory === 'primary' && <Option value="isap_agent">iSAP Agent (TCP)</Option>}
                         {modalCategory === 'primary' && <Option value="vision_camera">Vision Camera</Option>}
+                        {modalCategory === 'primary' && <Option value="webcam">{t('device.webcam')}</Option>}
                         <Option value="serial">{t('device.serialPort')}</Option>
                         <Option value="ssh">{t('device.ssh')}</Option>
                       </Select>
@@ -1472,6 +1532,45 @@ export default function DevicePage() {
                           value={vcSubnet}
                           onChange={(e) => setVcSubnet(e.target.value)}
                         />
+                      </>
+                    )}
+
+                    {!selectedModule && connectType === 'webcam' && (
+                      <>
+                        <div>
+                          <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>{t('device.webcamIndex')}:</span>
+                          <InputNumber
+                            value={webcamIndex}
+                            onChange={(v) => setWebcamIndex(v || 0)}
+                            min={0} max={15}
+                            style={{ width: 150 }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>{t('device.webcamWidth')}:</span>
+                            <InputNumber
+                              value={webcamWidth}
+                              onChange={(v) => setWebcamWidth(v || 0)}
+                              min={0} max={7680}
+                              placeholder="auto"
+                              style={{ width: 110 }}
+                            />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>{t('device.webcamHeight')}:</span>
+                            <InputNumber
+                              value={webcamHeight}
+                              onChange={(v) => setWebcamHeight(v || 0)}
+                              min={0} max={4320}
+                              placeholder="auto"
+                              style={{ width: 110 }}
+                            />
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#888' }}>
+                          {t('device.webcamHint')}
+                        </div>
                       </>
                     )}
 
@@ -1743,6 +1842,7 @@ export default function DevicePage() {
               { key: 'dlt', label: 'DLT', proto: 'TCP', port: '3490' },
               { key: 'bench', label: 'Bench', proto: 'UDP', port: '25000' },
               { key: 'vision_camera', label: 'Vision Camera', proto: 'GigE', port: '-' },
+              { key: 'webcam', label: 'Webcam', proto: 'USB', port: '-' },
               { key: 'ssh', label: 'SSH', proto: 'TCP', port: '22' },
             ].map(item => {
               const v = scanBuiltin[item.key] || { enabled: true, module: '' };

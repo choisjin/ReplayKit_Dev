@@ -695,6 +695,7 @@ class DeviceManager:
         # 같은 디바이스를 동시에 재연결하지 못하도록 직렬화. race condition 제거용.
         self._reconnect_locks: dict[str, asyncio.Lock] = {}
         self._vision_cams: dict[str, object] = {}  # device_id -> VisionCamera instance
+        self._webcam_devs: dict[str, object] = {}  # device_id -> WebcamDevice instance
         self._ssh_conns: dict[str, SSHConnection] = {}  # device_id -> SSHConnection
         self._ever_connected: set[str] = set()  # 사용자가 명시적으로 연결한 디바이스만 자동 재연결
         self._load_auxiliary_devices()
@@ -766,6 +767,8 @@ class DeviceManager:
             prefix = "iSAP"
         elif dev_type == "vision_camera":
             prefix = "VisionCam"
+        elif dev_type == "webcam":
+            prefix = "Webcam"
         elif dev_type == "ssh":
             prefix = "SSH"
         else:
@@ -784,7 +787,7 @@ class DeviceManager:
         aux = [
             d.to_dict()
             for d in self._devices.values()
-            if d.category == "auxiliary" or d.type in ("adb", "hkmc6th", "isap_agent", "vision_camera", "ssh")
+            if d.category == "auxiliary" or d.type in ("adb", "hkmc6th", "isap_agent", "vision_camera", "webcam", "ssh")
         ]
         try:
             _AUX_DEVICES_FILE.write_text(json.dumps(aux, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -956,6 +959,39 @@ class DeviceManager:
             return self._vision_cams.get(dev.id)
         return None
 
+    async def add_webcam_device(self, device_index: int, width: int = 640, height: int = 480,
+                                device_id: str = "", name: str = "") -> ManagedDevice:
+        """웹캠 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행)."""
+        final_id = device_id or self._generate_device_id("webcam")
+        display_name = name or f"Webcam {device_index}"
+
+        dev = ManagedDevice(
+            id=final_id,
+            type="webcam",
+            category="primary",
+            address=f"webcam:{device_index}",
+            status="disconnected",
+            name=display_name,
+            info={
+                "device_index": int(device_index),
+                "width": int(width) if width else 0,
+                "height": int(height) if height else 0,
+            },
+        )
+        self._devices[final_id] = dev
+        self._save_auxiliary_devices()
+        return dev
+
+    def get_webcam_device(self, device_id: str):
+        """Get WebcamDevice instance. Returns None if not found."""
+        cam = self._webcam_devs.get(device_id)
+        if cam:
+            return cam
+        dev = self.get_device(device_id)
+        if dev and dev.type == "webcam":
+            return self._webcam_devs.get(dev.id)
+        return None
+
     async def refresh_auxiliary(self) -> None:
         """빠른 상태 확인만 수행 (네트워크 I/O 없음). 재연결은 백그라운드에서."""
         for dev in self._devices.values():
@@ -972,6 +1008,13 @@ class DeviceManager:
             if dev.type == "isap_agent":
                 isap = self._isap_conns.get(dev.id)
                 if isap and isap.is_connected:
+                    dev.status = "connected"
+                elif dev.status != "reconnecting":
+                    dev.status = "disconnected"
+                continue
+            if dev.type == "webcam":
+                cam = self._webcam_devs.get(dev.id)
+                if cam and cam.IsConnected():
                     dev.status = "connected"
                 elif dev.status != "reconnecting":
                     dev.status = "disconnected"
@@ -1390,7 +1433,7 @@ class DeviceManager:
         self._devices[id_b] = dev_a
         self._devices[id_a] = dev_b
         # 연결 객체도 교체
-        for store in (self._serial_conns, self._hkmc_conns, self._isap_conns, self._vision_cams):
+        for store in (self._serial_conns, self._hkmc_conns, self._isap_conns, self._vision_cams, self._webcam_devs):
             a_val = store.pop(id_a, None)
             b_val = store.pop(id_b, None)
             if a_val is not None:
@@ -1418,6 +1461,8 @@ class DeviceManager:
             self._isap_conns[new_id] = self._isap_conns.pop(old_id)
         if old_id in self._vision_cams:
             self._vision_cams[new_id] = self._vision_cams.pop(old_id)
+        if old_id in self._webcam_devs:
+            self._webcam_devs[new_id] = self._webcam_devs.pop(old_id)
         if old_id in self._ever_connected:
             self._ever_connected.discard(old_id)
             self._ever_connected.add(new_id)
@@ -1446,7 +1491,7 @@ class DeviceManager:
 
         # 3) 충돌 방지: 임시 ID로 이동
         temp_map: dict[str, str] = {}  # temp_id → new_id
-        stores = (self._serial_conns, self._hkmc_conns, self._isap_conns, self._vision_cams)
+        stores = (self._serial_conns, self._hkmc_conns, self._isap_conns, self._vision_cams, self._webcam_devs)
         for old_id, new_id in remap.items():
             temp_id = f"__reorder_{old_id}__"
             dev = self._devices.pop(old_id)
@@ -1503,6 +1548,13 @@ class DeviceManager:
         if cam:
             try:
                 cam.Disconnect()
+            except Exception:
+                pass
+        # Close Webcam device connection if applicable
+        wcam = self._webcam_devs.pop(dev.id, None)
+        if wcam:
+            try:
+                wcam.Disconnect()
             except Exception:
                 pass
         # Close SSH connection if applicable
@@ -1681,6 +1733,21 @@ class DeviceManager:
                 except Exception as e:
                     dev.status = "disconnected"
                     logger.warning("Failed to open VisionCamera %s (%s): %s", dev.id, mac, e)
+            elif dev.type == "webcam":
+                try:
+                    from ..plugins.WebcamDevice import WebcamDevice
+                    cam = WebcamDevice(
+                        device_index=int(dev.info.get("device_index", 0)),
+                        width=int(dev.info.get("width", 0)),
+                        height=int(dev.info.get("height", 0)),
+                    )
+                    await loop.run_in_executor(None, cam.Connect)
+                    self._webcam_devs[dev.id] = cam
+                    dev.status = "connected"
+                    logger.info("Webcam connection opened: %s (index=%s)", dev.id, dev.info.get("device_index"))
+                except Exception as e:
+                    dev.status = "disconnected"
+                    logger.warning("Failed to open Webcam %s: %s", dev.id, e)
 
     async def connect_device_by_id(self, device_id: str) -> str:
         """등록된 디바이스 1개를 연결. 결과 메시지 반환."""
@@ -1830,6 +1897,37 @@ class DeviceManager:
                 dev.status = "disconnected"
                 return f"VisionCamera connect failed: {dev.id} — {e}"
 
+        elif dev.type == "webcam":
+            try:
+                # 기존 연결 정리
+                old = self._webcam_devs.pop(dev.id, None)
+                if old:
+                    try:
+                        await loop.run_in_executor(None, old.Disconnect)
+                    except Exception:
+                        pass
+                from ..plugins.WebcamDevice import WebcamDevice
+                cam = WebcamDevice(
+                    device_index=int(dev.info.get("device_index", 0)),
+                    width=int(dev.info.get("width", 0)),
+                    height=int(dev.info.get("height", 0)),
+                )
+                await loop.run_in_executor(None, cam.Connect)
+                self._webcam_devs[dev.id] = cam
+                info = cam.GetInfo()
+                dev.info["width"] = info.get("width", dev.info.get("width", 0))
+                dev.info["height"] = info.get("height", dev.info.get("height", 0))
+                dev.info["resolution"] = {
+                    "width": info.get("width", 0),
+                    "height": info.get("height", 0),
+                }
+                dev.status = "connected"
+                _mark_connected()
+                return f"Webcam connected: {dev.id} (index={dev.info.get('device_index')})"
+            except Exception as e:
+                dev.status = "disconnected"
+                return f"Webcam connect failed: {dev.id} — {e}"
+
         elif dev.type == "ssh":
             host = dev.info.get("host", dev.address)
             port = int(dev.info.get("port", 22))
@@ -1929,6 +2027,16 @@ class DeviceManager:
             dev.status = "disconnected"
             return f"Disconnected: {dev.id}"
 
+        elif dev.type == "webcam":
+            cam = self._webcam_devs.pop(device_id, None)
+            if cam:
+                try:
+                    cam.Disconnect()
+                except Exception:
+                    pass
+            dev.status = "disconnected"
+            return f"Disconnected: {dev.id}"
+
         elif dev.type == "ssh":
             self._close_ssh_conn(device_id)
             dev.status = "disconnected"
@@ -1969,6 +2077,13 @@ class DeviceManager:
                 pass
             logger.info("VisionCamera connection closed: %s", device_id)
         self._vision_cams.clear()
+        for device_id, cam in list(self._webcam_devs.items()):
+            try:
+                cam.Disconnect()
+            except Exception:
+                pass
+            logger.info("Webcam connection closed: %s", device_id)
+        self._webcam_devs.clear()
 
     async def send_serial_command(self, device_id: str, data: str, read_timeout: float = 1.0) -> str:
         """Send a command to a serial device and return the response."""
