@@ -2694,11 +2694,6 @@ export default function RecordPage() {
                     <Tag color="processing" style={{ fontSize: 14, padding: '4px 12px' }}>{t('record.stepTesting')}</Tag>
                   </div>
                 )}
-                {isScreenReadonly && testingStepIndex == null && (
-                  <div style={{ position: 'absolute', top: 8, left: 8, pointerEvents: 'none' }}>
-                    <Tag color="default">{t('record.readonlyDevice')}</Tag>
-                  </div>
-                )}
                 </div>
                 {viewCropEnabled && (
                   <div style={{ width: '100%', padding: '4px 0' }}>
