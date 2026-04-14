@@ -37,16 +37,25 @@ def _get_primary_webcam_indices() -> set[int]:
 
 @router.get("/devices")
 async def list_devices():
-    """Enumerate detected webcam devices (주 디바이스로 등록된 인덱스는 제외)."""
+    """Enumerate detected webcam devices (주 디바이스로 등록된 인덱스는 제외).
+
+    중요: 주 디바이스가 점유한 인덱스는 프로브 단계에서 skip해야 한다.
+    DirectShow에서 재오픈 시도하면 기존 캡처가 끊어져 스트리밍이 멈춘다.
+    """
     svc = get_webcam_service()
     excluded = _get_primary_webcam_indices()
-    all_devs = svc.list_devices()
-    return {"devices": [d for d in all_devs if d.get("index") not in excluded]}
+    return {"devices": svc.list_devices(exclude=excluded)}
 
 
 @router.get("/resolutions/{device_index}")
 async def probe_resolutions(device_index: int):
-    """지원 해상도 목록."""
+    """지원 해상도 목록.
+
+    주 디바이스로 등록된 인덱스는 프로브 거부 — 재오픈 시 주 디바이스 캡처가 끊긴다.
+    """
+    if device_index in _get_primary_webcam_indices():
+        # 빈 배열 반환 — 프론트는 fallback 해상도 사용
+        return {"resolutions": []}
     svc = get_webcam_service()
     if svc.is_open() and svc._device_index == device_index:
         # 현재 열려 있는 장치는 재오픈 피함 — status에서 현재 해상도만 반환

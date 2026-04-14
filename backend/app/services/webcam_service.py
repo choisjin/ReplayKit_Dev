@@ -151,10 +151,24 @@ class WebcamService:
     # ------------------------------------------------------------
     # Device enumeration / probe
     # ------------------------------------------------------------
-    def list_devices(self, max_index: int = 5) -> list[dict]:
-        """장착된 카메라 index 탐지 (간이 — DSHOW로 0..N을 순회)."""
+    def list_devices(self, max_index: int = 5, exclude: Optional[set[int]] = None) -> list[dict]:
+        """장착된 카메라 index 탐지 (간이 — DSHOW로 0..N을 순회).
+
+        exclude: 프로브를 건너뛸 인덱스 집합. 다른 곳에서 이미 점유 중인 인덱스를
+        DirectShow로 재오픈하면 기존 점유자의 캡처가 끊어질 수 있으므로 반드시 전달할 것.
+        """
+        exclude = exclude or set()
         found = []
         for idx in range(max_index):
+            if idx in exclude:
+                continue
+            # 싱글톤 자체가 이 인덱스를 쓰고 있으면 재오픈 금지
+            if self.is_open() and self._device_index == idx:
+                found.append({
+                    "index": idx,
+                    "label": f"Camera {idx} ({self._width}x{self._height})",
+                })
+                continue
             cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
             if cap.isOpened():
                 w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640

@@ -133,13 +133,31 @@ export function useWebcam() {
   const handleWebcamToggle = useCallback(async (keys: string | string[]) => {
     const isOpen = Array.isArray(keys) ? keys.includes('webcam') : keys === 'webcam';
     if (isOpen) {
-      await enumerateWebcams();
-      await startWebcam(webcamIndex);
-      await probeWebcamResolutions(webcamIndex);
+      // 최신 목록 조회 (주 디바이스로 등록된 인덱스는 백엔드가 필터링)
+      try {
+        const r = await axios.get('/api/webcam/devices');
+        const list: DeviceInfo[] = r.data.devices || [];
+        setWebcamDevices(list);
+        // 저장된 webcamIndex가 사용 가능한 목록에 없으면 첫 번째로 폴백
+        const available = new Set(list.map(d => d.index));
+        let target = webcamIndex;
+        if (!available.has(target)) {
+          if (list.length === 0) {
+            message.error(t('webcam.noDevices'));
+            return;
+          }
+          target = list[0].index;
+          setWebcamIndex(target);
+        }
+        await startWebcam(target);
+        await probeWebcamResolutions(target);
+      } catch {
+        message.error(t('webcam.enumFailed'));
+      }
     } else {
       await stopWebcam();
     }
-  }, [webcamIndex, enumerateWebcams, startWebcam, stopWebcam, probeWebcamResolutions]);
+  }, [webcamIndex, startWebcam, stopWebcam, probeWebcamResolutions, message, t]);
 
   const handleWebcamChange = useCallback(async (idx: number) => {
     setWebcamIndex(idx);
