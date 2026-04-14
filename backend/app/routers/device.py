@@ -33,6 +33,7 @@ _DEFAULT_SCAN_SETTINGS = {
         "adb":            {"enabled": True,  "module": ""},
         "serial":         {"enabled": True,  "module": "SerialLogging"},
         "hkmc":           {"enabled": True,  "module": "", "ports": [6655, 5000]},
+        "isap":           {"enabled": False, "module": "", "ports": [20000]},
         "dlt":            {"enabled": True,  "module": "DLTLogging", "ports": [3490]},
         "bench":          {"enabled": True,  "module": "CCIC_BENCH", "ports": [25000]},
         "vision_camera":  {"enabled": False, "module": "VisionCamera"},
@@ -186,6 +187,8 @@ async def scan_ports():
 
     if _enabled("hkmc"):
         tasks["hkmc_devices"] = asyncio.ensure_future(dm.scan_hkmc(ports=_ports_of("hkmc")))
+    if _enabled("isap"):
+        tasks["isap_hosts"] = asyncio.ensure_future(dm.scan_isap(ports=_ports_of("isap")))
     if _enabled("bench"):
         tasks["bench_devices"] = asyncio.ensure_future(dm.scan_bench(ports=_ports_of("bench")))
     if _enabled("vision_camera"):
@@ -254,6 +257,7 @@ async def scan_ports():
         "bench_devices": [],
         "vision_cameras": [],
         "webcams": [],
+        "isap_hosts": [],
         "dlt_devices": [],
         "smartbench_devices": [],
         "ssh_hosts": [],

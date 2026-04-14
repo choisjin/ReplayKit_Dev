@@ -500,6 +500,8 @@ export default function RecordPage() {
   const screenDevice = primaryDevices.find(d => d.id === screenshotDeviceId);
   const isScreenHkmc = screenDevice?.type === 'hkmc6th' || screenDevice?.type === 'isap_agent';
   const isScreenAdb = screenDevice?.type === 'adb';
+  // 카메라류(vision_camera/webcam)는 관찰 전용 — 조작(탭/스와이프/키) 금지
+  const isScreenReadonly = screenDevice?.type === 'vision_camera' || screenDevice?.type === 'webcam';
   const adbDisplays: { id: number; name: string; sf_id?: string; width?: number; height?: number }[] = screenDevice?.info?.displays || [];
   const hasMultiDisplay = isScreenAdb && adbDisplays.length > 1;
   // 멀티 디스플레이: 선택된 디스플레이 해상도 사용
@@ -627,6 +629,12 @@ export default function RecordPage() {
     const targetDevice = screenshotDeviceId;
     if (!targetDevice) return;
 
+    // 관찰 전용 디바이스(vision_camera/webcam)에서는 조작 동작 불가
+    const targetDev = primaryDevices.find(d => d.id === targetDevice);
+    if (targetDev?.type === 'vision_camera' || targetDev?.type === 'webcam') {
+      return;
+    }
+
     const resolvedAction = resolveAction(action, targetDevice);
     const resolvedParams = resolveParams(resolvedAction, params, targetDevice);
 
@@ -686,7 +694,7 @@ export default function RecordPage() {
         setTimeout(() => refreshScreenshot(), 150);
       }
     }
-  }, [recording, screenshotDeviceId, delayMs, refreshScreenshot, resolveAction, resolveParams, steps.length]);
+  }, [recording, screenshotDeviceId, delayMs, refreshScreenshot, resolveAction, resolveParams, steps.length, primaryDevices]);
 
   // --- ROI Modal logic ---
   // Draw on the ROI canvas using the captured screenshot (not reactive screenshot)
@@ -2667,15 +2675,16 @@ export default function RecordPage() {
                     maxHeight: '100%',
                     border: isDark ? '1px solid #333' : '1px solid #d9d9d9',
                     borderRadius: 4,
-                    cursor: testingStepIndex != null ? 'wait' : 'crosshair',
+                    cursor: testingStepIndex != null ? 'wait' : (isScreenReadonly ? 'not-allowed' : 'crosshair'),
                     userSelect: 'none' as const,
                   };
+                  const interactive = testingStepIndex == null && !isScreenReadonly;
                   return (
                     <canvas
                       ref={canvasRef}
-                      onMouseDown={testingStepIndex == null ? handleMouseDown : undefined}
-                      onMouseMove={testingStepIndex == null ? handleMouseMove : undefined}
-                      onMouseUp={testingStepIndex == null ? handleMouseUp : undefined}
+                      onMouseDown={interactive ? handleMouseDown : undefined}
+                      onMouseMove={interactive ? handleMouseMove : undefined}
+                      onMouseUp={interactive ? handleMouseUp : undefined}
                       style={baseStyle}
                     />
                   );
@@ -2683,6 +2692,11 @@ export default function RecordPage() {
                 {testingStepIndex != null && (
                   <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', borderRadius: 4, pointerEvents: 'none' }}>
                     <Tag color="processing" style={{ fontSize: 14, padding: '4px 12px' }}>{t('record.stepTesting')}</Tag>
+                  </div>
+                )}
+                {isScreenReadonly && testingStepIndex == null && (
+                  <div style={{ position: 'absolute', top: 8, left: 8, pointerEvents: 'none' }}>
+                    <Tag color="default">{t('record.readonlyDevice')}</Tag>
                   </div>
                 )}
                 </div>

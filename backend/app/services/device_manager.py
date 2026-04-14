@@ -1178,6 +1178,34 @@ class DeviceManager:
         """TCP 포트 스캔으로 LAN(192.168.*) 상의 DLT 데몬 탐지."""
         return await _scan_dlt_tcp(ports=ports)
 
+    async def scan_isap(self, ports: list[int] | None = None) -> list[dict]:
+        """TCP 포트 스캔으로 LAN(192.168.*) 상의 iSAP Agent 탐지.
+        단순 TCP open 체크 (iSAP은 핸드셰이크를 푸시하지 않는 경우가 있어 검증 생략).
+        """
+        if not ports:
+            logger.info("iSAP scan skipped: no ports configured")
+            return []
+        candidate_ips = _collect_candidate_ips_192()
+        if not candidate_ips:
+            return []
+        import asyncio as _a
+        semaphore = _a.Semaphore(100)
+        tasks = [
+            _probe_tcp_port(ip, port, 0.3, semaphore)
+            for ip in candidate_ips
+            for port in ports
+        ]
+        results = await _a.gather(*tasks)
+        found = [r for r in results if r is not None]
+        seen: set[str] = set()
+        deduped: list[dict] = []
+        for r in found:
+            if r["ip"] not in seen:
+                seen.add(r["ip"])
+                deduped.append(r)
+                logger.info("iSAP scan: found open port at %s:%d", r["ip"], r["port"])
+        return deduped
+
     async def scan_ssh(self, port: int = 22) -> list[dict]:
         """TCP 포트 스캔으로 LAN 상의 SSH 호스트 탐지."""
         return await scan_tcp_port(port)

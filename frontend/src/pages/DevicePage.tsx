@@ -215,6 +215,7 @@ export default function DevicePage() {
   const [scannedAdb, setScannedAdb] = useState<any[]>([]);
   const [scannedSerial, setScannedSerial] = useState<SerialPort[]>([]);
   const [scannedHkmc, setScannedHkmc] = useState<{ ip: string; port: number; raw: string }[]>([]);
+  const [scannedIsap, setScannedIsap] = useState<{ ip: string; port: number }[]>([]);
   const [scannedBench, setScannedBench] = useState<{ ip: string; port: number; verified?: boolean }[]>([]);
   const [scannedVision, setScannedVision] = useState<{ id: string; mac: string; model: string; serial: string; vendor: string; tl_type: string; ip: string; subnet?: string; gateway?: string }[]>([]);
   const [scannedWebcams, setScannedWebcams] = useState<{ index: number; label: string; width: number; height: number; already_registered?: boolean; in_use_by_recording?: boolean }[]>([]);
@@ -305,6 +306,7 @@ export default function DevicePage() {
     adb: { enabled: true, module: '' },
     serial: { enabled: true, module: 'SerialLogging' },
     hkmc: { enabled: true, module: '', ports: [6655, 5000] },
+    isap: { enabled: false, module: '', ports: [20000] },
     dlt: { enabled: true, module: 'DLTLogging', ports: [3490] },
     bench: { enabled: true, module: 'CCIC_BENCH', ports: [25000] },
     vision_camera: { enabled: false, module: 'VisionCamera' },
@@ -414,6 +416,7 @@ export default function DevicePage() {
     setScannedAdb([]);
     setScannedSerial([]);
     setScannedHkmc([]);
+    setScannedIsap([]);
     setScannedBench([]);
     setScannedVision([]);
     setScannedWebcams([]);
@@ -434,6 +437,7 @@ export default function DevicePage() {
       setScannedAdb(res.data.adb_devices || []);
       setScannedSerial(res.data.serial_ports || []);
       setScannedHkmc(res.data.hkmc_devices || []);
+      setScannedIsap(res.data.isap_hosts || []);
       setScannedBench(res.data.bench_devices || []);
       setScannedVision(res.data.vision_cameras || []);
       setScannedWebcams(res.data.webcams || []);
@@ -588,6 +592,18 @@ export default function DevicePage() {
     setConnecting(true);
     try {
       const result = await connectDevice('hkmc6th', ip, undefined, '', 'primary', undefined, undefined, undefined, '', port, deviceModel || undefined);
+      message.success(result);
+      closeAddModal();
+    } catch (e: any) {
+      message.error(e.response?.data?.detail || t('device.connectFailed'));
+    }
+    setConnecting(false);
+  };
+
+  const handleAddIsap = async (ip: string, port: number) => {
+    setConnecting(true);
+    try {
+      const result = await connectDevice('isap_agent', ip, undefined, '', 'primary', undefined, undefined, undefined, '', port, deviceModel || undefined);
       message.success(result);
       closeAddModal();
     } catch (e: any) {
@@ -1069,6 +1085,27 @@ export default function DevicePage() {
                                 <Button size="small" type="primary" loading={connecting} onClick={() => handleAddHkmc(d.ip, d.port)}>{t('common.add')}</Button>
                               ]}>
                                 <Tag color="volcano">HKMC</Tag> <Tag color="blue">{d.ip}</Tag> <span style={{ color: '#888' }}>TCP: {d.port}</span>
+                              </List.Item>
+                            )}
+                          />
+                        ),
+                      });
+                    }
+
+                    if (modalCategory === 'primary' && scannedIsap.length > 0) {
+                      scanTabs.push({
+                        key: 'isap',
+                        label: <span>{t('device.detectedIsap')} <Tag style={{ marginLeft: 4 }}>{scannedIsap.length}</Tag></span>,
+                        children: (
+                          <List
+                            size="small"
+                            dataSource={scannedIsap}
+                            pagination={scannedIsap.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                            renderItem={(d) => (
+                              <List.Item actions={[
+                                <Button size="small" type="primary" loading={connecting} onClick={() => handleAddIsap(d.ip, d.port)}>{t('common.add')}</Button>
+                              ]}>
+                                <Tag color="geekblue">iSAP</Tag> <Tag color="blue">{d.ip}</Tag> <span style={{ color: '#888' }}>TCP: {d.port}</span>
                               </List.Item>
                             )}
                           />
@@ -1881,6 +1918,7 @@ export default function DevicePage() {
               { key: 'adb', label: 'ADB', proto: 'USB/WiFi', editablePorts: false },
               { key: 'serial', label: 'Serial', proto: 'COM', editablePorts: false },
               { key: 'hkmc', label: 'HKMC', proto: 'TCP', editablePorts: true },
+              { key: 'isap', label: 'iSAP Agent', proto: 'TCP', editablePorts: true },
               { key: 'dlt', label: 'DLT', proto: 'TCP', editablePorts: true },
               { key: 'bench', label: 'Bench', proto: 'UDP', editablePorts: true },
               { key: 'vision_camera', label: 'Vision Camera', proto: 'GigE', editablePorts: false },
