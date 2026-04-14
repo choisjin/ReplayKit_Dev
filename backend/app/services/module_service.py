@@ -782,7 +782,7 @@ def _redirect_path_args_to_run_dir(call_args: dict, module_name: str, function_n
                 call_args[param_name] = str(log_dir / f"{safe_mod}_{safe_func}_{ts}{ext}")
 
 
-DEFAULT_MODULE_TIMEOUT_S = 600.0  # 10분 — 플러그인이 retry 기반 장시간 작업을 할 수 있음
+DEFAULT_MODULE_TIMEOUT_S = 3600.0  # 1시간 — 플러그인이 retry 기반 장시간 작업을 할 수 있음
 MODULE_TIMEOUT_BUFFER_S = 60.0     # 네트워크/초기화 오버헤드 여유
 
 
