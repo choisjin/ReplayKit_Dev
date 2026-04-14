@@ -38,6 +38,54 @@ def _scan_serial_ports() -> list[dict]:
 
 
 HKMC_SCAN_PORTS = [6655, 5000]
+
+
+def _collect_local_subnets_192() -> tuple[set[str], list]:
+    """로컬 192.168.* 서브넷만 수집 (IDS 오탐 방지를 위한 스캔 대상 제한).
+
+    /20보다 큰(즉 prefix < 20) 대규모 네트워크는 제외.
+
+    Returns:
+        (local_ips_set, subnet_list) — 자기 자신 IP 집합과 IPv4Network 목록
+    """
+    import ipaddress
+    import ifaddr
+
+    local_ips: set[str] = {"127.0.0.1"}
+    subnets: list = []
+    for adapter in ifaddr.get_adapters():
+        for ip_info in adapter.ips:
+            if not isinstance(ip_info.ip, str):
+                continue
+            ip_str = ip_info.ip
+            prefix = ip_info.network_prefix
+            if ip_str.startswith("127.") or ip_str.startswith("169.254."):
+                continue
+            # 192.168.* 대역만 허용 — 10.x, 172.16-31.x 등은 스캔 제외
+            if not ip_str.startswith("192.168."):
+                continue
+            local_ips.add(ip_str)
+            try:
+                net = ipaddress.IPv4Network(f"{ip_str}/{prefix}", strict=False)
+                if net.prefixlen >= 20:
+                    subnets.append(net)
+            except ValueError:
+                pass
+    # 중복 서브넷 제거
+    unique = list({str(s): s for s in subnets}.values())
+    return local_ips, unique
+
+
+def _collect_candidate_ips_192() -> set[str]:
+    """192.168.* 대역에 속한 후보 IP 집합 반환 (자기 자신 제외)."""
+    local_ips, subnets = _collect_local_subnets_192()
+    candidate_ips: set[str] = set()
+    for subnet in subnets:
+        for host in subnet.hosts():
+            ip_str = str(host)
+            if ip_str not in local_ips:
+                candidate_ips.add(ip_str)
+    return candidate_ips
 HKMC_HANDSHAKE_VALUES = {
     bytes.fromhex("6161000000035e002185fd6f6f"),
     bytes.fromhex("6161000000035e0000df856f6f"),
@@ -75,49 +123,17 @@ async def _scan_hkmc_tcp(
     connect_timeout: float = 0.3,
     max_concurrent: int = 100,
 ) -> list[dict]:
-    """LAN 서브넷의 모든 IP에 TCP 연결을 시도하여 HKMC 에이전트를 탐지한다."""
-    import ipaddress
-    import ifaddr
+    """LAN 서브넷의 모든 IP에 TCP 연결을 시도하여 HKMC 에이전트를 탐지한다.
+    스캔 범위는 192.168.* 로 제한한다.
+    """
+    if not ports:
+        logger.info("HKMC scan skipped: no ports configured")
+        return []
 
-    if ports is None:
-        ports = HKMC_SCAN_PORTS
-
-    # 로컬 IP 수집
-    local_ips: set[str] = {"127.0.0.1"}
-    subnets: list[ipaddress.IPv4Network] = []
-
-    for adapter in ifaddr.get_adapters():
-        for ip_info in adapter.ips:
-            if not isinstance(ip_info.ip, str):  # IPv6 튜플 제외
-                continue
-            ip_str = ip_info.ip
-            prefix = ip_info.network_prefix
-            if ip_str.startswith("127.") or ip_str.startswith("169.254."):
-                continue
-            local_ips.add(ip_str)
-            try:
-                net = ipaddress.IPv4Network(f"{ip_str}/{prefix}", strict=False)
-                # /20보다 큰 서브넷은 제외 (대규모 스캔 방지)
-                if net.prefixlen >= 20:
-                    subnets.append(net)
-            except ValueError:
-                pass
-
-    # 서브넷 중복 제거
-    unique = list({str(s): s for s in subnets}.values())
-
-    # 후보 IP 생성
-    candidate_ips: set[str] = set()
-    for subnet in unique:
-        for host in subnet.hosts():
-            ip_str = str(host)
-            if ip_str not in local_ips:
-                candidate_ips.add(ip_str)
-
+    candidate_ips = _collect_candidate_ips_192()
     if not candidate_ips:
         return []
 
-    # 모든 후보 IP × 모든 포트에 대해 병렬 프로브
     semaphore = asyncio.Semaphore(max_concurrent)
     tasks = [
         _probe_hkmc_host(ip, port, connect_timeout, semaphore)
@@ -127,7 +143,6 @@ async def _scan_hkmc_tcp(
     results = await asyncio.gather(*tasks)
     found = [r for r in results if r is not None]
 
-    # 같은 IP가 여러 포트에서 발견될 경우 첫 번째만 유지
     seen_ips: set[str] = set()
     deduped: list[dict] = []
     for r in found:
@@ -166,37 +181,8 @@ async def scan_tcp_port(
     connect_timeout: float = 0.3,
     max_concurrent: int = 100,
 ) -> list[dict]:
-    """LAN 서브넷에서 특정 TCP 포트가 열린 호스트를 탐지."""
-    import ipaddress
-    import ifaddr
-
-    local_ips: set[str] = {"127.0.0.1"}
-    subnets: list[ipaddress.IPv4Network] = []
-
-    for adapter in ifaddr.get_adapters():
-        for ip_info in adapter.ips:
-            if not isinstance(ip_info.ip, str):
-                continue
-            ip_str = ip_info.ip
-            prefix = ip_info.network_prefix
-            if ip_str.startswith("127.") or ip_str.startswith("169.254."):
-                continue
-            local_ips.add(ip_str)
-            try:
-                net = ipaddress.IPv4Network(f"{ip_str}/{prefix}", strict=False)
-                if net.prefixlen >= 20:
-                    subnets.append(net)
-            except ValueError:
-                pass
-
-    unique = list({str(s): s for s in subnets}.values())
-    candidate_ips: set[str] = set()
-    for subnet in unique:
-        for host in subnet.hosts():
-            ip_str = str(host)
-            if ip_str not in local_ips:
-                candidate_ips.add(ip_str)
-
+    """LAN 서브넷(192.168.*)에서 특정 TCP 포트가 열린 호스트를 탐지."""
+    candidate_ips = _collect_candidate_ips_192()
     if not candidate_ips:
         return []
 
@@ -241,37 +227,8 @@ async def _scan_udp_port(
     connect_timeout: float = 0.5,
     max_concurrent: int = 100,
 ) -> list[dict]:
-    """LAN 서브넷에서 특정 UDP 포트에 응답하는 호스트를 탐지."""
-    import ipaddress
-    import ifaddr
-
-    local_ips: set[str] = {"127.0.0.1"}
-    subnets: list[ipaddress.IPv4Network] = []
-
-    for adapter in ifaddr.get_adapters():
-        for ip_info in adapter.ips:
-            if not isinstance(ip_info.ip, str):
-                continue
-            ip_str = ip_info.ip
-            prefix = ip_info.network_prefix
-            if ip_str.startswith("127.") or ip_str.startswith("169.254."):
-                continue
-            local_ips.add(ip_str)
-            try:
-                net = ipaddress.IPv4Network(f"{ip_str}/{prefix}", strict=False)
-                if net.prefixlen >= 20:
-                    subnets.append(net)
-            except ValueError:
-                pass
-
-    unique = list({str(s): s for s in subnets}.values())
-    candidate_ips: set[str] = set()
-    for subnet in unique:
-        for host in subnet.hosts():
-            ip_str = str(host)
-            if ip_str not in local_ips:
-                candidate_ips.add(ip_str)
-
+    """LAN 서브넷(192.168.*)에서 특정 UDP 포트에 응답하는 호스트를 탐지."""
+    candidate_ips = _collect_candidate_ips_192()
     if not candidate_ips:
         return []
 
@@ -329,44 +286,12 @@ async def _scan_dlt_tcp(
     connect_timeout: float = 0.3,
     max_concurrent: int = 100,
 ) -> list[dict]:
-    """LAN 서브넷의 모든 IP에서 DLT 데몬(TCP 3490)을 탐지."""
-    import ipaddress
-    import ifaddr
+    """LAN 서브넷(192.168.*)에서 DLT 데몬을 탐지."""
+    if not ports:
+        logger.info("DLT scan skipped: no ports configured")
+        return []
 
-    if ports is None:
-        ports = DLT_SCAN_PORTS
-
-    local_ips: set[str] = {"127.0.0.1"}
-    subnets: list[ipaddress.IPv4Network] = []
-
-    for adapter in ifaddr.get_adapters():
-        for ip_info in adapter.ips:
-            if not isinstance(ip_info.ip, str):
-                continue
-            ip_str = ip_info.ip
-            prefix = ip_info.network_prefix
-            if ip_str.startswith("127.") or ip_str.startswith("169.254."):
-                continue
-            # 사내망(10.x) 제외 — DLT는 전용 네트워크에 있음
-            if ip_str.startswith("10."):
-                continue
-            local_ips.add(ip_str)
-            try:
-                net = ipaddress.IPv4Network(f"{ip_str}/{prefix}", strict=False)
-                if net.prefixlen >= 20:
-                    subnets.append(net)
-            except ValueError:
-                pass
-
-    unique = list({str(s): s for s in subnets}.values())
-
-    candidate_ips: set[str] = set()
-    for subnet in unique:
-        for host in subnet.hosts():
-            ip_str = str(host)
-            if ip_str not in local_ips:
-                candidate_ips.add(ip_str)
-
+    candidate_ips = _collect_candidate_ips_192()
     if not candidate_ips:
         return []
 
@@ -514,42 +439,19 @@ async def _ping_host(ip: str) -> str | None:
 
 
 async def _scan_network_hosts(
+    ports: list[int] | None = None,
     max_concurrent: int = 50,
 ) -> list[dict]:
-    """LAN 서브넷의 활성 호스트 탐지 (ARP + ping + UDP 프로브)."""
-    import ipaddress
-    import ifaddr
+    """LAN 서브넷(192.168.*)의 활성 호스트 탐지 (ARP + ping + UDP 프로브)."""
+    if not ports:
+        logger.info("Bench scan skipped: no ports configured")
+        return []
 
-    ports = BENCH_UDP_SCAN_PORTS
+    local_ips, subnets = _collect_local_subnets_192()
+    logger.info("Network scan: %d subnets: %s", len(subnets), [str(s) for s in subnets])
 
-    # 로컬 IP 수집 & 서브넷 탐지
-    local_ips: set[str] = {"127.0.0.1"}
-    subnets: list[ipaddress.IPv4Network] = []
-
-    for adapter in ifaddr.get_adapters():
-        for ip_info in adapter.ips:
-            if not isinstance(ip_info.ip, str):
-                continue
-            ip_str = ip_info.ip
-            prefix = ip_info.network_prefix
-            if ip_str.startswith("127.") or ip_str.startswith("169.254."):
-                continue
-            local_ips.add(ip_str)
-            try:
-                net = ipaddress.IPv4Network(f"{ip_str}/{prefix}", strict=False)
-                # 벤치 전용 네트워크만 대상 (192.168.x.x)
-                # 10.x.x.x (사내), 172.16-31.x.x (기업) 등 대규모 네트워크 제외
-                if net.prefixlen >= 20 and ip_str.startswith("192.168."):
-                    subnets.append(net)
-            except ValueError:
-                pass
-
-    unique = list({str(s): s for s in subnets}.values())
-    logger.info("Network scan: %d subnets: %s", len(unique), [str(s) for s in unique])
-
-    # 서브넷별 후보 IP
     candidate_ips: set[str] = set()
-    for subnet in unique:
+    for subnet in subnets:
         for host in subnet.hosts():
             ip_str = str(host)
             if ip_str not in local_ips:
@@ -1258,21 +1160,23 @@ class DeviceManager:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, _scan_serial_ports)
 
-    async def scan_hkmc(self) -> list[dict]:
-        """TCP 포트 스캔으로 LAN 상의 HKMC 디바이스 탐지."""
-        return await _scan_hkmc_tcp()
+    async def scan_hkmc(self, ports: list[int] | None = None) -> list[dict]:
+        """TCP 포트 스캔으로 LAN(192.168.*) 상의 HKMC 디바이스 탐지.
+        ports가 비어있으면 스캔하지 않음.
+        """
+        return await _scan_hkmc_tcp(ports=ports)
 
-    async def scan_bench(self) -> list[dict]:
-        """LAN에서 네트워크 호스트 탐색 (ARP + ping + UDP 프로브)."""
-        return await _scan_network_hosts()
+    async def scan_bench(self, ports: list[int] | None = None) -> list[dict]:
+        """LAN(192.168.*)에서 네트워크 호스트 탐색 (ARP + ping + UDP 프로브)."""
+        return await _scan_network_hosts(ports=ports)
 
     async def scan_smartbench(self) -> list[dict]:
-        """SmartBench 장비 탐지 (192.167.0.x 네트워크)."""
+        """SmartBench 장비 탐지 (전용 IP 쌍 고정 — 192.167.0.4/5)."""
         return await _scan_smartbench()
 
-    async def scan_dlt(self) -> list[dict]:
-        """TCP 포트 스캔으로 LAN 상의 DLT 데몬 탐지."""
-        return await _scan_dlt_tcp()
+    async def scan_dlt(self, ports: list[int] | None = None) -> list[dict]:
+        """TCP 포트 스캔으로 LAN(192.168.*) 상의 DLT 데몬 탐지."""
+        return await _scan_dlt_tcp(ports=ports)
 
     async def scan_ssh(self, port: int = 22) -> list[dict]:
         """TCP 포트 스캔으로 LAN 상의 SSH 호스트 탐지."""

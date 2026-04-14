@@ -301,12 +301,12 @@ export default function DevicePage() {
 
   // Scan settings modal
   const [scanSettingsOpen, setScanSettingsOpen] = useState(false);
-  const [scanBuiltin, setScanBuiltin] = useState<Record<string, { enabled: boolean; module: string; port?: number }>>({
+  const [scanBuiltin, setScanBuiltin] = useState<Record<string, { enabled: boolean; module: string; port?: number; ports?: number[] }>>({
     adb: { enabled: true, module: '' },
     serial: { enabled: true, module: 'SerialLogging' },
-    hkmc: { enabled: true, module: '' },
-    dlt: { enabled: true, module: 'DLTLogging' },
-    bench: { enabled: true, module: 'CCIC_BENCH' },
+    hkmc: { enabled: true, module: '', ports: [6655, 5000] },
+    dlt: { enabled: true, module: 'DLTLogging', ports: [3490] },
+    bench: { enabled: true, module: 'CCIC_BENCH', ports: [25000] },
     vision_camera: { enabled: false, module: 'VisionCamera' },
     webcam: { enabled: true, module: 'WebcamDevice' },
     ssh: { enabled: true, module: 'SSHManager', port: 22 },
@@ -1878,16 +1878,20 @@ export default function DevicePage() {
           <tbody>
             {/* 기본 스캔 항목 */}
             {[
-              { key: 'adb', label: 'ADB', proto: 'USB/WiFi', port: '-' },
-              { key: 'serial', label: 'Serial', proto: 'COM', port: '-' },
-              { key: 'hkmc', label: 'HKMC', proto: 'TCP', port: '6655/5000' },
-              { key: 'dlt', label: 'DLT', proto: 'TCP', port: '3490' },
-              { key: 'bench', label: 'Bench', proto: 'UDP', port: '25000' },
-              { key: 'vision_camera', label: 'Vision Camera', proto: 'GigE', port: '-' },
-              { key: 'webcam', label: 'Webcam', proto: 'USB', port: '-' },
-              { key: 'ssh', label: 'SSH', proto: 'TCP', port: '22' },
+              { key: 'adb', label: 'ADB', proto: 'USB/WiFi', editablePorts: false },
+              { key: 'serial', label: 'Serial', proto: 'COM', editablePorts: false },
+              { key: 'hkmc', label: 'HKMC', proto: 'TCP', editablePorts: true },
+              { key: 'dlt', label: 'DLT', proto: 'TCP', editablePorts: true },
+              { key: 'bench', label: 'Bench', proto: 'UDP', editablePorts: true },
+              { key: 'vision_camera', label: 'Vision Camera', proto: 'GigE', editablePorts: false },
+              { key: 'webcam', label: 'Webcam', proto: 'USB', editablePorts: false },
+              { key: 'ssh', label: 'SSH', proto: 'TCP', editablePorts: false },
             ].map(item => {
               const v = scanBuiltin[item.key] || { enabled: true, module: '' };
+              const portsStr = v.ports && v.ports.length > 0 ? v.ports.join(',') : '';
+              const portLabel = item.key === 'ssh'
+                ? String(v.port ?? 22)
+                : (item.editablePorts ? portsStr : '-');
               return (
                 <tr key={item.key} style={{ borderBottom: '1px solid #f0f0f0' }}>
                   <td style={{ padding: '4px' }}>
@@ -1896,7 +1900,22 @@ export default function DevicePage() {
                   </td>
                   <td style={{ padding: '4px' }}>{item.label}</td>
                   <td style={{ padding: '4px' }}><Tag>{item.proto}</Tag></td>
-                  <td style={{ padding: '4px' }}>{item.port}</td>
+                  <td style={{ padding: '4px' }}>
+                    {item.editablePorts ? (
+                      <Input
+                        size="small"
+                        value={portsStr}
+                        placeholder={t('device.portsPlaceholder')}
+                        onChange={e => {
+                          const ports = e.target.value
+                            .split(/[,\s]+/)
+                            .map(p => parseInt(p.trim(), 10))
+                            .filter(p => !isNaN(p) && p > 0 && p < 65536);
+                          setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, ports } });
+                        }}
+                      />
+                    ) : portLabel}
+                  </td>
                   <td style={{ padding: '4px' }}>
                     <Select size="small" allowClear placeholder="-" value={v.module || undefined}
                       onChange={val => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, module: val || '' } })}

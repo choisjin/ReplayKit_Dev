@@ -32,9 +32,9 @@ _DEFAULT_SCAN_SETTINGS = {
     "builtin": {
         "adb":            {"enabled": True,  "module": ""},
         "serial":         {"enabled": True,  "module": "SerialLogging"},
-        "hkmc":           {"enabled": True,  "module": ""},
-        "dlt":            {"enabled": True,  "module": "DLTLogging"},
-        "bench":          {"enabled": True,  "module": "CCIC_BENCH"},
+        "hkmc":           {"enabled": True,  "module": "", "ports": [6655, 5000]},
+        "dlt":            {"enabled": True,  "module": "DLTLogging", "ports": [3490]},
+        "bench":          {"enabled": True,  "module": "CCIC_BENCH", "ports": [25000]},
         "vision_camera":  {"enabled": False, "module": "VisionCamera"},
         "webcam":         {"enabled": True,  "module": "WebcamDevice"},
         "ssh":            {"enabled": True,  "module": "SSHManager", "port": 22},
@@ -173,10 +173,21 @@ async def scan_ports():
         tasks["adb_devices"] = asyncio.ensure_future(adb.list_devices())
     if _enabled("serial"):
         tasks["serial_ports"] = asyncio.ensure_future(dm.scan_serial())
+    def _ports_of(key: str) -> list[int]:
+        entry = builtin.get(key, {}) if isinstance(builtin.get(key), dict) else {}
+        raw = entry.get("ports") or []
+        result: list[int] = []
+        for p in raw:
+            try:
+                result.append(int(p))
+            except (TypeError, ValueError):
+                pass
+        return result
+
     if _enabled("hkmc"):
-        tasks["hkmc_devices"] = asyncio.ensure_future(dm.scan_hkmc())
+        tasks["hkmc_devices"] = asyncio.ensure_future(dm.scan_hkmc(ports=_ports_of("hkmc")))
     if _enabled("bench"):
-        tasks["bench_devices"] = asyncio.ensure_future(dm.scan_bench())
+        tasks["bench_devices"] = asyncio.ensure_future(dm.scan_bench(ports=_ports_of("bench")))
     if _enabled("vision_camera"):
         tasks["vision_cameras"] = asyncio.ensure_future(dm.scan_vision_cameras())
     if _enabled("webcam"):
@@ -207,7 +218,7 @@ async def scan_ports():
             return cams
         tasks["webcams"] = asyncio.ensure_future(_scan_webcams())
     if _enabled("dlt"):
-        tasks["dlt_devices"] = asyncio.ensure_future(dm.scan_dlt())
+        tasks["dlt_devices"] = asyncio.ensure_future(dm.scan_dlt(ports=_ports_of("dlt")))
     if _enabled("smartbench"):
         tasks["smartbench_devices"] = asyncio.ensure_future(dm.scan_smartbench())
     if _enabled("ssh"):
