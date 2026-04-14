@@ -36,6 +36,10 @@ export const deviceApi = {
     api.post('/device/connect-registered', { device_ids: deviceIds || [] }),
   disconnectOne: (deviceId: string) =>
     api.post('/device/disconnect-one', { device_id: deviceId }),
+  getWebcamExposure: (deviceId: string) =>
+    api.get(`/device/webcam-exposure/${deviceId}`),
+  setWebcamExposure: (deviceId: string, value?: number, auto?: boolean) =>
+    api.post(`/device/webcam-exposure/${deviceId}`, { value, auto }),
 };
 
 // Scenario APIs

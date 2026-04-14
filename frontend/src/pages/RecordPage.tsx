@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Button, Card, Col, Image, Input, Modal, Radio, Row, Select, Slider, Space, InputNumber, message, List, Tag, Popover, Tooltip, Splitter } from 'antd';
-import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined, CopyOutlined, ZoomInOutlined, ZoomOutOutlined, HolderOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined, CopyOutlined, ZoomInOutlined, ZoomOutOutlined, HolderOutlined, SettingOutlined } from '@ant-design/icons';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -306,6 +306,11 @@ export default function RecordPage() {
   const [repeatTapCount, setRepeatTapCount] = useState(5);
   const [repeatTapInterval, setRepeatTapInterval] = useState(100);
   const repeatTapCoordsRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  // 웹캠 설정(노출) 모달
+  const [webcamExposureOpen, setWebcamExposureOpen] = useState(false);
+  const [webcamExposureInfo, setWebcamExposureInfo] = useState<{ supported: boolean; value?: number; auto?: boolean; min?: number; max?: number; step?: number }>({ supported: false });
+  const [webcamExposureLoading, setWebcamExposureLoading] = useState(false);
 
   // 뷰포트 크롭 상태 localStorage 로드 (디바이스 변경 시)
   useEffect(() => {
@@ -623,6 +628,21 @@ export default function RecordPage() {
     }
     return params;
   }, [allDevices, screenType]);
+
+  // 웹캠 노출 설정 모달 열기 — 현재 값을 먼저 조회 후 모달 open
+  const openWebcamExposureModal = useCallback(async () => {
+    if (!screenshotDeviceId) return;
+    setWebcamExposureOpen(true);
+    setWebcamExposureLoading(true);
+    try {
+      const res = await deviceApi.getWebcamExposure(screenshotDeviceId);
+      setWebcamExposureInfo(res.data);
+    } catch (err: any) {
+      message.error(err?.response?.data?.detail || t('record.webcamExposureFailed'));
+      setWebcamExposureInfo({ supported: false });
+    }
+    setWebcamExposureLoading(false);
+  }, [screenshotDeviceId, message, t]);
 
   // Execute or record an action (화면 제스처/HKMC키 전용 — 모듈 스텝 추가와는 별개 경로)
   const executeAction = useCallback(async (action: string, params: Record<string, any>, desc: string) => {
@@ -2609,16 +2629,26 @@ export default function RecordPage() {
                       }}
                     />
                   </Tooltip>
-                  <Tooltip title={t('record.repeatTap')}>
-                    <Button
-                      size="small"
-                      type={repeatTapMode ? 'primary' : 'default'}
-                      onClick={() => setRepeatTapMode(v => !v)}
-                      style={{ fontWeight: repeatTapMode ? 700 : 400 }}
-                    >
-                      {t('record.repeatTapShort')}
-                    </Button>
-                  </Tooltip>
+                  {screenDevice?.type === 'webcam' ? (
+                    <Tooltip title={t('record.webcamSettings')}>
+                      <Button
+                        size="small"
+                        icon={<SettingOutlined />}
+                        onClick={() => openWebcamExposureModal()}
+                      />
+                    </Tooltip>
+                  ) : (
+                    <Tooltip title={t('record.repeatTap')}>
+                      <Button
+                        size="small"
+                        type={repeatTapMode ? 'primary' : 'default'}
+                        onClick={() => setRepeatTapMode(v => !v)}
+                        style={{ fontWeight: repeatTapMode ? 700 : 400 }}
+                      >
+                        {t('record.repeatTapShort')}
+                      </Button>
+                    </Tooltip>
+                  )}
                   {isScreenAdb && <>
                   <Tooltip title={t('record.multiTouch')}>
                     <Radio.Group
@@ -3583,6 +3613,81 @@ export default function RecordPage() {
             <div style={{ marginBottom: 4, fontSize: 13 }}>{t('record.repeatTapInterval')}</div>
             <InputNumber min={10} max={5000} step={10} value={repeatTapInterval} onChange={v => setRepeatTapInterval(v ?? 100)} style={{ width: '100%' }} addonAfter="ms" />
           </div>
+        </Space>
+      </Modal>
+
+      {/* 웹캠 설정(노출) 모달 */}
+      <Modal
+        title={t('record.webcamSettings')}
+        open={webcamExposureOpen}
+        onCancel={() => setWebcamExposureOpen(false)}
+        footer={null}
+        width={420}
+      >
+        <Space direction="vertical" style={{ width: '100%', marginTop: 12 }} size={16}>
+          {!webcamExposureInfo.supported ? (
+            <div style={{ color: '#888', textAlign: 'center', padding: 16 }}>
+              {t('record.webcamExposureUnsupported')}
+            </div>
+          ) : (
+            <>
+              <div>
+                <div style={{ marginBottom: 8, fontSize: 13 }}>{t('record.webcamExposureMode')}</div>
+                <Radio.Group
+                  value={webcamExposureInfo.auto ? 'auto' : 'manual'}
+                  onChange={async (e) => {
+                    if (!screenshotDeviceId) return;
+                    setWebcamExposureLoading(true);
+                    try {
+                      if (e.target.value === 'auto') {
+                        const res = await deviceApi.setWebcamExposure(screenshotDeviceId, undefined, true);
+                        setWebcamExposureInfo(res.data);
+                      } else {
+                        const res = await deviceApi.setWebcamExposure(screenshotDeviceId, webcamExposureInfo.value ?? -6, false);
+                        setWebcamExposureInfo(res.data);
+                      }
+                    } catch (err: any) {
+                      message.error(err?.response?.data?.detail || t('record.webcamExposureFailed'));
+                    }
+                    setWebcamExposureLoading(false);
+                  }}
+                  optionType="button"
+                  buttonStyle="solid"
+                  disabled={webcamExposureLoading}
+                >
+                  <Radio.Button value="auto">{t('record.webcamExposureAuto')}</Radio.Button>
+                  <Radio.Button value="manual">{t('record.webcamExposureManual')}</Radio.Button>
+                </Radio.Group>
+              </div>
+              <div>
+                <div style={{ marginBottom: 8, fontSize: 13 }}>
+                  {t('record.webcamExposureValue')}: <strong>{webcamExposureInfo.value?.toFixed(1) ?? '-'}</strong>
+                </div>
+                <Slider
+                  min={webcamExposureInfo.min ?? -13}
+                  max={webcamExposureInfo.max ?? 0}
+                  step={webcamExposureInfo.step ?? 1}
+                  value={webcamExposureInfo.value ?? -6}
+                  disabled={webcamExposureInfo.auto || webcamExposureLoading}
+                  onChange={(v) => setWebcamExposureInfo({ ...webcamExposureInfo, value: v })}
+                  onChangeComplete={async (v) => {
+                    if (!screenshotDeviceId) return;
+                    setWebcamExposureLoading(true);
+                    try {
+                      const res = await deviceApi.setWebcamExposure(screenshotDeviceId, v, false);
+                      setWebcamExposureInfo(res.data);
+                    } catch (err: any) {
+                      message.error(err?.response?.data?.detail || t('record.webcamExposureFailed'));
+                    }
+                    setWebcamExposureLoading(false);
+                  }}
+                />
+                <div style={{ fontSize: 11, color: '#888' }}>
+                  {t('record.webcamExposureHint')}
+                </div>
+              </div>
+            </>
+          )}
         </Space>
       </Modal>
 

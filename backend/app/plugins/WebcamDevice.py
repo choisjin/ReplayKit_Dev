@@ -171,6 +171,50 @@ class WebcamDevice:
             "connected": self._is_connected,
         }
 
+    # ------------------------------------------------------------------
+    # Exposure (DSHOW 기준 — CAP_PROP_AUTO_EXPOSURE: 0.25=manual, 0.75=auto)
+    # ------------------------------------------------------------------
+
+    def GetExposure(self) -> dict:
+        """현재 노출값/모드 반환."""
+        if not self._is_connected or self._cap is None:
+            return {"supported": False}
+        try:
+            value = self._cap.get(cv2.CAP_PROP_EXPOSURE)
+            auto = self._cap.get(cv2.CAP_PROP_AUTO_EXPOSURE)
+            return {
+                "supported": True,
+                "value": float(value),
+                "auto": auto >= 0.5,
+                "min": -13.0,
+                "max": 0.0,
+                "step": 1.0,
+            }
+        except Exception as e:
+            logger.warning("WebcamDevice GetExposure failed: %s", e)
+            return {"supported": False}
+
+    def SetExposure(self, value: Optional[float] = None, auto: Optional[bool] = None) -> bool:
+        """노출값 설정. value를 주면 manual 모드로 전환 후 적용. auto=True면 자동 모드."""
+        if not self._is_connected or self._cap is None:
+            return False
+        try:
+            with self._lock:
+                if auto is True:
+                    self._cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.75)
+                    logger.info("WebcamDevice exposure: AUTO (index=%d)", self._device_index)
+                    return True
+                if value is not None:
+                    self._cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)
+                    self._cap.set(cv2.CAP_PROP_EXPOSURE, float(value))
+                    actual = self._cap.get(cv2.CAP_PROP_EXPOSURE)
+                    logger.info("WebcamDevice exposure: MANUAL value=%.2f (actual=%.2f, index=%d)",
+                                value, actual, self._device_index)
+                    return True
+        except Exception as e:
+            logger.warning("WebcamDevice SetExposure failed: %s", e)
+        return False
+
     @staticmethod
     def list_available(max_index: int = 8, max_consecutive_fail: int = 2) -> list[dict]:
         """연결된 웹캠 index 스캔.

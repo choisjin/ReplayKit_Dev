@@ -924,6 +924,44 @@ async def list_hkmc_keys():
     }
 
 
+class WebcamExposureRequest(BaseModel):
+    value: Optional[float] = None
+    auto: Optional[bool] = None
+
+
+@router.get("/webcam-exposure/{device_id}")
+async def get_webcam_exposure(device_id: str):
+    """주 디바이스로 등록된 웹캠의 현재 노출값/모드 조회."""
+    dev = dm.get_device(device_id)
+    if not dev or dev.type != "webcam":
+        raise HTTPException(status_code=400, detail=f"Device {device_id} is not a webcam")
+    cam = dm.get_webcam_device(device_id)
+    if not cam:
+        raise HTTPException(status_code=400, detail=f"Webcam {device_id} not connected")
+    import asyncio
+    loop = asyncio.get_event_loop()
+    info = await loop.run_in_executor(None, cam.GetExposure)
+    return info
+
+
+@router.post("/webcam-exposure/{device_id}")
+async def set_webcam_exposure(device_id: str, req: WebcamExposureRequest):
+    """주 디바이스로 등록된 웹캠의 노출값 설정 (value 또는 auto 지정)."""
+    dev = dm.get_device(device_id)
+    if not dev or dev.type != "webcam":
+        raise HTTPException(status_code=400, detail=f"Device {device_id} is not a webcam")
+    cam = dm.get_webcam_device(device_id)
+    if not cam:
+        raise HTTPException(status_code=400, detail=f"Webcam {device_id} not connected")
+    import asyncio
+    loop = asyncio.get_event_loop()
+    ok = await loop.run_in_executor(None, cam.SetExposure, req.value, req.auto)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Failed to set exposure")
+    info = await loop.run_in_executor(None, cam.GetExposure)
+    return info
+
+
 @router.get("/screenshot/{device_id}")
 async def get_screenshot(device_id: str, fmt: str = "jpeg", screen_type: str = "front_center"):
     """Capture and return a screenshot for a specific primary device."""
