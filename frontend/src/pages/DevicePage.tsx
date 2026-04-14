@@ -217,7 +217,7 @@ export default function DevicePage() {
   const [scannedHkmc, setScannedHkmc] = useState<{ ip: string; port: number; raw: string }[]>([]);
   const [scannedBench, setScannedBench] = useState<{ ip: string; port: number; verified?: boolean }[]>([]);
   const [scannedVision, setScannedVision] = useState<{ id: string; mac: string; model: string; serial: string; vendor: string; tl_type: string; ip: string; subnet?: string; gateway?: string }[]>([]);
-  const [scannedWebcams, setScannedWebcams] = useState<{ index: number; label: string; width: number; height: number }[]>([]);
+  const [scannedWebcams, setScannedWebcams] = useState<{ index: number; label: string; width: number; height: number; already_registered?: boolean; in_use_by_recording?: boolean }[]>([]);
   const [scannedDlt, setScannedDlt] = useState<{ ip: string; port: number }[]>([]);
   const [scannedSmartbench, setScannedSmartbench] = useState<{ ip: string; port: number; label: string; module: string }[]>([]);
   const [scannedSsh, setScannedSsh] = useState<{ ip: string; port: number }[]>([]);
@@ -307,7 +307,7 @@ export default function DevicePage() {
     dlt: { enabled: true, module: 'DLTLogging' },
     bench: { enabled: true, module: 'CCIC_BENCH' },
     vision_camera: { enabled: false, module: 'VisionCamera' },
-    webcam: { enabled: false, module: 'WebcamDevice' },
+    webcam: { enabled: true, module: 'WebcamDevice' },
     ssh: { enabled: true, module: 'SSHManager', port: 22 },
   });
   const [scanCustom, setScanCustom] = useState<{ label: string; type: string; port: number; module: string; enabled: boolean }[]>([]);
@@ -1178,23 +1178,38 @@ export default function DevicePage() {
                             size="small"
                             dataSource={scannedWebcams}
                             pagination={scannedWebcams.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
-                            renderItem={(w) => (
-                              <List.Item actions={[
-                                <Button size="small" type="primary" loading={connecting} onClick={() => {
-                                  setConnectType('webcam');
-                                  setWebcamIndex(w.index);
-                                  setWebcamWidth(w.width || 0);
-                                  setWebcamHeight(w.height || 0);
-                                  setModalTabKey('manual');
-                                }}>{t('common.connect')}</Button>
-                              ]}>
-                                <div>
-                                  <Tag color="purple">{t('device.webcam')}</Tag>
-                                  <strong>{w.label}</strong>
-                                  {w.width > 0 && <Tag style={{ marginLeft: 8 }}>{w.width}×{w.height}</Tag>}
-                                </div>
-                              </List.Item>
-                            )}
+                            renderItem={(w) => {
+                              const busy = !!w.in_use_by_recording;
+                              const dup = !!w.already_registered;
+                              const handleQuickAdd = async () => {
+                                setConnecting(true);
+                                try {
+                                  const extra = { device_index: w.index, width: w.width || 0, height: w.height || 0 };
+                                  const result = await connectDevice('webcam', String(w.index), undefined, '', 'primary', undefined, 'webcam', extra);
+                                  message.success(result);
+                                  closeAddModal();
+                                } catch (e: any) {
+                                  message.error(e.response?.data?.detail || t('device.connectFailed'));
+                                }
+                                setConnecting(false);
+                              };
+                              return (
+                                <List.Item actions={[
+                                  <Button size="small" type="primary" loading={connecting}
+                                          disabled={dup || busy} onClick={handleQuickAdd}>
+                                    {t('common.add')}
+                                  </Button>
+                                ]}>
+                                  <div>
+                                    <Tag color="purple">{t('device.webcam')}</Tag>
+                                    <strong>{w.label}</strong>
+                                    {w.width > 0 && <Tag style={{ marginLeft: 8 }}>{w.width}×{w.height}</Tag>}
+                                    {dup && <Tag color="default" style={{ marginLeft: 8 }}>{t('device.alreadyRegistered')}</Tag>}
+                                    {busy && <Tag color="orange" style={{ marginLeft: 8 }}>{t('device.webcamInUseByRecording')}</Tag>}
+                                  </div>
+                                </List.Item>
+                              );
+                            }}
                           />
                         ),
                       });

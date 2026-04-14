@@ -250,10 +250,22 @@ async def capture_expected_image(req: CaptureExpectedImageRequest):
             if not hkmc:
                 raise HTTPException(status_code=400, detail=f"HKMC device {req.device_id} not connected")
             png_bytes = await hkmc.async_screencap_bytes(screen_type=req.screen_type, fmt="png")
+        elif dev and dev.type == "isap_agent":
+            isap = dm.get_isap_service(req.device_id)
+            if not isap:
+                raise HTTPException(status_code=400, detail=f"iSAP device {req.device_id} not connected")
+            png_bytes = await isap.async_screencap_bytes(screen_type=req.screen_type, fmt="png")
         elif dev and dev.type == "vision_camera":
             cam = dm.get_vision_camera(req.device_id)
             if not cam or not cam.IsConnected():
                 raise HTTPException(status_code=400, detail=f"VisionCamera {req.device_id} not connected")
+            import asyncio
+            loop = asyncio.get_event_loop()
+            png_bytes = await loop.run_in_executor(None, cam.CaptureBytes, "png")
+        elif dev and dev.type == "webcam":
+            cam = dm.get_webcam_device(req.device_id)
+            if not cam or not cam.IsConnected():
+                raise HTTPException(status_code=400, detail=f"Webcam {req.device_id} not connected")
             import asyncio
             loop = asyncio.get_event_loop()
             png_bytes = await loop.run_in_executor(None, cam.CaptureBytes, "png")

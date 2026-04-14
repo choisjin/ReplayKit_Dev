@@ -397,12 +397,13 @@ async def websocket_screen_mirror(websocket: WebSocket):
     is_hkmc = dev and dev.type == "hkmc6th"
     is_isap = dev and dev.type == "isap_agent"
     is_vision_camera = dev and dev.type == "vision_camera"
+    is_webcam = dev and dev.type == "webcam"
 
     dev_type_label = (
         "hkmc" if is_hkmc else
         ("isap" if is_isap else
-         ("vision_camera" if is_vision_camera else "adb"))
-    )
+         ("vision_camera" if is_vision_camera else
+          ("webcam" if is_webcam else "adb"))))
     logger.debug("Screen mirror: device=%s type=%s", target_device_id, dev_type_label)
 
     # scrcpy 제거 — 항상 JPEG screencap 사용
@@ -453,6 +454,24 @@ async def websocket_screen_mirror(websocket: WebSocket):
                             continue
                     else:
                         logger.warning("VisionCam not ready: cam=%s connected=%s",
+                                       cam is not None, cam.IsConnected() if cam else "no_cam")
+                        await asyncio.sleep(0.3)
+                        continue
+                elif is_webcam:
+                    cam = device_manager.get_webcam_device(target_device_id)
+                    if cam and cam.IsConnected():
+                        try:
+                            loop = asyncio.get_event_loop()
+                            jpeg_bytes = await loop.run_in_executor(
+                                None, cam.CaptureBytes, "jpeg"
+                            )
+                            await websocket.send_bytes(jpeg_bytes)
+                        except RuntimeError as we:
+                            logger.debug("Webcam capture error: %s", we)
+                            await asyncio.sleep(0.3)
+                            continue
+                    else:
+                        logger.warning("Webcam not ready: cam=%s connected=%s",
                                        cam is not None, cam.IsConnected() if cam else "no_cam")
                         await asyncio.sleep(0.3)
                         continue

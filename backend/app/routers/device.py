@@ -36,7 +36,7 @@ _DEFAULT_SCAN_SETTINGS = {
         "dlt":            {"enabled": True,  "module": "DLTLogging"},
         "bench":          {"enabled": True,  "module": "CCIC_BENCH"},
         "vision_camera":  {"enabled": False, "module": "VisionCamera"},
-        "webcam":         {"enabled": False, "module": "WebcamDevice"},
+        "webcam":         {"enabled": True,  "module": "WebcamDevice"},
         "ssh":            {"enabled": True,  "module": "SSHManager", "port": 22},
     },
     # type: "tcp" | "udp"
@@ -183,7 +183,28 @@ async def scan_ports():
         async def _scan_webcams():
             from ..plugins.WebcamDevice import WebcamDevice
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, WebcamDevice.list_available)
+            cams = await loop.run_in_executor(None, WebcamDevice.list_available)
+            # 이미 등록된 인덱스는 중복 추가 방지를 위해 표시
+            registered_indices: set[int] = set()
+            for d in dm.list_primary():
+                if d.type == "webcam":
+                    try:
+                        registered_indices.add(int(d.info.get("device_index", -1)))
+                    except (TypeError, ValueError):
+                        pass
+            # 녹화용 싱글톤이 점유 중인 인덱스도 표시
+            recording_index = None
+            try:
+                from ..services.webcam_service import get_webcam_service
+                svc = get_webcam_service()
+                if svc.is_open():
+                    recording_index = getattr(svc, "_device_index", None)
+            except Exception:
+                pass
+            for cam in cams:
+                cam["already_registered"] = cam["index"] in registered_indices
+                cam["in_use_by_recording"] = (recording_index is not None and cam["index"] == recording_index)
+            return cams
         tasks["webcams"] = asyncio.ensure_future(_scan_webcams())
     if _enabled("dlt"):
         tasks["dlt_devices"] = asyncio.ensure_future(dm.scan_dlt())

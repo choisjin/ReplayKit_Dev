@@ -172,21 +172,37 @@ class WebcamDevice:
         }
 
     @staticmethod
-    def list_available(max_index: int = 5) -> list[dict]:
-        """연결된 웹캠 index 스캔."""
+    def list_available(max_index: int = 8, max_consecutive_fail: int = 2) -> list[dict]:
+        """연결된 웹캠 index 스캔.
+
+        max_consecutive_fail: 연속 실패 횟수가 이 값에 도달하면 이른 종료
+        (DirectShow 실패 open은 각각 0.5~2초 걸리므로 불필요한 낭비 차단).
+        """
         found: list[dict] = []
+        consecutive_fail = 0
         for idx in range(max_index):
             cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
             try:
                 if cap.isOpened():
+                    consecutive_fail = 0
                     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 640
                     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 480
-                    found.append({
-                        "index": idx,
-                        "label": f"Camera {idx} ({w}x{h})",
-                        "width": w,
-                        "height": h,
-                    })
+                    # 첫 프레임을 실제로 읽어서 유효성 최종 확인
+                    ret, _ = cap.read()
+                    if ret:
+                        found.append({
+                            "index": idx,
+                            "label": f"Camera {idx} ({w}x{h})",
+                            "width": w,
+                            "height": h,
+                        })
+                    else:
+                        consecutive_fail += 1
+                else:
+                    consecutive_fail += 1
             finally:
                 cap.release()
+            if consecutive_fail >= max_consecutive_fail and not found:
+                # 맨 앞 몇 개가 연속 실패면 더 이상 시도하지 않음
+                break
         return found
