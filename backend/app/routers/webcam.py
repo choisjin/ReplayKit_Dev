@@ -13,17 +13,35 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
 from ..services.webcam_service import get_webcam_service
+from ..dependencies import device_manager
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/webcam", tags=["webcam"])
 
 
+def _get_primary_webcam_indices() -> set[int]:
+    """주 디바이스로 등록된 웹캠 인덱스 집합 (PIP 목록에서 제외용)."""
+    indices: set[int] = set()
+    try:
+        for d in device_manager.list_primary():
+            if d.type == "webcam":
+                try:
+                    indices.add(int(d.info.get("device_index", -1)))
+                except (TypeError, ValueError):
+                    pass
+    except Exception:
+        pass
+    return indices
+
+
 @router.get("/devices")
 async def list_devices():
-    """Enumerate detected webcam devices."""
+    """Enumerate detected webcam devices (주 디바이스로 등록된 인덱스는 제외)."""
     svc = get_webcam_service()
-    return {"devices": svc.list_devices()}
+    excluded = _get_primary_webcam_indices()
+    all_devs = svc.list_devices()
+    return {"devices": [d for d in all_devs if d.get("index") not in excluded]}
 
 
 @router.get("/resolutions/{device_index}")
@@ -44,7 +62,14 @@ class OpenRequest(BaseModel):
 
 @router.post("/open")
 async def open_webcam(req: OpenRequest):
-    """카메라 오픈 + 캡처 스레드 시작."""
+    """카메라 오픈 + 캡처 스레드 시작.
+    주 디바이스로 등록된 인덱스는 거부 (하드웨어 경합 방지).
+    """
+    if req.device_index in _get_primary_webcam_indices():
+        raise HTTPException(
+            status_code=409,
+            detail=f"Webcam index {req.device_index} is registered as a primary device",
+        )
     svc = get_webcam_service()
     ok = svc.open(req.device_index, req.width, req.height)
     if not ok:

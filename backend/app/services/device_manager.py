@@ -1810,6 +1810,16 @@ class DeviceManager:
                         await loop.run_in_executor(None, old.Disconnect)
                     except Exception:
                         pass
+                # 녹화용 싱글톤이 같은 인덱스를 열고 있으면 자동 해제 (하드웨어 경합 방지)
+                try:
+                    target_index = int(dev.info.get("device_index", 0))
+                    from .webcam_service import get_webcam_service
+                    wsvc = get_webcam_service()
+                    if wsvc.is_open() and getattr(wsvc, "_device_index", None) == target_index:
+                        logger.info("Closing recording webcam singleton (index=%d) — device being registered as primary", target_index)
+                        await loop.run_in_executor(None, wsvc.close)
+                except Exception as _e:
+                    logger.debug("Failed to close recording singleton pre-connect: %s", _e)
                 from ..plugins.WebcamDevice import WebcamDevice
                 cam = WebcamDevice(
                     device_index=int(dev.info.get("device_index", 0)),
