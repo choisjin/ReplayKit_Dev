@@ -166,12 +166,4 @@ export const serverApi = {
   powerStatus: () => api.get('/settings/power-status'),
 };
 
-// Custom HKMC keys APIs
-export const customKeysApi = {
-  list: () => api.get('/settings/custom-hkmc-keys'),
-  add: (data: { name: string; group: string; key_name: string; cmd: number; key_code: number; is_dial?: boolean }) =>
-    api.post('/settings/custom-hkmc-keys', data),
-  remove: (keyName: string) => api.delete(`/settings/custom-hkmc-keys/${keyName}`),
-};
-
 export default api;

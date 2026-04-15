@@ -4,7 +4,7 @@ import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOp
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { deviceApi, scenarioApi, customKeysApi } from '../services/api';
+import { deviceApi, scenarioApi } from '../services/api';
 import { useDevice } from '../context/DeviceContext';
 import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from '../i18n';
