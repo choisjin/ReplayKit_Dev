@@ -291,6 +291,20 @@ export default function RecordPage() {
   const [isapKeysModalOpen, setIsapKeysModalOpen] = useState(false);
   const [isapKeysDraft, setIsapKeysDraft] = useState<HkmcKeyInfo[]>([]);
   const [isapKeysSaving, setIsapKeysSaving] = useState(false);
+
+  // Random 스트레스 설정 (localStorage 기반, device + screen_type별)
+  type RandRegion = { x: number; y: number; width: number; height: number } | null;
+  const [randHkKeysConfig, setRandHkKeysConfig] = useState<string[] | null>(null); // null = 전체
+  const [randSkRegion, setRandSkRegion] = useState<RandRegion>(null);
+  const [randDragRegion, setRandDragRegion] = useState<RandRegion>(null);
+  const [randHkModalOpen, setRandHkModalOpen] = useState(false);
+  const [randRegionModal, setRandRegionModal] = useState<null | 'sk' | 'drag'>(null);
+  // Region 모달용 canvas/drag ref
+  const randRegionCanvasRef = useRef<HTMLCanvasElement>(null);
+  const randRegionScreenshotRef = useRef<string>('');
+  const randRegionDragRef = useRef<{ startX: number; startY: number; curX: number; curY: number; active: boolean }>({
+    startX: 0, startY: 0, curX: 0, curY: 0, active: false,
+  });
   const [hkmcSubCommands, setHkmcSubCommands] = useState<Record<string, number>>({});
 
   // HKMC 디스플레이 모드: standard(기본형) / integrated(일체형 — 클러스터+AVN)
@@ -560,6 +574,33 @@ export default function RecordPage() {
     }).catch(() => { setModuleFunctions([]); setModuleDescription(''); });
   }, [selectedModuleName]);
 
+  // Random stress 설정: device + screen_type 바뀔 때마다 localStorage에서 로드
+  useEffect(() => {
+    if (!screenshotDeviceId) {
+      setRandHkKeysConfig(null);
+      setRandSkRegion(null);
+      setRandDragRegion(null);
+      return;
+    }
+    const base = `rand_cfg_${screenshotDeviceId}_${screenType || 'default'}`;
+    try {
+      const hk = localStorage.getItem(`${base}_hk`);
+      setRandHkKeysConfig(hk ? JSON.parse(hk) : null);
+    } catch { setRandHkKeysConfig(null); }
+    try {
+      const sk = localStorage.getItem(`${base}_sk`);
+      setRandSkRegion(sk ? JSON.parse(sk) : null);
+    } catch { setRandSkRegion(null); }
+    try {
+      const drag = localStorage.getItem(`${base}_drag`);
+      setRandDragRegion(drag ? JSON.parse(drag) : null);
+    } catch { setRandDragRegion(null); }
+  }, [screenshotDeviceId, screenType]);
+
+  const _randStorageBase = useCallback(() =>
+    screenshotDeviceId ? `rand_cfg_${screenshotDeviceId}_${screenType || 'default'}` : '',
+    [screenshotDeviceId, screenType]);
+
   // Fetch hardware keys — HKMC/iSAP 모두 선택된 디바이스별로 재조회
   // (각 디바이스의 info에 저장된 per-device override가 병합되어 반환됨)
   useEffect(() => {
@@ -749,6 +790,192 @@ export default function RecordPage() {
       }
     }
   }, [recording, screenshotDeviceId, delayMs, refreshScreenshot, resolveAction, resolveParams, steps.length, primaryDevices]);
+
+  // ----------------------------------------------------------------
+  // Random stress helpers (HKMC/iSAP 전용)
+  // 참조 스트레스 스크립트(CCIC) RAND_HK/SK/DRAG 패턴을 버튼화
+  // ----------------------------------------------------------------
+  const _randBounds = useCallback((): { w: number; h: number } => {
+    // canvas natural → deviceRes 순으로 폴백 (iSAP은 canvas natural이 touch space)
+    const el = canvasRef.current;
+    if (el && el.width > 0 && el.height > 0) return { w: el.width, h: el.height };
+    return { w: deviceRes.width || 1920, h: deviceRes.height || 720 };
+  }, [deviceRes]);
+
+  const _pickRandInRegion = useCallback((region: RandRegion): { x: number; y: number } => {
+    const { w, h } = _randBounds();
+    let x0 = 0, y0 = 0, xMax = w, yMax = h;
+    if (region) {
+      x0 = Math.max(0, region.x);
+      y0 = Math.max(0, region.y);
+      xMax = Math.min(w, region.x + region.width);
+      yMax = Math.min(h, region.y + region.height);
+    }
+    const rw = Math.max(1, xMax - x0);
+    const rh = Math.max(1, yMax - y0);
+    return {
+      x: Math.floor(x0 + Math.random() * rw),
+      y: Math.floor(y0 + Math.random() * rh),
+    };
+  }, [_randBounds]);
+
+  const randHK = useCallback(() => {
+    // 기본 pool: visible=true + dial이 아닌 키
+    let candidates = hkmcKeys.filter(k => k.visible !== false && !k.is_dial);
+    // 사용자 설정 pool이 있으면 교집합으로 제한
+    if (randHkKeysConfig && randHkKeysConfig.length > 0) {
+      const set = new Set(randHkKeysConfig);
+      candidates = candidates.filter(k => set.has(k.name));
+    }
+    if (candidates.length === 0) {
+      message.warning('랜덤 대상 키가 없음 (키 설정 확인)');
+      return;
+    }
+    const k = candidates[Math.floor(Math.random() * candidates.length)];
+    const isLong = Math.random() < 0.2; // 20% 확률 Long press
+    const sub = isLong ? HKMC_LONG_KEY : HKMC_SHORT_KEY;
+    const label = `RAND HK: ${k.name}${isLong ? ' (Long)' : ''}`;
+    executeAction('hkmc_key', { key_name: k.name, sub_cmd: sub, screen_type: screenType }, label);
+  }, [hkmcKeys, randHkKeysConfig, screenType, executeAction]);
+
+  const randSK = useCallback(() => {
+    const { x, y } = _pickRandInRegion(randSkRegion);
+    const label = `RAND SK: (${x},${y})`;
+    executeAction('hkmc_touch', { x, y, screen_type: screenType }, label);
+  }, [_pickRandInRegion, randSkRegion, screenType, executeAction]);
+
+  const randDrag = useCallback(() => {
+    const p1 = _pickRandInRegion(randDragRegion);
+    const p2 = _pickRandInRegion(randDragRegion);
+    const label = `RAND DRAG: (${p1.x},${p1.y})→(${p2.x},${p2.y})`;
+    executeAction('hkmc_swipe', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, duration_ms: 300, screen_type: screenType }, label);
+  }, [_pickRandInRegion, randDragRegion, screenType, executeAction]);
+
+  const allRand = useCallback(() => {
+    // 참조 스크립트 가중치: HK 20% / SK 70% / DRAG 10%
+    const roll = Math.random();
+    if (roll < 0.20) randHK();
+    else if (roll < 0.90) randSK();
+    else randDrag();
+  }, [randHK, randSK, randDrag]);
+
+  // Region 모달 canvas 그리기 (screenshot + 기존/현재 드래그 사각형)
+  const drawRandRegionCanvas = useCallback((dragRect?: { x: number; y: number; w: number; h: number }) => {
+    const canvas = randRegionCanvasRef.current;
+    const src = randRegionScreenshotRef.current;
+    if (!canvas || !src) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const img = new window.Image();
+    img.onload = () => {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      ctx.drawImage(img, 0, 0);
+      // 기존 저장된 영역 (현재 모달 모드 기준)
+      const saved = randRegionModal === 'sk' ? randSkRegion : randRegionModal === 'drag' ? randDragRegion : null;
+      if (saved && !dragRect) {
+        // 바깥 dim + 내부 선명
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(saved.x, saved.y, saved.width, saved.height);
+        ctx.drawImage(img, saved.x, saved.y, saved.width, saved.height,
+                      saved.x, saved.y, saved.width, saved.height);
+        ctx.strokeStyle = '#faad14';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(saved.x, saved.y, saved.width, saved.height);
+        ctx.fillStyle = '#faad14';
+        ctx.font = '22px sans-serif';
+        ctx.fillText(`${saved.width}×${saved.height}`, saved.x + 4, saved.y - 6);
+      }
+      // 현재 드래그 중인 사각형
+      if (dragRect && dragRect.w > 5 && dragRect.h > 5) {
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(dragRect.x, dragRect.y, dragRect.w, dragRect.h);
+        ctx.drawImage(img, dragRect.x, dragRect.y, dragRect.w, dragRect.h,
+                      dragRect.x, dragRect.y, dragRect.w, dragRect.h);
+        ctx.strokeStyle = '#1890ff';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(dragRect.x, dragRect.y, dragRect.w, dragRect.h);
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#1890ff';
+        ctx.font = '22px sans-serif';
+        ctx.fillText(`${dragRect.w}×${dragRect.h}`, dragRect.x + 4, dragRect.y - 6);
+      }
+    };
+    img.src = src;
+  }, [randRegionModal, randSkRegion, randDragRegion]);
+
+  const randRegionMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = randRegionCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top) * scaleY);
+    randRegionDragRef.current = { startX: x, startY: y, curX: x, curY: y, active: true };
+  }, []);
+
+  const randRegionMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!randRegionDragRef.current.active) return;
+    const canvas = randRegionCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = Math.round((e.clientX - rect.left) * scaleX);
+    const y = Math.round((e.clientY - rect.top) * scaleY);
+    randRegionDragRef.current.curX = x;
+    randRegionDragRef.current.curY = y;
+    const { startX, startY } = randRegionDragRef.current;
+    drawRandRegionCanvas({
+      x: Math.min(startX, x), y: Math.min(startY, y),
+      w: Math.abs(x - startX), h: Math.abs(y - startY),
+    });
+  }, [drawRandRegionCanvas]);
+
+  const randRegionMouseUp = useCallback(() => {
+    if (!randRegionDragRef.current.active) return;
+    randRegionDragRef.current.active = false;
+    const { startX, startY, curX, curY } = randRegionDragRef.current;
+    const rx = Math.min(startX, curX);
+    const ry = Math.min(startY, curY);
+    const rw = Math.abs(curX - startX);
+    const rh = Math.abs(curY - startY);
+    if (rw > 10 && rh > 10) {
+      const region = { x: rx, y: ry, width: rw, height: rh };
+      const base = _randStorageBase();
+      if (randRegionModal === 'sk') {
+        setRandSkRegion(region);
+        if (base) localStorage.setItem(`${base}_sk`, JSON.stringify(region));
+      } else if (randRegionModal === 'drag') {
+        setRandDragRegion(region);
+        if (base) localStorage.setItem(`${base}_drag`, JSON.stringify(region));
+      }
+      // 저장 후 다시 그려서 노란 테두리로 표시
+      setTimeout(() => drawRandRegionCanvas(), 30);
+    }
+  }, [_randStorageBase, randRegionModal, drawRandRegionCanvas]);
+
+  const openRandRegionModal = useCallback(async (mode: 'sk' | 'drag') => {
+    randRegionScreenshotRef.current = await snapshotScreenshot();
+    setRandRegionModal(mode);
+    setTimeout(() => drawRandRegionCanvas(), 80);
+  }, [snapshotScreenshot, drawRandRegionCanvas]);
+
+  const clearRandRegion = useCallback((mode: 'sk' | 'drag') => {
+    const base = _randStorageBase();
+    if (mode === 'sk') {
+      setRandSkRegion(null);
+      if (base) localStorage.removeItem(`${base}_sk`);
+    } else {
+      setRandDragRegion(null);
+      if (base) localStorage.removeItem(`${base}_drag`);
+    }
+    setTimeout(() => drawRandRegionCanvas(), 30);
+  }, [_randStorageBase, drawRandRegionCanvas]);
 
   // --- ROI Modal logic ---
   // Draw on the ROI canvas using the captured screenshot (not reactive screenshot)
@@ -2875,10 +3102,43 @@ export default function RecordPage() {
                         );
                       })}
                       {canConfigKeys && (
-                        <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, marginTop: 4 }}
-                          onClick={() => { setIsapKeysDraft(hkmcKeys.map(k => ({ ...k }))); setIsapKeysModalOpen(true); }}>
-                          키 설정
-                        </Button>
+                        <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+                          <span style={{ fontSize: 11, color: subTextColor, marginRight: 2 }}>Random:</span>
+                          {/* HK */}
+                          <Button.Group>
+                            <Button size="small" danger style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                              onClick={randHK}>
+                              HK{randHkKeysConfig && randHkKeysConfig.length > 0 ? ` (${randHkKeysConfig.length})` : ''}
+                            </Button>
+                            <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
+                              onClick={() => setRandHkModalOpen(true)} title="HK 설정" />
+                          </Button.Group>
+                          {/* SK */}
+                          <Button.Group style={{ marginLeft: 2 }}>
+                            <Button size="small" danger style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                              onClick={randSK}>
+                              SK{randSkRegion ? ' ▣' : ''}
+                            </Button>
+                            <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
+                              onClick={() => openRandRegionModal('sk')} title="SK 영역 설정" />
+                          </Button.Group>
+                          {/* DRAG */}
+                          <Button.Group style={{ marginLeft: 2 }}>
+                            <Button size="small" danger style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                              onClick={randDrag}>
+                              DRAG{randDragRegion ? ' ▣' : ''}
+                            </Button>
+                            <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
+                              onClick={() => openRandRegionModal('drag')} title="DRAG 영역 설정" />
+                          </Button.Group>
+                          <Button size="small" type="primary" danger style={{ fontSize: 10, padding: '0 8px', height: 22, marginLeft: 4 }}
+                            onClick={allRand}>ALL RAND</Button>
+                          <span style={{ flex: 1 }} />
+                          <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, height: 22 }}
+                            onClick={() => { setIsapKeysDraft(hkmcKeys.map(k => ({ ...k }))); setIsapKeysModalOpen(true); }}>
+                            키 설정
+                          </Button>
+                        </div>
                       )}
                     </div>
                   );
@@ -3904,6 +4164,145 @@ export default function RecordPage() {
           })()}
         </div>
       </Modal>
+
+      {/* RAND HK 설정 모달 — 랜덤 HK 풀 선택 */}
+      <Modal
+        title={`RAND HK 설정${screenshotDeviceId ? ` — ${screenshotDeviceId}` : ''}`}
+        open={randHkModalOpen}
+        onCancel={() => setRandHkModalOpen(false)}
+        width={640}
+        okText="닫기"
+        cancelButtonProps={{ style: { display: 'none' } }}
+        onOk={() => setRandHkModalOpen(false)}
+      >
+        <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          <div style={{ fontSize: 11, color: subTextColor, marginBottom: 8 }}>
+            RAND HK 실행 시 무작위로 선택될 키 풀을 지정합니다. 아무것도 선택하지 않으면 표시 중인 키(dial 제외) 전체가 사용됩니다.
+          </div>
+          <Space style={{ marginBottom: 8 }}>
+            <Button size="small" onClick={() => {
+              // all visible non-dial keys
+              const all = hkmcKeys.filter(k => k.visible !== false && !k.is_dial).map(k => k.name);
+              setRandHkKeysConfig(all);
+              const base = _randStorageBase();
+              if (base) localStorage.setItem(`${base}_hk`, JSON.stringify(all));
+            }}>전체 선택</Button>
+            <Button size="small" onClick={() => {
+              setRandHkKeysConfig([]);
+              const base = _randStorageBase();
+              if (base) localStorage.setItem(`${base}_hk`, JSON.stringify([]));
+            }}>전체 해제</Button>
+            <Button size="small" type="link" onClick={() => {
+              // null = 기본(전체)로 복구
+              setRandHkKeysConfig(null);
+              const base = _randStorageBase();
+              if (base) localStorage.removeItem(`${base}_hk`);
+            }}>기본값으로 복구</Button>
+            <span style={{ fontSize: 11, color: subTextColor }}>
+              현재: {randHkKeysConfig == null ? '기본(전체)' : `${randHkKeysConfig.length}개 선택`}
+            </span>
+          </Space>
+          {(() => {
+            const GROUP_ORDER = ['MKBD', 'MKBD2', 'CCP', 'RRC', 'SWRC', 'SWRC2', 'MIRROR', 'OVERHEAD', 'TRIP', 'GRIP', 'OPTICAL', 'RHEOSTAT'];
+            const pool = hkmcKeys.filter(k => k.visible !== false && !k.is_dial);
+            const byGroup: Record<string, HkmcKeyInfo[]> = {};
+            pool.forEach(k => {
+              const g = k.group || 'OTHER';
+              if (!byGroup[g]) byGroup[g] = [];
+              byGroup[g].push(k);
+            });
+            const groups = [
+              ...GROUP_ORDER.filter(g => byGroup[g]),
+              ...Object.keys(byGroup).filter(g => !GROUP_ORDER.includes(g)).sort(),
+            ];
+            const selected = new Set(randHkKeysConfig || pool.map(k => k.name));
+            const toggle = (name: string) => {
+              const next = new Set(selected);
+              if (next.has(name)) next.delete(name); else next.add(name);
+              const arr = Array.from(next);
+              setRandHkKeysConfig(arr);
+              const base = _randStorageBase();
+              if (base) localStorage.setItem(`${base}_hk`, JSON.stringify(arr));
+            };
+            return groups.map(group => {
+              const items = byGroup[group];
+              const groupSelected = items.filter(k => selected.has(k.name)).length;
+              const allOn = groupSelected === items.length;
+              return (
+                <details key={group} open style={{ marginBottom: 8, border: '1px solid #2a2a2a', borderRadius: 4, padding: 6 }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                    {group} <span style={{ color: '#888', fontSize: 11 }}>({groupSelected}/{items.length})</span>
+                    <Button size="small" type="link" style={{ fontSize: 10, padding: '0 4px' }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const next = new Set(selected);
+                        items.forEach(k => { if (allOn) next.delete(k.name); else next.add(k.name); });
+                        const arr = Array.from(next);
+                        setRandHkKeysConfig(arr);
+                        const base = _randStorageBase();
+                        if (base) localStorage.setItem(`${base}_hk`, JSON.stringify(arr));
+                      }}>{allOn ? '그룹 해제' : '그룹 선택'}</Button>
+                  </summary>
+                  <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {items.map(k => {
+                      const on = selected.has(k.name);
+                      return (
+                        <Button key={k.name} size="small" type={on ? 'primary' : 'default'}
+                          style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                          onClick={() => toggle(k.name)}>
+                          {k.name.replace(`${group}_`, '')}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </details>
+              );
+            });
+          })()}
+        </div>
+      </Modal>
+
+      {/* RAND SK / DRAG 영역 설정 모달 — 현재 화면 스크린샷에 드래그로 영역 지정 */}
+      <Modal
+        title={`RAND ${randRegionModal === 'sk' ? 'SK' : 'DRAG'} 영역 설정${screenshotDeviceId ? ` — ${screenshotDeviceId}` : ''}`}
+        open={randRegionModal !== null}
+        onCancel={() => setRandRegionModal(null)}
+        width={'80vw'}
+        style={{ top: 20 }}
+        okText="닫기"
+        cancelButtonProps={{ style: { display: 'none' } }}
+        onOk={() => setRandRegionModal(null)}
+      >
+        <div style={{ fontSize: 11, color: subTextColor, marginBottom: 8 }}>
+          스크린샷 위에서 드래그하여 영역을 지정하면 즉시 저장됩니다. 지정하지 않으면 전체 화면이 사용됩니다.
+        </div>
+        <Space style={{ marginBottom: 8 }}>
+          <Button size="small" onClick={() => randRegionModal && clearRandRegion(randRegionModal)}>
+            영역 해제 (전체 화면 사용)
+          </Button>
+          <Button size="small" onClick={async () => {
+            randRegionScreenshotRef.current = await snapshotScreenshot();
+            drawRandRegionCanvas();
+          }}>스크린샷 새로고침</Button>
+          <span style={{ fontSize: 11, color: subTextColor }}>
+            {(() => {
+              const r = randRegionModal === 'sk' ? randSkRegion : randDragRegion;
+              return r ? `현재: ${r.x},${r.y} ${r.width}×${r.height}` : '현재: 전체 화면';
+            })()}
+          </span>
+        </Space>
+        <div style={{ maxHeight: '70vh', overflow: 'auto', border: '1px solid #333' }}>
+          <canvas
+            ref={randRegionCanvasRef}
+            onMouseDown={randRegionMouseDown}
+            onMouseMove={randRegionMouseMove}
+            onMouseUp={randRegionMouseUp}
+            onMouseLeave={() => { if (randRegionDragRef.current.active) randRegionMouseUp(); }}
+            style={{ maxWidth: '100%', display: 'block', cursor: 'crosshair', userSelect: 'none' }}
+          />
+        </div>
+      </Modal>
+
       <Image
         src={annotatedPreviewSrc}
         style={{ display: 'none' }}
