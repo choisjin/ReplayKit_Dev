@@ -922,9 +922,16 @@ export default function RecordPage() {
     if (rw > 10 && rh > 10 && captureStepIndex != null && scenarioName && screenshotDeviceId) {
       const crop = { x: rx, y: ry, width: rw, height: rh };
       await ensureSavedForImageOp();
+      // 모달에 표시된 이미지(모달 열 때 찍어둔 스냅샷)를 그대로 사용해야 함.
+      // 백엔드에서 다시 캡처하면 그사이 화면이 바뀌어(예: 팝업이 사라짐) 잘못된 영역이 크롭됨.
+      const modalImage = captureScreenshotRef.current;
+      if (!modalImage) {
+        message.error(t('record.expectedImageSaveFailed'));
+        return;
+      }
       try {
-        const res = await scenarioApi.captureExpectedImage(
-          scenarioName, captureStepIndex, screenshotDeviceId, crop, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined,
+        const res = await scenarioApi.saveExpectedImage(
+          scenarioName, captureStepIndex, modalImage, crop,
         );
         setSteps(prev => prev.map((s, i) => i === captureStepIndex ? { ...s, expected_image: res.data.filename, roi: crop, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now(), exclude_rois: [], expected_images: [] } : s));
         message.success(t('record.cropExpectedSaved', { index: captureStepIndex + 1, size: `${rw}×${rh}` }));
@@ -935,7 +942,7 @@ export default function RecordPage() {
         message.error(e.response?.data?.detail || t('record.expectedImageSaveFailed'));
       }
     }
-  }, [captureStepIndex, scenarioName, screenshotDeviceId, isScreenHkmc, hasMultiDisplay, screenType, t]);
+  }, [captureStepIndex, scenarioName, screenshotDeviceId, t]);
 
   useEffect(() => {
     if (captureModalOpen) setTimeout(() => drawCaptureCanvas(), 50);
@@ -1097,12 +1104,17 @@ export default function RecordPage() {
     const rw = Math.abs(curX - startX);
     const rh = Math.abs(curY - startY);
     if (rw > 10 && rh > 10 && excludeRoiEditingIndex != null) {
-      // 기대 이미지가 없으면 자동 캡처
+      // 기대 이미지가 없으면 자동 저장 — 모달에 표시된 스냅샷 사용 (백엔드 재캡처 금지)
       const step = steps[excludeRoiEditingIndex];
       if (!step?.expected_image && scenarioName && screenshotDeviceId) {
         await ensureSavedForImageOp();
+        const modalImage = excludeRoiScreenshotRef.current;
+        if (!modalImage) {
+          message.error(t('record.cropSaveFailed'));
+          return;
+        }
         try {
-          const capRes = await scenarioApi.captureExpectedImage(scenarioName, excludeRoiEditingIndex, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
+          const capRes = await scenarioApi.saveExpectedImage(scenarioName, excludeRoiEditingIndex, modalImage);
           setSteps(prev => prev.map((s, i) => i === excludeRoiEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now(), roi: null, expected_images: [] } : s));
         } catch (e: any) {
           message.error(e.response?.data?.detail || t('record.cropSaveFailed'));
@@ -1243,9 +1255,14 @@ export default function RecordPage() {
       // 캔버스 ↔ deviceRes 비율 변환 (H.264 다운스케일 대응)
       const crop = { x: rx, y: ry, width: rw, height: rh };
       await ensureSavedForImageOp();
+      // 모달에 표시된 스냅샷을 기대이미지로 저장 — 백엔드 재캡처 시 팝업 사라진 최신 화면이 들어오는 버그 회피
+      const modalImage = multiCropScreenshotRef.current;
+      if (!modalImage) {
+        message.error(t('record.cropSaveFailed'));
+        return;
+      }
       try {
-        // 현재 화면으로 기대이미지 갱신 (모달 스냅샷과 좌표 일치 보장)
-        const capRes = await scenarioApi.captureExpectedImage(scenarioName, multiCropEditingIndex, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined, true);
+        const capRes = await scenarioApi.saveExpectedImage(scenarioName, multiCropEditingIndex, modalImage);
         setSteps(prev => prev.map((s, i) => i === multiCropEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now(), roi: null, exclude_rois: [] } : s));
         const replaceIdx = multiCropSelectedIdx ?? undefined;
         const res = await scenarioApi.cropFromExpected(scenarioName, multiCropEditingIndex, crop, '', replaceIdx);
