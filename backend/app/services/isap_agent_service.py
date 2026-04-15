@@ -511,19 +511,47 @@ class ISAPAgentService:
         with self._send_lock:
             self._make_send_packet(CMD_GETIMG, sub_cmd, 0, data)
 
+    def _stored_screen_size_raw(self, screen_type: str) -> tuple[int, int]:
+        """저장된 스크린 사이즈 (default fallback 적용 전)."""
+        m = {
+            "front_center": (self.screen_width_front, self.screen_height_front),
+            "rear_left":    (self.screen_width_rear_l, self.screen_height_rear_l),
+            "rear_right":   (self.screen_width_rear_r, self.screen_height_rear_r),
+            "cluster":      (self.screen_width_cluster, self.screen_height_cluster),
+            "hud":          (self.screen_width_front, self.screen_height_front),
+        }
+        return m.get(screen_type, (0, 0))
+
+    def _set_screen_size(self, screen_type: str, w: int, h: int) -> None:
+        if screen_type in ("front_center", "hud"):
+            self.screen_width_front, self.screen_height_front = w, h
+        elif screen_type == "rear_left":
+            self.screen_width_rear_l, self.screen_height_rear_l = w, h
+        elif screen_type == "rear_right":
+            self.screen_width_rear_r, self.screen_height_rear_r = w, h
+        elif screen_type == "cluster":
+            self.screen_width_cluster, self.screen_height_cluster = w, h
+
     def screencap_bytes(self, screen_type: str = "front_center",
                         fmt: str = "jpeg", timeout: float = 10.0) -> bytes:
         """화면 캡쳐 후 지정 포맷의 바이트 반환.
 
         Agent가 JPEG/PNG/BMP를 직접 지원하면 변환 없이 반환.
+
+        Agent가 reported screen size와 다른 해상도로 JPEG를 보낼 수 있다.
+        - GET_SCREENSIZE가 성공한 경우: agent의 touch 좌표계 = reported size이므로
+          JPEG를 reported size로 리사이즈해서 픽셀-터치좌표 1:1 매핑을 보장
+        - GET_SCREENSIZE가 실패해서 default(1920x720)를 쓰는 경우: 실제 JPEG
+          크기로 stored size를 업데이트하여 자기 보정 (다음 fetchDevices 시 프론트
+          deviceRes 갱신)
         """
         fmt_map = {"jpeg": IMG_JPEG, "png": IMG_PNG, "bmp": IMG_BMP24}
         sub_cmd = fmt_map.get(fmt, IMG_JPEG)
 
         with self._capture_lock:
-            w, h = self.get_screen_size(screen_type)
+            req_w, req_h = self.get_screen_size(screen_type)
             self._img_filename = ""
-            self._request_img(0, 0, w, h, screen_type, sub_cmd)
+            self._request_img(0, 0, req_w, req_h, screen_type, sub_cmd)
 
             if not self._img_event.wait(timeout=timeout):
                 raise TimeoutError(f"iSAP screenshot timeout ({timeout}s) for {screen_type}")
@@ -532,22 +560,42 @@ class ISAPAgentService:
             if not raw:
                 raise ValueError("iSAP empty image buffer")
 
-        # Agent가 요청한 포맷으로 직접 보내므로 보통 그대로 반환 가능.
-        # 혹시 BMP로만 응답하는 agent면 변환.
-        if fmt in ("jpeg", "png") and raw[:3] not in (b"\xff\xd8\xff", b"\x89PN"):
-            try:
-                import cv2
-                import numpy as np
-                arr = np.frombuffer(raw, dtype=np.uint8)
-                img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-                if img is not None:
-                    ext = ".jpg" if fmt == "jpeg" else ".png"
-                    params = [cv2.IMWRITE_JPEG_QUALITY, 60] if fmt == "jpeg" else []
-                    _, buf = cv2.imencode(ext, img, params)
-                    return buf.tobytes()
-            except Exception:
-                pass
-        return raw
+        try:
+            import cv2
+            import numpy as np
+            arr = np.frombuffer(raw, dtype=np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img is None:
+                return raw
+            actual_h, actual_w = img.shape[:2]
+
+            stored_w, stored_h = self._stored_screen_size_raw(screen_type)
+            agent_responded = stored_w > 0 and stored_h > 0
+
+            if (actual_w, actual_h) != (req_w, req_h):
+                if not getattr(self, "_size_warn_seen", None):
+                    self._size_warn_seen = set()
+                key = f"{screen_type}:{actual_w}x{actual_h}vs{req_w}x{req_h}:agent={agent_responded}"
+                if key not in self._size_warn_seen:
+                    self._size_warn_seen.add(key)
+                    logger.warning(
+                        "iSAP %s: JPEG %dx%d != requested %dx%d (agent_get_size=%s)",
+                        screen_type, actual_w, actual_h, req_w, req_h, agent_responded,
+                    )
+                if agent_responded:
+                    # Agent가 명시적으로 알려준 size로 리사이즈 — touch 좌표계 일치
+                    img = cv2.resize(img, (req_w, req_h), interpolation=cv2.INTER_AREA)
+                else:
+                    # Default fallback이었다면 실제 JPEG 크기로 stored size 갱신
+                    self._set_screen_size(screen_type, actual_w, actual_h)
+
+            ext = ".jpg" if fmt == "jpeg" else ".png"
+            params = [cv2.IMWRITE_JPEG_QUALITY, 60] if fmt == "jpeg" else []
+            _, buf = cv2.imencode(ext, img, params)
+            return buf.tobytes()
+        except Exception as e:
+            logger.debug("iSAP image post-process failed: %s — returning raw", e)
+            return raw
 
     def screencap(self, output_path: str, screen_type: str = "front_center",
                   timeout: float = 10.0, fmt: str = "png") -> str:
