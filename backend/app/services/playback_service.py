@@ -815,7 +815,72 @@ class PlaybackService:
             step.id,
             t1 - t0, t2 - t1, t3 - t2, t4 - t3, t_end - t4, t_end - start_time,
         )
+        # RAND 스텝은 random_log.txt에 별도 기록 + step 메시지 보강
+        # (description이 "RAND " 로 시작하면 RAND 출처로 간주 — 프론트 randHK/SK/DRAG가 그렇게 라벨함)
+        try:
+            desc = (step.description or "")
+            if desc.startswith("RAND "):
+                self._log_random_step(scenario_name, step, step_result, repeat_index)
+        except Exception as _e:
+            logger.debug("random log write failed: %s", _e)
         return step_result
+
+    def _format_random_action(self, step: Step) -> str:
+        """RAND 스텝의 실제 동작을 사람이 읽기 쉬운 한 줄로 요약."""
+        p = step.params or {}
+        t = step.type
+        if t == StepType.HKMC_KEY:
+            kn = p.get("key_name", "")
+            sub = p.get("sub_cmd", 0x43)
+            sub_label = "LONG" if sub == 0x44 else "SHORT" if sub == 0x43 else f"sub=0x{int(sub):02X}"
+            scr = p.get("screen_type", "")
+            return f"HK key={kn} {sub_label} screen={scr}"
+        if t == StepType.HKMC_TOUCH:
+            return f"SK ({p.get('x',0)},{p.get('y',0)}) screen={p.get('screen_type','')}"
+        if t == StepType.HKMC_SWIPE:
+            return f"DRAG ({p.get('x1',0)},{p.get('y1',0)})→({p.get('x2',0)},{p.get('y2',0)}) {p.get('duration_ms',0)}ms screen={p.get('screen_type','')}"
+        # 일반 ADB 등도 혹시 RAND 라벨이 붙으면 동일 포맷으로
+        return f"{t.value if hasattr(t, 'value') else t} {p}"
+
+    def _log_random_step(self, scenario_name: str, step: Step,
+                         step_result: StepResult, repeat_index: int) -> None:
+        """RAND 출처 step의 실행 결과를 run_dir/random_log.txt 에 append.
+
+        목적: 스트레스 테스트 시 어느 cycle/step에서 어떤 무작위 동작이
+        실행됐고 결과가 무엇이었는지 추적하기 위함.
+        """
+        # 출력 경로: run_dir 우선, 없으면 scenarioname 기반 results dir
+        run_dir = self._run_output_dir
+        if run_dir is None or not run_dir.exists():
+            # 단일 시나리오 fallback
+            run_dir = RESULTS_DIR / f"{scenario_name}_{self._result_timestamp or 'manual'}"
+            run_dir.mkdir(parents=True, exist_ok=True)
+        log_path = run_dir / "random_log.txt"
+
+        # 첫 줄에 헤더 1회 작성
+        is_new = not log_path.exists()
+        action_summary = self._format_random_action(step)
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        line = (
+            f"{ts}\tcycle={repeat_index}\tstep_id={step.id}\t"
+            f"status={step_result.status}\tduration={step_result.execution_time_ms}ms\t"
+            f"desc={(step.description or '').strip()}\t"
+            f"action={action_summary}\n"
+        )
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                if is_new:
+                    f.write("# Random action log — timestamp / cycle / step_id / status / duration / desc / action\n")
+                f.write(line)
+        except Exception as e:
+            logger.debug("random_log.txt write failed: %s", e)
+
+        # step_result.message 에도 한 줄 요약 prepend (UI 결과 테이블에서 즉시 확인 가능)
+        prefix = f"[RAND] {action_summary}"
+        if step_result.message and step_result.message.strip():
+            step_result.message = f"{prefix}\n{step_result.message}"
+        else:
+            step_result.message = prefix
 
     @staticmethod
     def _format_command(step: Step) -> str:

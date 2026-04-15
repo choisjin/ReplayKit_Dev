@@ -1350,7 +1350,9 @@ export default function ScenarioPage() {
       if (r.status === 'running') return '-';
       // 모듈 실행 결과(CMD 등)는 이미지 없이 메시지만 있을 수 있음
       const isModuleMsg = r.command?.startsWith('CMD::') || r.command?.includes('::');
-      const hasMsgOnly = isModuleMsg && r.message && !r.expected_image && !r.actual_image;
+      // RAND 출처 step은 message에 "[RAND]" 프리픽스 포함
+      const isRandMsg = !!r.message && r.message.startsWith('[RAND]');
+      const hasMsgOnly = (isModuleMsg && r.message && !r.expected_image && !r.actual_image) || isRandMsg;
       if (r.expected_image || r.actual_image || hasMsgOnly) {
         return <Button size="small" onClick={() => setCompareStep(r)}>{hasMsgOnly ? 'LOG' : t('scenario.compare')}</Button>;
       }
