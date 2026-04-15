@@ -39,7 +39,9 @@ NOTI_CONNECTED = 0x5E
 
 # Key commands
 CMD_MKBD = 0x60
-CMD_SWC = 0x70
+CMD_SWC = 0x70       # SWRC (기본)
+CMD_SWRC2 = 0x71     # hkccic SWRC2 (CCIC 전용)
+CMD_MKBD2 = 0x72     # hkccic MKBD2 (CCIC 전용)
 CMD_CCP = 0x80
 CMD_RRC = 0x90
 CMD_MIRROR = 0x92
@@ -67,58 +69,106 @@ SCREEN_CAPTURE_MAP = {
     "rear_right": 128,  # 1 << 7
 }
 
-# Key definitions (commonly used)
+# Key definitions — HKMC 6th Connected Wide + hkccic.
+# 각 디바이스는 info["hkmc_keys"]로 cmd/key/visible/dial을 개별 오버라이드할 수 있다.
 HKMC_KEYS = {
-    # MKBD keys
-    "MKBD_MAP": {"cmd": CMD_MKBD, "key": 0x0B},
-    "MKBD_NAV": {"cmd": CMD_MKBD, "key": 0x0C},
-    "MKBD_RADIO": {"cmd": CMD_MKBD, "key": 0x0D},
-    "MKBD_MEDIA": {"cmd": CMD_MKBD, "key": 0x0E},
-    "MKBD_CUSTOM": {"cmd": CMD_MKBD, "key": 0x11},
-    "MKBD_SETUP": {"cmd": CMD_MKBD, "key": 0x12},
-    "MKBD_HOME": {"cmd": CMD_MKBD, "key": 0x14},
-    "MKBD_PHONE": {"cmd": CMD_MKBD, "key": 0x29},
-    # CCP keys
-    "CCP_ENTER": {"cmd": CMD_CCP, "key": 0x08},
-    "CCP_UP": {"cmd": CMD_CCP, "key": 0x00},
-    "CCP_DOWN": {"cmd": CMD_CCP, "key": 0x01},
-    "CCP_LEFT": {"cmd": CMD_CCP, "key": 0x03},
-    "CCP_RIGHT": {"cmd": CMD_CCP, "key": 0x06},
-    "CCP_BACK": {"cmd": CMD_CCP, "key": 0x09},
-    "CCP_MENU": {"cmd": CMD_CCP, "key": 0x0A},
-    "CCP_HOME": {"cmd": CMD_CCP, "key": 0x14},
-    "CCP_POWER": {"cmd": CMD_CCP, "key": 0x19},
-    "CCP_TUNE_PUSH": {"cmd": CMD_CCP, "key": 0x1E},
-    "CCP_JOGDIAL": {"cmd": CMD_CCP, "key": 0x00, "dial": True},
+    # ---------- MKBD (CMD_MKBD=0x60) — Navi/Non-Navi 공통 ----------
+    "MKBD_MAP":         {"cmd": CMD_MKBD, "key": 0x0B},
+    "MKBD_NAV":         {"cmd": CMD_MKBD, "key": 0x0C},
+    "MKBD_RADIO":       {"cmd": CMD_MKBD, "key": 0x0D},
+    "MKBD_MEDIA":       {"cmd": CMD_MKBD, "key": 0x0E},
+    "MKBD_CUSTOM":      {"cmd": CMD_MKBD, "key": 0x11},
+    "MKBD_SETUP":       {"cmd": CMD_MKBD, "key": 0x12},
+    "MKBD_HOME":        {"cmd": CMD_MKBD, "key": 0x14},   # Non-Navi
+    "MKBD_PHONE":       {"cmd": CMD_MKBD, "key": 0x29},   # Non-Navi
+
+    # ---------- CCP (CMD_CCP=0x80) ----------
+    "CCP_ENTER":        {"cmd": CMD_CCP, "key": 0x08},
+    "CCP_UP":           {"cmd": CMD_CCP, "key": 0x00},
+    "CCP_DOWN":         {"cmd": CMD_CCP, "key": 0x01},
+    "CCP_LEFT":         {"cmd": CMD_CCP, "key": 0x03},
+    "CCP_RIGHT":        {"cmd": CMD_CCP, "key": 0x06},
+    "CCP_BACK":         {"cmd": CMD_CCP, "key": 0x09},
+    "CCP_MENU":         {"cmd": CMD_CCP, "key": 0x0A},
+    "CCP_HOME":         {"cmd": CMD_CCP, "key": 0x14},
+    "CCP_POWER":        {"cmd": CMD_CCP, "key": 0x19},
+    "CCP_TUNE_PUSH":    {"cmd": CMD_CCP, "key": 0x1E},
+    "CCP_JOGDIAL":      {"cmd": CMD_CCP, "key": 0x00, "dial": True},
     "CCP_JOGDIAL_CLOCK_Right": {"cmd": CMD_CCP, "key": 0x00, "dial": True, "direction": 0x00},
-    "CCP_JOGDIAL_CLOCK_Left": {"cmd": CMD_CCP, "key": 0x00, "dial": True, "direction": 0x01},
-    "CCP_VOLUME": {"cmd": CMD_CCP, "key": 0x01, "dial": True},
-    "CCP_TUNE": {"cmd": CMD_CCP, "key": 0x04, "dial": True},
-    # RRC keys
-    "RRC_ENTER": {"cmd": CMD_RRC, "key": 0x08},
-    "RRC_UP": {"cmd": CMD_RRC, "key": 0x00},
-    "RRC_DOWN": {"cmd": CMD_RRC, "key": 0x01},
-    "RRC_LEFT": {"cmd": CMD_RRC, "key": 0x03},
-    "RRC_RIGHT": {"cmd": CMD_RRC, "key": 0x06},
-    "RRC_BACK": {"cmd": CMD_RRC, "key": 0x09},
-    "RRC_MENU": {"cmd": CMD_RRC, "key": 0x0A},
-    "RRC_HOME": {"cmd": CMD_RRC, "key": 0x14},
-    "RRC_POWER_LEFT": {"cmd": CMD_RRC, "key": 0x1A},
-    "RRC_POWER_RIGHT": {"cmd": CMD_RRC, "key": 0x1B},
-    "RRC_JOGDIAL": {"cmd": CMD_RRC, "key": 0x00, "dial": True},
-    # SWRC keys
-    "SWRC_PTT": {"cmd": CMD_SWC, "key": 0x22},
-    "SWRC_MODE": {"cmd": CMD_SWC, "key": 0x23},
-    "SWRC_MUTE": {"cmd": CMD_SWC, "key": 0x24},
-    "SWRC_SEEK_UP": {"cmd": CMD_SWC, "key": 0x0F},
-    "SWRC_SEEK_DOWN": {"cmd": CMD_SWC, "key": 0x10},
-    "SWRC_SEND": {"cmd": CMD_SWC, "key": 0x25},
-    "SWRC_END": {"cmd": CMD_SWC, "key": 0x26},
-    "SWRC_CUSTOM": {"cmd": CMD_SWC, "key": 0x11},
-    "SWRC_VOLUME": {"cmd": CMD_SWC, "key": 0x01, "dial": True},
-    # MIRROR keys
-    "MIRROR_SOS": {"cmd": CMD_MIRROR, "key": 0x27},
-    "MIRROR_CONCIERGE": {"cmd": CMD_MIRROR, "key": 0x2A},
+    "CCP_JOGDIAL_CLOCK_Left":  {"cmd": CMD_CCP, "key": 0x00, "dial": True, "direction": 0x01},
+    "CCP_VOLUME":       {"cmd": CMD_CCP, "key": 0x01, "dial": True},
+    "CCP_TUNE":         {"cmd": CMD_CCP, "key": 0x04, "dial": True},
+
+    # ---------- RRC (CMD_RRC=0x90) — Navi ----------
+    "RRC_ENTER":        {"cmd": CMD_RRC, "key": 0x08},
+    "RRC_UP":           {"cmd": CMD_RRC, "key": 0x00},
+    "RRC_DOWN":         {"cmd": CMD_RRC, "key": 0x01},
+    "RRC_LEFT":         {"cmd": CMD_RRC, "key": 0x03},
+    "RRC_RIGHT":        {"cmd": CMD_RRC, "key": 0x06},
+    "RRC_BACK":         {"cmd": CMD_RRC, "key": 0x09},
+    "RRC_MENU":         {"cmd": CMD_RRC, "key": 0x0A},
+    "RRC_HOME":         {"cmd": CMD_RRC, "key": 0x14},
+    "RRC_POWER_LEFT":   {"cmd": CMD_RRC, "key": 0x1A},
+    "RRC_POWER_RIGHT":  {"cmd": CMD_RRC, "key": 0x1B},
+    "RRC_VOLUME_LEFT":  {"cmd": CMD_RRC, "key": 0x17},
+    "RRC_VOLUME_RIGHT": {"cmd": CMD_RRC, "key": 0x18},
+    "RRC_JOGDIAL":                  {"cmd": CMD_RRC, "key": 0x00, "dial": True},
+    "RRC_VOLUME_LEFT_DIAL":         {"cmd": CMD_RRC, "key": 0x02, "dial": True},
+    "RRC_VOLUME_RIGHT_DIAL":        {"cmd": CMD_RRC, "key": 0x03, "dial": True},
+    # ---------- RRC (CMD_RRC=0x90) — Non-Navi 전용 ----------
+    "RRC_RADIO":        {"cmd": CMD_RRC, "key": 0x0D},
+    "RRC_MEDIA":        {"cmd": CMD_RRC, "key": 0x0E},
+    "RRC_MUTE":         {"cmd": CMD_RRC, "key": 0x24},
+    "RRC_SEEK_UP":      {"cmd": CMD_RRC, "key": 0x0F},
+    "RRC_SEEK_DOWN":    {"cmd": CMD_RRC, "key": 0x10},
+    "RRC_PRESET_UP":    {"cmd": CMD_RRC, "key": 0x20},
+    "RRC_PRESET_DOWN":  {"cmd": CMD_RRC, "key": 0x21},
+    "RRC_POWER":        {"cmd": CMD_RRC, "key": 0x19},
+    "RRC_VOLUME":       {"cmd": CMD_RRC, "key": 0x01, "dial": True},
+
+    # ---------- SWRC (CMD_SWC=0x70) ----------
+    "SWRC_PTT":         {"cmd": CMD_SWC, "key": 0x22},
+    "SWRC_MODE":        {"cmd": CMD_SWC, "key": 0x23},
+    "SWRC_MUTE":        {"cmd": CMD_SWC, "key": 0x24},
+    "SWRC_SEEK_UP":     {"cmd": CMD_SWC, "key": 0x0F},
+    "SWRC_SEEK_DOWN":   {"cmd": CMD_SWC, "key": 0x10},
+    "SWRC_SEND":        {"cmd": CMD_SWC, "key": 0x25},
+    "SWRC_END":         {"cmd": CMD_SWC, "key": 0x26},
+    "SWRC_CUSTOM":      {"cmd": CMD_SWC, "key": 0x11},
+    "SWRC_VOLUME":      {"cmd": CMD_SWC, "key": 0x01, "dial": True},
+
+    # ---------- MIRROR (CMD_MIRROR=0x92) ----------
+    "MIRROR_SOS":                   {"cmd": CMD_MIRROR, "key": 0x27},
+    "MIRROR_CONCIERGE":              {"cmd": CMD_MIRROR, "key": 0x2A},
+    "MIRROR_CONCIERGE_POI":          {"cmd": CMD_MIRROR, "key": 0x2B},
+    "MIRROR_VOICE_LOCAL_SEARCH":     {"cmd": CMD_MIRROR, "key": 0x2C},
+    "MIRROR_ROADSIDE_ASSISTANT":     {"cmd": CMD_MIRROR, "key": 0x2D},
+
+    # ---------- hkccic MKBD2 (CMD_MKBD2=0x72) ----------
+    "MKBD2_TURN_LEFT":  {"cmd": CMD_MKBD2, "key": 0x01},
+    "MKBD2_TURN_RIGHT": {"cmd": CMD_MKBD2, "key": 0x02},
+
+    # ---------- hkccic SWRC2 (CMD_SWRC2=0x71) ----------
+    "SWRC2_BACK":       {"cmd": CMD_SWRC2, "key": 0x01},
+    "SWRC2_UP":         {"cmd": CMD_SWRC2, "key": 0x02},
+    "SWRC2_DOWN":       {"cmd": CMD_SWRC2, "key": 0x03},
+    "SWRC2_OK":         {"cmd": CMD_SWRC2, "key": 0x04},
+    "SWRC2_ENTER":      {"cmd": CMD_SWRC2, "key": 0x05},
+    # SWRC2 Optical mouse events (hkccic)
+    "SWRC2_SWIPE_UP":            {"cmd": CMD_SWRC2, "key": 0x06},
+    "SWRC2_SWIPE_DOWN":          {"cmd": CMD_SWRC2, "key": 0x07},
+    "SWRC2_SWIPE_LEFT":          {"cmd": CMD_SWRC2, "key": 0x08},
+    "SWRC2_SWIPE_RIGHT":         {"cmd": CMD_SWRC2, "key": 0x09},
+    "SWRC2_SWIPE_FAST_UP":       {"cmd": CMD_SWRC2, "key": 0x0A},
+    "SWRC2_SWIPE_FAST_DOWN":     {"cmd": CMD_SWRC2, "key": 0x0B},
+    "SWRC2_SWIPE_FAST_LEFT":     {"cmd": CMD_SWRC2, "key": 0x0C},
+    "SWRC2_SWIPE_FAST_RIGHT":    {"cmd": CMD_SWRC2, "key": 0x0D},
+    "SWRC2_DRAG_UP":             {"cmd": CMD_SWRC2, "key": 0x0E},
+    "SWRC2_DRAG_DOWN":           {"cmd": CMD_SWRC2, "key": 0x0F},
+    "SWRC2_DRAG_LEFT":           {"cmd": CMD_SWRC2, "key": 0x10},
+    "SWRC2_DRAG_RIGHT":          {"cmd": CMD_SWRC2, "key": 0x11},
+    "SWRC2_TOUCH":               {"cmd": CMD_SWRC2, "key": 0x12},
+    "SWRC2_DOUBLE_TOUCH":        {"cmd": CMD_SWRC2, "key": 0x13},
 }
 
 
@@ -150,10 +200,19 @@ class HKMC6thService:
     Each instance manages one TCP connection to one target device.
     """
 
-    def __init__(self, host: str, port: int, device_id: str = ""):
+    def __init__(self, host: str, port: int, device_id: str = "",
+                 key_overrides: Optional[dict[str, dict]] = None):
+        """
+        Args:
+            key_overrides: 디바이스별 키 오버라이드.
+                {name: {"cmd": int, "key": int, "dial": bool, "visible": bool}}
+                visible=False면 UI 표시 제외. cmd/key/dial은 spec default를 덮어쓴다.
+                차종별로 키 값이 다를 때 사용 (Non-Navi/Navi 차이 등).
+        """
         self.host = host
         self.port = port
         self.device_id = device_id
+        self._key_overrides: dict[str, dict] = dict(key_overrides or {})
 
         self._socket: Optional[socket.socket] = None
         self._connected = False
@@ -739,6 +798,28 @@ class HKMC6thService:
         with self._send_lock:
             self._make_send_packet(cmd, sub_cmd, resp, data)
 
+    def resolve_key(self, key_name: str) -> Optional[dict]:
+        """spec default + device override 병합된 키 정보 반환.
+
+        cmd/key/dial/direction 개별 필드만 덮어쓴다 (visible은 UI 전용).
+        """
+        base = HKMC_KEYS.get(key_name, {})
+        ov = self._key_overrides.get(key_name, {})
+        merged = dict(base)
+        for k in ("cmd", "key", "dial", "direction"):
+            if k in ov:
+                merged[k] = ov[k]
+        if "cmd" not in merged or "key" not in merged:
+            return None
+        return merged
+
+    def set_key_overrides(self, overrides: Optional[dict[str, dict]]) -> None:
+        """디바이스 키 오버라이드 일괄 갱신 (설정 모달 저장 시 호출)."""
+        self._key_overrides = dict(overrides or {})
+
+    def get_key_overrides(self) -> dict[str, dict]:
+        return dict(self._key_overrides)
+
     def send_key_by_name(self, key_name: str, sub_cmd: int = SHORT_KEY,
                          monitor: int = 0x00, direction: Optional[int] = None) -> None:
         """Send a hardware key by its name (e.g. 'CCP_ENTER', 'MKBD_MAP').
@@ -749,7 +830,7 @@ class HKMC6thService:
             monitor: Target monitor
             direction: Direction for dial events
         """
-        key_info = HKMC_KEYS.get(key_name)
+        key_info = self.resolve_key(key_name)
         if not key_info:
             raise ValueError(f"Unknown HKMC key: {key_name}")
 

@@ -560,7 +560,8 @@ export default function RecordPage() {
     }).catch(() => { setModuleFunctions([]); setModuleDescription(''); });
   }, [selectedModuleName]);
 
-  // Fetch hardware keys — HKMC는 글로벌, iSAP은 선택된 디바이스별로 재조회
+  // Fetch hardware keys — HKMC/iSAP 모두 선택된 디바이스별로 재조회
+  // (각 디바이스의 info에 저장된 per-device override가 병합되어 반환됨)
   useEffect(() => {
     const dev = primaryDevices.find(d => d.id === screenshotDeviceId);
     if (dev?.type === 'isap_agent') {
@@ -569,12 +570,10 @@ export default function RecordPage() {
         setHkmcSubCommands(res.data.sub_commands || {});
       }).catch(() => {});
     } else if (dev?.type === 'hkmc6th') {
-      if (hkmcKeys.length === 0) {
-        deviceApi.listHkmcKeys().then(res => {
-          setHkmcKeys(res.data.keys || []);
-          setHkmcSubCommands(res.data.sub_commands || {});
-        }).catch(() => {});
-      }
+      deviceApi.listHkmcKeys(dev.id).then(res => {
+        setHkmcKeys(res.data.keys || []);
+        setHkmcSubCommands(res.data.sub_commands || {});
+      }).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screenshotDeviceId, primaryDevices]);
@@ -2813,8 +2812,8 @@ export default function RecordPage() {
                 </div>
                 {isScreenHkmc && hkmcKeys.length > 0 && testingStepIndex == null && (() => {
                   // visible=false 키는 숨김. 그룹별로 details로 묶어 표시.
-                  // 그룹 순서는 spec 문서 순서에 맞춘다 (iSAP 기준).
-                  const GROUP_ORDER = ['MKBD', 'CCP', 'RRC', 'SWRC', 'MIRROR', 'OVERHEAD', 'TRIP', 'GRIP', 'OPTICAL', 'RHEOSTAT'];
+                  // 그룹 순서: HKMC + iSAP 통합 순서
+                  const GROUP_ORDER = ['MKBD', 'MKBD2', 'CCP', 'RRC', 'SWRC', 'SWRC2', 'MIRROR', 'OVERHEAD', 'TRIP', 'GRIP', 'OPTICAL', 'RHEOSTAT'];
                   const visibleKeys = hkmcKeys.filter(k => k.visible !== false);
                   const byGroup: Record<string, HkmcKeyInfo[]> = {};
                   visibleKeys.forEach(k => {
@@ -2826,7 +2825,10 @@ export default function RecordPage() {
                     ...GROUP_ORDER.filter(g => byGroup[g]),
                     ...Object.keys(byGroup).filter(g => !GROUP_ORDER.includes(g)).sort(),
                   ];
-                  const isIsap = screenDevice?.type === 'isap_agent';
+                  const devType = screenDevice?.type;
+                  const isIsap = devType === 'isap_agent';
+                  const isHkmc = devType === 'hkmc6th';
+                  const canConfigKeys = isIsap || isHkmc;
                   return (
                     <div style={{ marginTop: 4, width: '100%' }}>
                       {groups.map((group) => {
@@ -2872,7 +2874,7 @@ export default function RecordPage() {
                           </details>
                         );
                       })}
-                      {isIsap && (
+                      {canConfigKeys && (
                         <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, marginTop: 4 }}
                           onClick={() => { setIsapKeysDraft(hkmcKeys.map(k => ({ ...k }))); setIsapKeysModalOpen(true); }}>
                           키 설정
@@ -3775,9 +3777,9 @@ export default function RecordPage() {
           </div>
         )}
       </Modal>
-      {/* iSAP 키 설정 모달 — 디바이스별 키 값/표시 여부 관리 */}
+      {/* 하드키 설정 모달 — HKMC/iSAP 디바이스별 키 값/표시 여부 관리 */}
       <Modal
-        title={`iSAP 키 설정${screenshotDeviceId ? ` — ${screenshotDeviceId}` : ''}`}
+        title={`키 설정${screenshotDeviceId ? ` — ${screenshotDeviceId}` : ''}`}
         open={isapKeysModalOpen}
         onCancel={() => setIsapKeysModalOpen(false)}
         width={720}
@@ -3786,6 +3788,7 @@ export default function RecordPage() {
         cancelText={t('common.cancel')}
         onOk={async () => {
           if (!screenshotDeviceId) return;
+          const devType = screenDevice?.type;
           setIsapKeysSaving(true);
           try {
             // full dict: 모든 키에 대해 cmd/key/visible 전송 (dial은 spec default 유지)
@@ -3797,10 +3800,17 @@ export default function RecordPage() {
                 visible: k.visible !== false,
               };
             }
-            await deviceApi.updateIsapKeys(screenshotDeviceId, payload);
-            // 저장 후 재조회
-            const r = await deviceApi.listIsapKeys(screenshotDeviceId);
-            setHkmcKeys(r.data.keys || []);
+            if (devType === 'isap_agent') {
+              await deviceApi.updateIsapKeys(screenshotDeviceId, payload);
+              const r = await deviceApi.listIsapKeys(screenshotDeviceId);
+              setHkmcKeys(r.data.keys || []);
+            } else if (devType === 'hkmc6th') {
+              await deviceApi.updateHkmcKeys(screenshotDeviceId, payload);
+              const r = await deviceApi.listHkmcKeys(screenshotDeviceId);
+              setHkmcKeys(r.data.keys || []);
+            } else {
+              throw new Error('Unsupported device type for key config');
+            }
             message.success('저장됨');
             setIsapKeysModalOpen(false);
           } catch (e: any) {
@@ -3815,7 +3825,7 @@ export default function RecordPage() {
             체크박스로 표시할 키를 선택하고, 필요 시 key 값을 차종에 맞게 수정하세요. (cmd는 전문 지식 필요 시에만 변경)
           </div>
           {(() => {
-            const GROUP_ORDER = ['MKBD', 'CCP', 'RRC', 'SWRC', 'MIRROR', 'OVERHEAD', 'TRIP', 'GRIP', 'OPTICAL', 'RHEOSTAT'];
+            const GROUP_ORDER = ['MKBD', 'MKBD2', 'CCP', 'RRC', 'SWRC', 'SWRC2', 'MIRROR', 'OVERHEAD', 'TRIP', 'GRIP', 'OPTICAL', 'RHEOSTAT'];
             const byGroup: Record<string, { k: HkmcKeyInfo; idx: number }[]> = {};
             isapKeysDraft.forEach((k, idx) => {
               const g = k.group || 'OTHER';

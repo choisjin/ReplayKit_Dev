@@ -968,16 +968,33 @@ async def update_isap_keys(req: UpdateIsapKeysRequest):
 
 
 @router.get("/hkmc-keys")
-async def list_hkmc_keys():
-    """List all available HKMC hardware key names."""
+async def list_hkmc_keys(device_id: Optional[str] = None):
+    """List HKMC hardware keys (merged with per-device override).
+
+    device_id가 지정되면 해당 디바이스의 info["hkmc_keys"] 오버라이드를
+    spec default에 병합하여 반환한다.
+    """
     from ..services.hkmc6th_service import HKMC_KEYS, SHORT_KEY, LONG_KEY, PRESS_KEY, RELEASE_KEY, DIAL_ACTION
+    overrides: dict[str, dict] = {}
+    if device_id:
+        dev = dm.get_device(device_id)
+        if dev:
+            overrides = dev.info.get("hkmc_keys") or {}
     keys = []
     for name, info in HKMC_KEYS.items():
-        group = name.split("_")[0]  # MKBD, CCP, RRC, SWRC, MIRROR
+        ov = overrides.get(name, {})
+        group = name.split("_")[0]  # MKBD, MKBD2, CCP, RRC, SWRC, SWRC2, MIRROR
+        cmd = ov.get("cmd", info["cmd"])
+        key = ov.get("key", info["key"])
+        is_dial = ov.get("dial", info.get("dial", False))
+        visible = ov.get("visible", True)
         keys.append({
             "name": name,
             "group": group,
-            "is_dial": info.get("dial", False),
+            "cmd": cmd,
+            "key": key,
+            "is_dial": is_dial,
+            "visible": visible,
         })
     return {
         "keys": keys,
@@ -989,6 +1006,52 @@ async def list_hkmc_keys():
             "DIAL_ACTION": DIAL_ACTION,
         },
     }
+
+
+class UpdateHkmcKeysRequest(BaseModel):
+    device_id: str
+    keys: dict[str, dict]  # name → {cmd?, key?, dial?, visible?}
+
+
+@router.post("/hkmc-keys")
+async def update_hkmc_keys(req: UpdateHkmcKeysRequest):
+    """Save per-device HKMC key overrides (차종별 키 값 + 표시 여부)."""
+    from ..services.hkmc6th_service import HKMC_KEYS
+    dev = dm.get_device(req.device_id)
+    if not dev:
+        raise HTTPException(status_code=404, detail=f"Device {req.device_id} not found")
+    if dev.type != "hkmc6th":
+        raise HTTPException(status_code=400, detail=f"Device {req.device_id} is not an HKMC device")
+    clean: dict[str, dict] = {}
+    for name, ov in (req.keys or {}).items():
+        if name not in HKMC_KEYS:
+            continue
+        entry: dict = {}
+        if "cmd" in ov and ov["cmd"] is not None:
+            try:
+                entry["cmd"] = int(ov["cmd"])
+            except (TypeError, ValueError):
+                pass
+        if "key" in ov and ov["key"] is not None:
+            try:
+                entry["key"] = int(ov["key"])
+            except (TypeError, ValueError):
+                pass
+        if "dial" in ov and ov["dial"] is not None:
+            entry["dial"] = bool(ov["dial"])
+        if "visible" in ov and ov["visible"] is not None:
+            entry["visible"] = bool(ov["visible"])
+        if entry:
+            clean[name] = entry
+    if clean:
+        dev.info["hkmc_keys"] = clean
+    else:
+        dev.info.pop("hkmc_keys", None)
+    svc = dm.get_hkmc_service(req.device_id)
+    if svc:
+        svc.set_key_overrides(dev.info.get("hkmc_keys"))
+    dm._save_auxiliary_devices()
+    return {"status": "ok", "device_id": req.device_id, "count": len(clean)}
 
 
 class WebcamExposureRequest(BaseModel):

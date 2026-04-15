@@ -890,7 +890,8 @@ class PlaybackService:
                             # disconnect()는 내부적으로 recv_thread.join(timeout=3)을 호출하는 blocking 호출.
                             # 직접 호출하면 event loop를 최대 3초 블록 → uvicorn WS ping 예산을 까먹음.
                             await hkmc.async_disconnect()
-                        svc = HKMC6thService(dev.address, port, device_id=dev.id)
+                        svc = HKMC6thService(dev.address, port, device_id=dev.id,
+                                               key_overrides=dev.info.get("hkmc_keys"))
                         ok = await svc.async_connect()
                         if ok:
                             self.dm._hkmc_conns[dev.id] = svc
