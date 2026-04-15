@@ -1262,7 +1262,8 @@ export default function RecordPage() {
         return;
       }
       try {
-        const capRes = await scenarioApi.saveExpectedImage(scenarioName, multiCropEditingIndex, modalImage);
+        // preserve_crops=true: 기존 multi_crop 아이템을 유지 (아래 cropFromExpected에서 추가/교체)
+        const capRes = await scenarioApi.saveExpectedImage(scenarioName, multiCropEditingIndex, modalImage, undefined, undefined, undefined, true);
         setSteps(prev => prev.map((s, i) => i === multiCropEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now(), roi: null, exclude_rois: [] } : s));
         const replaceIdx = multiCropSelectedIdx ?? undefined;
         const res = await scenarioApi.cropFromExpected(scenarioName, multiCropEditingIndex, crop, '', replaceIdx);
@@ -2223,8 +2224,13 @@ export default function RecordPage() {
   const showAnnotatedPreview = useCallback((step: Step) => {
     if (!step.expected_image || !scenarioName) return;
     const imgUrl = `/screenshots/${scenarioName}/${step.expected_image}?v=${step._imageVer || ''}`;
-    const hasAnnotations = (step.exclude_rois?.length || 0) > 0 || (step.expected_images?.length || 0) > 0 || !!step.roi;
-    if (!hasAnnotations) {
+    const mode = step.compare_mode;
+    // compare_mode에 해당하는 어노테이션만 그린다 — stale 필드(이전 모드 잔재)를 그리면
+    // "다른 스텝의 ROI처럼 보이는" 버그가 발생함.
+    // single_crop은 저장된 이미지 자체가 크롭 영역이므로 rect를 그리지 않음.
+    const drawExclude = mode === 'full_exclude' && (step.exclude_rois?.length || 0) > 0;
+    const drawMulti = mode === 'multi_crop' && (step.expected_images?.length || 0) > 0;
+    if (!drawExclude && !drawMulti) {
       setAnnotatedPreviewSrc(imgUrl);
       setAnnotatedPreviewVisible(true);
       return;
@@ -2236,19 +2242,8 @@ export default function RecordPage() {
       canvas.height = img.naturalHeight;
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
-      if (step.roi) {
-        const r = step.roi;
-        ctx.strokeStyle = '#52c41a';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(r.x, r.y, r.width, r.height);
-        ctx.fillStyle = 'rgba(82,196,26,0.15)';
-        ctx.fillRect(r.x, r.y, r.width, r.height);
-        ctx.fillStyle = '#52c41a';
-        ctx.font = '24px sans-serif';
-        ctx.fillText('CROP', r.x + 4, r.y + 26);
-      }
-      if (step.exclude_rois?.length) {
-        step.exclude_rois.forEach((r, i) => {
+      if (drawExclude) {
+        step.exclude_rois!.forEach((r, i) => {
           ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
           ctx.fillRect(r.x, r.y, r.width, r.height);
           ctx.strokeStyle = '#ff4d4f';
@@ -2259,8 +2254,8 @@ export default function RecordPage() {
           ctx.fillText(`#${i + 1}`, r.x + 4, r.y + 22);
         });
       }
-      if (step.expected_images?.length) {
-        step.expected_images.forEach((ci, i) => {
+      if (drawMulti) {
+        step.expected_images!.forEach((ci, i) => {
           if (!ci.roi) return;
           ctx.strokeStyle = '#52c41a';
           ctx.lineWidth = 2;

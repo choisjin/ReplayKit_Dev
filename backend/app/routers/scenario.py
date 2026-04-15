@@ -151,6 +151,7 @@ class SaveExpectedImageRequest(BaseModel):
     crop: Optional[dict] = None  # {x, y, width, height} in image pixels
     compare_mode: Optional[str] = None  # "multi_crop" to append to expected_images
     crop_label: str = ""  # label for multi_crop item
+    preserve_crops: bool = False  # True: multi_crop items 유지 (multi_crop base 이미지 갱신 시 사용)
 
 
 async def _resolve_scenario(scenario_name: str):
@@ -207,8 +208,29 @@ async def save_expected_image(req: SaveExpectedImageRequest):
                        width=int(req.crop["width"]), height=int(req.crop["height"])) if req.crop else None
         step.expected_images.append(CropItem(image=filename, label=req.crop_label, roi=crop_roi))
     else:
-        # Single image (full or single_crop)
-        filename = f"{req.scenario_name}_step_{step.id:03d}.png"
+        # Single image (full / single_crop / full_exclude / multi_crop base)
+        # 타임스탬프로 캐시 충돌 방지 (capture-expected-image와 동일 패턴)
+        import time as _time
+        ts = int(_time.time() * 1000) % 1000000
+        filename = f"{req.scenario_name}_step_{step.id:03d}_{ts}.png"
+        # 이전 기대이미지 파일 삭제
+        if step.expected_image and step.expected_image != filename:
+            old_file = save_dir / step.expected_image
+            if old_file.exists():
+                old_file.unlink(missing_ok=True)
+        # 이전 multi_crop 이미지 파일 삭제 + 관련 필드 초기화
+        # (이전 모드가 multi_crop / full_exclude였다면 stale ROI가 렌더링에 끼어들어
+        # 다른 스텝 ROI처럼 보이는 버그 방지). preserve_crops=True면 유지 (multi_crop base 갱신용)
+        if not req.preserve_crops:
+            for ci in step.expected_images:
+                if ci.image:
+                    old_crop = save_dir / ci.image
+                    if old_crop.exists():
+                        old_crop.unlink(missing_ok=True)
+            step.expected_images.clear()
+        # single_crop (crop 있음) 저장 시에만 exclude_rois 초기화 — 이전 full_exclude 잔재 제거
+        if req.crop:
+            step.exclude_rois.clear()
         (save_dir / filename).write_bytes(png_bytes)
         step.expected_image = filename
         if req.crop:

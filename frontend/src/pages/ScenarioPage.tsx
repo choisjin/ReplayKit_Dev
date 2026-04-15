@@ -1779,13 +1779,14 @@ export default function ScenarioPage() {
                   },
                   { title: t('scenario.compare'), key: 'img', render: (_: any, r: any) => {
                     if (!r.expected_image) return '-';
+                    // 파일명에 timestamp가 포함되므로 r.id 기반 캐시 키만으로도 충분하지만, 안전하게 유지
                     const imgSrc = `/screenshots/${selectedName}/${r.expected_image}?v=${r.id}`;
                     const mode = r.compare_mode;
                     const regions: { x: number; y: number; width: number; height: number }[] = [];
                     let regionColor = '#52c41a';
-                    if (mode === 'single_crop' && r.roi) {
-                      regions.push(r.roi);
-                    } else if (mode === 'multi_crop' && r.expected_images?.length) {
+                    // single_crop은 저장된 이미지 자체가 크롭 영역이므로 rect overlay를 그리지 않음
+                    // (원본 좌표계 ROI를 크롭 이미지에 그리면 화면 밖으로 나가거나 잘못된 위치에 표시됨)
+                    if (mode === 'multi_crop' && r.expected_images?.length) {
                       r.expected_images.forEach((ci: any) => { if (ci.roi) regions.push(ci.roi); });
                     } else if (mode === 'full_exclude' && r.exclude_rois?.length) {
                       r.exclude_rois.forEach((roi: any) => regions.push(roi));
