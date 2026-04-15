@@ -358,6 +358,18 @@ export default function ScenarioPage() {
   const [importLoading, setImportLoading] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
+  // 재생 상태를 동기적으로 추적 (WS 이벤트 핸들러의 stale closure 대응)
+  const playingRef = useRef(false);
+  // WS 끊김 시 자동 재연결 타이머
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 수신한 가장 높은 iteration (재연결 replay 시 역행 방지)
+  const maxIterationRef = useRef(0);
+  // 재생 종료(정상/에러/중단) 시 호출 — 자동 재연결이 다시 살아나지 않도록 ref도 함께 정리
+  const endPlaying = () => {
+    playingRef.current = false;
+    if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+    endPlaying();
+  };
 
   // --- Filtered scenarios by group ---
   // 그룹 선택 시 그룹 멤버 순서 유지 (scenarios는 알파벳순이므로 filter 대신 map 사용)
@@ -786,28 +798,40 @@ export default function ScenarioPage() {
       }
       doAutoRecord = true;
     }
+    playingRef.current = true;
     setPlaying(true);
     setPlayingName(name);
     setStepResults([]);
     setCurrentStepId(null);
     setCurrentIteration(1);
     setTotalIterations(repeat);
+    maxIterationRef.current = 0;
     webcamBlobsRef.current = [];
     webcamRecordingActiveRef.current = false;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/playback`);
-    wsRef.current = ws;
-
     const hasMap = Object.keys(deviceMap).length > 0;
-    ws.onopen = () => {
-      setCurrentStepId(1);
-      const skipIds = Array.from(skipStepIds);
-      ws.send(JSON.stringify({ action: 'play', scenario: name, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}), ...(skipIds.length > 0 ? { skip_steps: skipIds } : {}) }));
-    };
-    ws.onmessage = (event) => {
+    const skipIds = Array.from(skipStepIds);
+
+    // WS 연결 생성. isReconnect=true면 play를 보내지 않고 subscribe만 — 백엔드가 버퍼 replay.
+    const openPlaybackWS = (isReconnect: boolean) => {
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/playback`);
+      wsRef.current = ws;
+      ws.onopen = () => {
+        if (isReconnect) {
+          // 재연결: 버퍼 replay는 서버에서 자동 수행되므로 play 재발행 금지
+          ws.send(JSON.stringify({ action: 'subscribe' }));
+        } else {
+          setCurrentStepId(1);
+          ws.send(JSON.stringify({ action: 'play', scenario: name, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}), ...(skipIds.length > 0 ? { skip_steps: skipIds } : {}) }));
+        }
+      };
+      ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'iteration_start') {
+        // 재연결 시 buffer replay로 과거 iteration_start가 다시 올 수 있음 → 최고값 기반으로 스킵
+        if (msg.iteration <= maxIterationRef.current) return;
+        maxIterationRef.current = msg.iteration;
         setCurrentIteration(msg.iteration);
         // 회차별 웹캠 녹화 분리
         if (doAutoRecord && webcamRecordingActiveRef.current && msg.iteration > 1) {
@@ -834,7 +858,13 @@ export default function ScenarioPage() {
           delay_ms: d.delay_ms, execution_time_ms: 0,
           compare_mode: null, sub_results: [],
         };
-        setStepResults((prev) => [...prev, placeholder]);
+        // 재연결 replay 시 중복 방지 — 같은 (step_id, repeat_index) 행이 이미 있으면 스킵
+        setStepResults((prev) => {
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].step_id === d.step_id && prev[i].repeat_index === d.repeat_index) return prev;
+          }
+          return [...prev, placeholder];
+        });
         setCurrentStepId(d.step_id);
         // 실시간 카운터
         stepStartTimeRef.current = Date.now();
@@ -878,7 +908,7 @@ export default function ScenarioPage() {
         setCurrentStepId(null);
       } else if (msg.type === 'playback_complete') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
-        setPlaying(false); setPaused(false); setCurrentStepId(null); resumeScreenStream();
+        endPlaying(); setPaused(false); setCurrentStepId(null); resumeScreenStream();
         message.success(repeat > 1 ? t('scenario.playCompleteRepeat', { count: String(repeat) }) : t('scenario.playComplete'));
         ws.close();
         // 백그라운드 CMD 결과 폴링 시작
@@ -899,7 +929,7 @@ export default function ScenarioPage() {
           });
         }
       } else if (msg.type === 'preflight_error') {
-        setPlaying(false); setCurrentStepId(null);
+        endPlaying(); setCurrentStepId(null);
         Modal.confirm({
           title: t('scenario.deviceCheckFailed'),
           content: (
@@ -922,12 +952,12 @@ export default function ScenarioPage() {
         ws.close();
       } else if (msg.type === 'error') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
-        setPlaying(false); setCurrentStepId(null); resumeScreenStream();
+        endPlaying(); setCurrentStepId(null); resumeScreenStream();
         message.error(msg.message); ws.close();
         if (doAutoRecord && webcamRecordingActiveRef.current) { webcam.stopRecordingAuto(); webcamRecordingActiveRef.current = false; webcamBlobsRef.current = []; }
       } else if (msg.type === 'playback_stopped') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
-        setPlaying(false); setPaused(false); setCurrentStepId(null); resumeScreenStream();
+        endPlaying(); setPaused(false); setCurrentStepId(null); resumeScreenStream();
         const resultFilename = msg.result_filename || '';
         if (resultFilename) {
           message.info(t('scenario.playStoppedPartial'));
@@ -959,8 +989,28 @@ export default function ScenarioPage() {
         resumeScreenStream();
       }
     };
-    ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setPaused(false); setCurrentStepId(null); resumeScreenStream(); message.error(t('scenario.websocketFailed')); };
-    ws.onclose = () => { wsRef.current = null; };
+      ws.onerror = () => {
+        // onerror 자체는 연결 실패를 의미하지만, 뒤이어 onclose가 항상 호출되므로
+        // 여기서는 상태 정리만 하고 재연결은 onclose에 맡긴다.
+        if (!playingRef.current && liveDurationRef.current) {
+          clearInterval(liveDurationRef.current);
+          liveDurationRef.current = null;
+        }
+      };
+      ws.onclose = () => {
+        if (wsRef.current === ws) wsRef.current = null;
+        // 재생 중에 WS가 예기치 않게 끊긴 경우 — 2초 후 자동 재연결
+        // (정상 종료 시에는 playback_complete/stopped/error 핸들러에서 endPlaying()이 먼저 호출되어 playingRef가 false)
+        if (playingRef.current) {
+          if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            if (playingRef.current) openPlaybackWS(true);
+          }, 2000);
+        }
+      };
+    };
+    openPlaybackWS(false);
   };
 
   // --- Group playback ---
@@ -1022,6 +1072,7 @@ export default function ScenarioPage() {
       doAutoRecord = true;
     }
 
+    playingRef.current = true;
     setPlaying(true);
     setPlayingGroupName(gName);
     setPlayingName(members[0].name);
@@ -1030,6 +1081,7 @@ export default function ScenarioPage() {
     setCurrentStepId(null);
     setCurrentIteration(1);
     setTotalIterations(repeat);
+    maxIterationRef.current = 0;
     setGroupScenarioIndex(0);
     setGroupScenarioTotal(members.length);
     setCurrentGroupScenario('');
@@ -1037,14 +1089,19 @@ export default function ScenarioPage() {
     webcamRecordingActiveRef.current = false;
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/playback`);
-    wsRef.current = ws;
-
     const hasMap = Object.keys(deviceMap).length > 0;
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ action: 'play_group', group_name: gName, scenarios: members, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}) }));
-    };
-    ws.onmessage = (event) => {
+
+    const openPlaybackWS = (isReconnect: boolean) => {
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/playback`);
+      wsRef.current = ws;
+      ws.onopen = () => {
+        if (isReconnect) {
+          ws.send(JSON.stringify({ action: 'subscribe' }));
+        } else {
+          ws.send(JSON.stringify({ action: 'play_group', group_name: gName, scenarios: members, verify: true, repeat, ...(hasMap ? { device_map: deviceMap } : {}) }));
+        }
+      };
+      ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'group_scenario_start') {
         setCurrentGroupScenario(msg.scenario_name);
@@ -1052,6 +1109,9 @@ export default function ScenarioPage() {
         setGroupScenarioTotal(msg.total_scenarios);
         setPlayingName(msg.scenario_name);
       } else if (msg.type === 'iteration_start') {
+        // 재연결 replay 시 과거 iteration 스킵
+        if (msg.iteration <= maxIterationRef.current) return;
+        maxIterationRef.current = msg.iteration;
         setCurrentIteration(msg.iteration);
         // 회차별 웹캠 녹화 분리
         if (doAutoRecord && webcamRecordingActiveRef.current && msg.iteration > 1) {
@@ -1077,7 +1137,13 @@ export default function ScenarioPage() {
           delay_ms: d.delay_ms, execution_time_ms: 0,
           compare_mode: null, sub_results: [],
         };
-        setStepResults((prev) => [...prev, placeholder]);
+        // 재연결 replay 시 중복 방지
+        setStepResults((prev) => {
+          for (let i = prev.length - 1; i >= 0; i--) {
+            if (prev[i].step_id === d.step_id && prev[i].repeat_index === d.repeat_index) return prev;
+          }
+          return [...prev, placeholder];
+        });
         setCurrentStepId(d.step_id);
         stepStartTimeRef.current = Date.now();
         setLiveDuration(0);
@@ -1118,7 +1184,7 @@ export default function ScenarioPage() {
         setCurrentStepId(null);
       } else if (msg.type === 'playback_complete') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
-        setPlaying(false); setPaused(false); setPlayingGroupName(null); setCurrentStepId(null); resumeScreenStream();
+        endPlaying(); setPaused(false); setPlayingGroupName(null); setCurrentStepId(null); resumeScreenStream();
         message.success(t('scenario.playComplete'));
         ws.close();
         // 백그라운드 CMD 결과 폴링 시작
@@ -1138,7 +1204,7 @@ export default function ScenarioPage() {
           });
         }
       } else if (msg.type === 'preflight_error') {
-        setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null);
+        endPlaying(); setPlayingGroupName(null); setCurrentStepId(null);
         Modal.confirm({
           title: t('scenario.deviceCheckFailed'),
           content: (
@@ -1160,12 +1226,12 @@ export default function ScenarioPage() {
         ws.close();
       } else if (msg.type === 'error') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
-        setPlaying(false); setPlayingGroupName(null); setCurrentStepId(null); resumeScreenStream();
+        endPlaying(); setPlayingGroupName(null); setCurrentStepId(null); resumeScreenStream();
         message.error(msg.message); ws.close();
         if (doAutoRecord && webcamRecordingActiveRef.current) { webcam.stopRecordingAuto(); webcamRecordingActiveRef.current = false; webcamBlobsRef.current = []; }
       } else if (msg.type === 'playback_stopped') {
         if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
-        setPlaying(false); setPaused(false); setPlayingGroupName(null); setCurrentStepId(null); resumeScreenStream();
+        endPlaying(); setPaused(false); setPlayingGroupName(null); setCurrentStepId(null); resumeScreenStream();
         const resultFilename = msg.result_filename || '';
         if (resultFilename) {
           message.info(t('scenario.playStoppedPartial'));
@@ -1196,13 +1262,37 @@ export default function ScenarioPage() {
         resumeScreenStream();
       }
     };
-    ws.onerror = () => { if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; } setPlaying(false); setPaused(false); setPlayingGroupName(null); setCurrentStepId(null); message.error(t('scenario.websocketFailed')); };
-    ws.onclose = () => { wsRef.current = null; };
+      ws.onerror = () => {
+        if (!playingRef.current && liveDurationRef.current) {
+          clearInterval(liveDurationRef.current);
+          liveDurationRef.current = null;
+        }
+      };
+      ws.onclose = () => {
+        if (wsRef.current === ws) wsRef.current = null;
+        if (playingRef.current) {
+          if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            if (playingRef.current) openPlaybackWS(true);
+          }, 2000);
+        }
+      };
+    };
+    openPlaybackWS(false);
   };
 
   const stopPlayback = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'stop' }));
+    } else {
+      // WS가 끊긴 상태(재연결 대기 중 등)에도 재생을 확실히 중지하기 위해 REST 폴백
+      scenarioApi.stopPlayback().catch(() => {});
+      endPlaying();
+      setPaused(false);
+      setPlayingGroupName(null);
+      setCurrentStepId(null);
+      if (liveDurationRef.current) { clearInterval(liveDurationRef.current); liveDurationRef.current = null; }
     }
   };
 

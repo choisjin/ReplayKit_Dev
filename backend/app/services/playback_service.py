@@ -583,7 +583,9 @@ class PlaybackService:
                             }
                             for ci in step.expected_images
                         ]
-                        judgement = self.image_compare.judge(
+                        # judge()는 SSIM/template matching이 CPU-bound — event loop 블록 방지 위해 thread 이전
+                        judgement = await asyncio.to_thread(
+                            self.image_compare.judge,
                             expected_path="",
                             actual_path=actual_path,
                             threshold_pass=step.similarity_threshold,
@@ -599,8 +601,9 @@ class PlaybackService:
                             # Generate annotated image with all match boxes
                             try:
                                 annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
-                                self.image_compare.generate_multi_crop_annotated(
-                                    actual_path, judgement.get("sub_results", []), annotated_path
+                                await asyncio.to_thread(
+                                    self.image_compare.generate_multi_crop_annotated,
+                                    actual_path, judgement.get("sub_results", []), annotated_path,
                                 )
                                 step_result.actual_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_annotated.png"), scenario_name)
                             except Exception as e:
@@ -608,18 +611,23 @@ class PlaybackService:
 
                             # Generate annotated expected image: only crop regions visible, rest darkened
                             if expected_path:
-                                try:
+                                def _build_multi_crop_expected_annotated():
                                     import cv2
                                     img_exp = safe_imread(expected_path)
-                                    if img_exp is not None:
-                                        dark = (img_exp * 0.2).astype("uint8")
-                                        for ci in step.expected_images:
-                                            if ci.roi:
-                                                r = ci.roi
-                                                dark[r.y:r.y + r.height, r.x:r.x + r.width] = img_exp[r.y:r.y + r.height, r.x:r.x + r.width]
-                                                cv2.rectangle(dark, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 255, 0), 2)
-                                        exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
-                                        safe_imwrite(exp_ann_path, dark)
+                                    if img_exp is None:
+                                        return None
+                                    dark = (img_exp * 0.2).astype("uint8")
+                                    for ci in step.expected_images:
+                                        if ci.roi:
+                                            r = ci.roi
+                                            dark[r.y:r.y + r.height, r.x:r.x + r.width] = img_exp[r.y:r.y + r.height, r.x:r.x + r.width]
+                                            cv2.rectangle(dark, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 255, 0), 2)
+                                    exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
+                                    safe_imwrite(exp_ann_path, dark)
+                                    return exp_ann_path
+                                try:
+                                    built = await asyncio.to_thread(_build_multi_crop_expected_annotated)
+                                    if built:
                                         step_result.expected_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_expected_annotated.png"), scenario_name)
                                 except Exception as e:
                                     logger.warning("Failed to generate multi-crop expected annotated: %s", e)
@@ -631,7 +639,8 @@ class PlaybackService:
                     elif mode == CompareMode.FULL_EXCLUDE:
                         # --- Full-exclude mode ---
                         exclude_rois_dicts = [r.model_dump() for r in step.exclude_rois]
-                        judgement = self.image_compare.judge(
+                        judgement = await asyncio.to_thread(
+                            self.image_compare.judge,
                             expected_path,
                             actual_path,
                             threshold_pass=step.similarity_threshold,
@@ -645,18 +654,22 @@ class PlaybackService:
                             step_result.message = judgement.get("message", "Exclude comparison error")
                         else:
                             # Generate annotated image with excluded regions
-                            try:
+                            def _build_exclude_actual_annotated():
                                 import cv2
                                 img_annotated = safe_imread(actual_path)
-                                if img_annotated is not None:
-                                    overlay = img_annotated.copy()
-                                    for r in step.exclude_rois:
-                                        cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (128, 128, 128), -1)
-                                    cv2.addWeighted(overlay, 0.5, img_annotated, 0.5, 0, img_annotated)
-                                    for r in step.exclude_rois:
-                                        cv2.rectangle(img_annotated, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 2)
-                                    annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
-                                    safe_imwrite(annotated_path, img_annotated)
+                                if img_annotated is None:
+                                    return False
+                                overlay = img_annotated.copy()
+                                for r in step.exclude_rois:
+                                    cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (128, 128, 128), -1)
+                                cv2.addWeighted(overlay, 0.5, img_annotated, 0.5, 0, img_annotated)
+                                for r in step.exclude_rois:
+                                    cv2.rectangle(img_annotated, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 2)
+                                annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
+                                safe_imwrite(annotated_path, img_annotated)
+                                return True
+                            try:
+                                if await asyncio.to_thread(_build_exclude_actual_annotated):
                                     step_result.actual_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_annotated.png"), scenario_name)
                             except Exception as e:
                                 logger.warning("Failed to generate exclude annotated image: %s", e)
@@ -665,7 +678,8 @@ class PlaybackService:
                                 diff_path = str(actual_dir / f"diff_{file_prefix}.png")
                                 diff_rel = self._rel_path(diff_path, scenario_name)
                                 try:
-                                    self.image_compare.generate_diff_heatmap(
+                                    await asyncio.to_thread(
+                                        self.image_compare.generate_diff_heatmap,
                                         expected_path, actual_path, diff_path,
                                         exclude_rois=exclude_rois_dicts,
                                     )
@@ -675,18 +689,22 @@ class PlaybackService:
 
                             # Generate annotated expected image: gray out excluded regions
                             if expected_path:
-                                try:
+                                def _build_exclude_expected_annotated():
                                     import cv2
                                     img_exp = safe_imread(expected_path)
-                                    if img_exp is not None:
-                                        overlay = img_exp.copy()
-                                        for r in step.exclude_rois:
-                                            cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (128, 128, 128), -1)
-                                        cv2.addWeighted(overlay, 0.5, img_exp, 0.5, 0, overlay)
-                                        for r in step.exclude_rois:
-                                            cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 2)
-                                        exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
-                                        safe_imwrite(exp_ann_path, overlay)
+                                    if img_exp is None:
+                                        return False
+                                    overlay = img_exp.copy()
+                                    for r in step.exclude_rois:
+                                        cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (128, 128, 128), -1)
+                                    cv2.addWeighted(overlay, 0.5, img_exp, 0.5, 0, overlay)
+                                    for r in step.exclude_rois:
+                                        cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 2)
+                                    exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
+                                    safe_imwrite(exp_ann_path, overlay)
+                                    return True
+                                try:
+                                    if await asyncio.to_thread(_build_exclude_expected_annotated):
                                         step_result.expected_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_expected_annotated.png"), scenario_name)
                                 except Exception as e:
                                     logger.warning("Failed to generate exclude expected annotated: %s", e)
@@ -697,16 +715,21 @@ class PlaybackService:
                         # --- Full / Single-crop mode (existing behavior) ---
                         compare_actual = actual_path
                         if step.roi:
-                            import cv2
-                            img_act = safe_imread(actual_path)
-                            if img_act is not None:
+                            def _crop_actual_roi():
+                                img_act = safe_imread(actual_path)
+                                if img_act is None:
+                                    return None
                                 r = step.roi
                                 cropped = img_act[r.y:r.y + r.height, r.x:r.x + r.width]
                                 cropped_path = str(actual_dir / f"{file_prefix}_roi.png")
                                 safe_imwrite(cropped_path, cropped)
-                                compare_actual = cropped_path
+                                return cropped_path
+                            cropped_ret = await asyncio.to_thread(_crop_actual_roi)
+                            if cropped_ret:
+                                compare_actual = cropped_ret
 
-                        judgement = self.image_compare.judge(
+                        judgement = await asyncio.to_thread(
+                            self.image_compare.judge,
                             expected_path,
                             compare_actual,
                             threshold_pass=step.similarity_threshold,
@@ -721,29 +744,37 @@ class PlaybackService:
                             match_loc = judgement.get("match_location")
                             if match_loc:
                                 step_result.match_location = match_loc
-                                try:
+                                def _build_match_annotated():
                                     import cv2
                                     img_annotated = safe_imread(actual_path)
-                                    if img_annotated is not None:
-                                        x, y = match_loc["x"], match_loc["y"]
-                                        w, h = match_loc["width"], match_loc["height"]
-                                        cv2.rectangle(img_annotated, (x, y), (x + w, y + h), (0, 0, 255), 3)
-                                        annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
-                                        safe_imwrite(annotated_path, img_annotated)
+                                    if img_annotated is None:
+                                        return False
+                                    x, y = match_loc["x"], match_loc["y"]
+                                    w, h = match_loc["width"], match_loc["height"]
+                                    cv2.rectangle(img_annotated, (x, y), (x + w, y + h), (0, 0, 255), 3)
+                                    annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
+                                    safe_imwrite(annotated_path, img_annotated)
+                                    return True
+                                try:
+                                    if await asyncio.to_thread(_build_match_annotated):
                                         step_result.actual_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_annotated.png"), scenario_name)
                                 except Exception as e:
                                     logger.warning("Failed to generate annotated image: %s", e)
                             elif step.roi:
-                                try:
+                                def _build_roi_annotated():
                                     import cv2
                                     img_annotated = safe_imread(actual_path)
-                                    if img_annotated is not None:
-                                        r = step.roi
-                                        cv2.rectangle(img_annotated, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 3)
-                                        annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
-                                        safe_imwrite(annotated_path, img_annotated)
+                                    if img_annotated is None:
+                                        return False
+                                    r = step.roi
+                                    cv2.rectangle(img_annotated, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 3)
+                                    annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
+                                    safe_imwrite(annotated_path, img_annotated)
+                                    return True
+                                try:
+                                    if await asyncio.to_thread(_build_roi_annotated):
                                         step_result.actual_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_annotated.png"), scenario_name)
-                                        step_result.match_location = {"x": r.x, "y": r.y, "width": r.width, "height": r.height}
+                                        step_result.match_location = {"x": step.roi.x, "y": step.roi.y, "width": step.roi.width, "height": step.roi.height}
                                 except Exception as e:
                                     logger.warning("Failed to generate annotated image: %s", e)
 
@@ -751,8 +782,9 @@ class PlaybackService:
                                 diff_path = str(actual_dir / f"diff_{file_prefix}.png")
                                 diff_rel = self._rel_path(diff_path, scenario_name)
                                 try:
-                                    self.image_compare.generate_diff_heatmap(
-                                        expected_path, compare_actual, diff_path
+                                    await asyncio.to_thread(
+                                        self.image_compare.generate_diff_heatmap,
+                                        expected_path, compare_actual, diff_path,
                                     )
                                     step_result.diff_image = diff_rel
                                 except Exception as e:
@@ -855,7 +887,9 @@ class PlaybackService:
                     try:
                         hkmc = self.dm.get_hkmc_service(device_id)
                         if hkmc:
-                            hkmc.disconnect()
+                            # disconnect()는 내부적으로 recv_thread.join(timeout=3)을 호출하는 blocking 호출.
+                            # 직접 호출하면 event loop를 최대 3초 블록 → uvicorn WS ping 예산을 까먹음.
+                            await hkmc.async_disconnect()
                         svc = HKMC6thService(dev.address, port, device_id=dev.id)
                         ok = await svc.async_connect()
                         if ok:
@@ -893,7 +927,7 @@ class PlaybackService:
                     try:
                         isap = self.dm.get_isap_service(device_id)
                         if isap:
-                            isap.disconnect()
+                            await isap.async_disconnect()
                         svc = ISAPAgentService(dev.address, port, device_id=dev.id)
                         ok = await svc.async_connect()
                         if ok:

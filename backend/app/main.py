@@ -601,24 +601,30 @@ def _try_move_cycle_to_final(iteration: int, src: Path) -> Optional[Path]:
         return None
 
 
-def _webcam_session_next_cycle(session: Optional[_WebcamPlaybackSession], iteration: int) -> None:
+async def _webcam_session_next_cycle(session: Optional[_WebcamPlaybackSession], iteration: int) -> None:
     """현재 cycle 녹화 종료 + 다음 cycle 녹화 시작.
 
     완료된 이전 cycle 파일은 즉시 `run_dir/recordings/`로 이동하여
     재생 중에도 결과 상세에서 해당 cycle의 영상을 조회할 수 있게 한다.
+
+    stop_recording()은 코덱 finalize(프레임 flush, MP4 trailer 작성) 때문에
+    수 초 단위 blocking이 가능하므로 thread로 이전하여 event loop를 지킨다.
     """
     if session is None or not session.is_active():
         return
     try:
         from .services.webcam_service import get_webcam_service
         svc = get_webcam_service()
-        svc.stop_recording()
+        await asyncio.to_thread(svc.stop_recording)
         if session.current_path is not None:
-            # 완료된 cycle 파일을 즉시 최종 위치로 이동 시도
-            moved = _try_move_cycle_to_final(session.current_cycle, session.current_path)
+            # 완료된 cycle 파일을 즉시 최종 위치로 이동 시도 (shutil.move = blocking)
+            moved = await asyncio.to_thread(
+                _try_move_cycle_to_final, session.current_cycle, session.current_path
+            )
             session.cycle_files.append((session.current_cycle, moved or session.current_path))
         path = session.temp_dir / f"webcam_r{iteration}.mp4"  # type: ignore[union-attr]
-        if svc.start_recording(str(path)):
+        started = await asyncio.to_thread(svc.start_recording, str(path))
+        if started:
             session.current_cycle = iteration
             session.current_path = path
             logger.info("Webcam session next cycle %d → %s", iteration, path)
@@ -760,7 +766,7 @@ async def _run_play_job(data: dict):
                 })
                 # 두 번째 이상 cycle 시작 시 웹캠 녹화 분할 (rotate)
                 if iteration > 1 and webcam_session is not None:
-                    _webcam_session_next_cycle(webcam_session, iteration)
+                    await _webcam_session_next_cycle(webcam_session, iteration)
 
             _step_idx = 0
             _pending_seq = 0
@@ -934,7 +940,7 @@ async def _run_play_group_job(data: dict):
                 })
                 # 두 번째 이상 cycle 시작 시 웹캠 녹화 분할
                 if iteration > 1 and webcam_session is not None:
-                    _webcam_session_next_cycle(webcam_session, iteration)
+                    await _webcam_session_next_cycle(webcam_session, iteration)
 
             sc_idx = 0
             start_step = 0
@@ -1144,7 +1150,13 @@ async def websocket_playback(websocket: WebSocket):
                 try:
                     await websocket.send_json(ev)
                 except Exception:
-                    # WS 전송 실패 → forward 중단 (재생은 계속됨)
+                    # WS 전송 실패 → 좀비 연결 방지를 위해 WS 명시적으로 close.
+                    # 그래야 outer receive_json 루프가 WebSocketDisconnect로 빠져나와
+                    # 정상 cleanup 경로를 탄다.
+                    try:
+                        await websocket.close()
+                    except Exception:
+                        pass
                     return
         except asyncio.CancelledError:
             return
