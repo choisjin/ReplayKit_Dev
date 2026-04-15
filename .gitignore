@@ -51,9 +51,11 @@ frontend/.pkg_hash
 Thumbs.db
 Desktop.ini
 .DS_Store
-.claude/settings.json
-.claude/settings.local.json
+# Claude Code 관련 파일은 git에 포함하지 않음
+.claude/
 frontend/.claude/
+CLAUDE.md
+**/CLAUDE.md
 .bkit/
 .playwright-mcp/
 DLL_DEBUG/
