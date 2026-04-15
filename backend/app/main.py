@@ -551,8 +551,11 @@ class _WebcamPlaybackSession:
         return self.temp_dir is not None
 
 
-def _webcam_session_start(iteration: int = 1) -> Optional[_WebcamPlaybackSession]:
-    """첫 cycle의 녹화를 시작 + 세션 객체 반환. 웹캠 미오픈 시 None."""
+async def _webcam_session_start(iteration: int = 1) -> Optional[_WebcamPlaybackSession]:
+    """첫 cycle의 녹화를 시작 + 세션 객체 반환. 웹캠 미오픈 시 None.
+
+    start_recording()이 카메라 초기화/코덱 세팅에서 blocking 가능 → thread 이전.
+    """
     try:
         from .services.webcam_service import get_webcam_service
         svc = get_webcam_service()
@@ -563,7 +566,8 @@ def _webcam_session_start(iteration: int = 1) -> Optional[_WebcamPlaybackSession
         session.temp_dir = _RESULTS_DIR / f"_tmp_webcam_{ts}"
         session.temp_dir.mkdir(parents=True, exist_ok=True)
         path = session.temp_dir / f"webcam_r{iteration}.mp4"
-        if not svc.start_recording(str(path)):
+        started = await asyncio.to_thread(svc.start_recording, str(path))
+        if not started:
             return None
         session.current_cycle = iteration
         session.current_path = path
@@ -634,20 +638,13 @@ async def _webcam_session_next_cycle(session: Optional[_WebcamPlaybackSession], 
         logger.warning("Failed to rotate webcam recording: %s", e)
 
 
-def _webcam_session_finalize(session: Optional[_WebcamPlaybackSession], result_path: Optional[str]) -> None:
-    """재생 종료 시 마지막 cycle 녹화 정지 + 남은 cycle 파일을 결과 폴더로 이동.
-
-    cycle별 파일은 이미 `_webcam_session_next_cycle`에서 즉시 최종 위치로 옮겨져 있는 경우가 많으며,
-    이 함수는 마지막(진행 중이던) cycle과 early-move가 실패했던 파일만 보완 이동한다.
-    """
-    if session is None or not session.is_active():
-        return
+def _webcam_session_finalize_sync(session: _WebcamPlaybackSession, result_path: Optional[str]) -> None:
+    """Blocking 작업(stop/move/rmdir)을 모은 동기 함수. thread에서 실행."""
     try:
         from .services.webcam_service import get_webcam_service
         svc = get_webcam_service()
         svc.stop_recording()
         if session.current_path is not None:
-            # 마지막 cycle도 즉시 이동 시도 (run_dir이 준비되어 있을 경우)
             moved = _try_move_cycle_to_final(session.current_cycle, session.current_path)
             session.cycle_files.append((session.current_cycle, moved or session.current_path))
     except Exception as e:
@@ -659,7 +656,6 @@ def _webcam_session_finalize(session: Optional[_WebcamPlaybackSession], result_p
             return
         if result_path:
             result_file = Path(result_path)
-            # 런 폴더 스타일 (result.json) / 레거시 (results/{name}.json)
             if result_file.name == "result.json":
                 run_dir = result_file.parent
             else:
@@ -671,7 +667,6 @@ def _webcam_session_finalize(session: Optional[_WebcamPlaybackSession], result_p
                 if not src.exists():
                     continue
                 dst = final_dir / f"webcam_r{iteration}.mp4"
-                # 이미 최종 위치에 있으면 이동 생략 (early-move 성공 케이스)
                 try:
                     if src.resolve() == dst.resolve():
                         continue
@@ -689,13 +684,25 @@ def _webcam_session_finalize(session: Optional[_WebcamPlaybackSession], result_p
     except Exception as e:
         logger.warning("Failed to finalize webcam session: %s", e)
     finally:
-        # 임시 폴더 정리 (비어 있을 때만)
         try:
             td = session.temp_dir
             if td and td.exists() and not any(td.iterdir()):
                 td.rmdir()
         except Exception:
             pass
+
+
+async def _webcam_session_finalize(session: Optional[_WebcamPlaybackSession], result_path: Optional[str]) -> None:
+    """재생 종료 시 마지막 cycle 녹화 정지 + 남은 cycle 파일을 결과 폴더로 이동.
+
+    cycle별 파일은 이미 `_webcam_session_next_cycle`에서 즉시 최종 위치로 옮겨져 있는 경우가 많으며,
+    이 함수는 마지막(진행 중이던) cycle과 early-move가 실패했던 파일만 보완 이동한다.
+
+    stop_recording + shutil.move 여러 번 = 수 초 블록 가능 → thread 이전.
+    """
+    if session is None or not session.is_active():
+        return
+    await asyncio.to_thread(_webcam_session_finalize_sync, session, result_path)
 
 
 async def _run_play_job(data: dict):
@@ -720,7 +727,7 @@ async def _run_play_job(data: dict):
         mark_playback_active(True)
         publish_event({"type": "playback_reset", "scenario": scenario_name})
         # 웹캠 녹화 시작 (열려 있을 때만)
-        webcam_session = _webcam_session_start(iteration=1)
+        webcam_session = await _webcam_session_start(iteration=1)
 
         scen = await recording_service.load_scenario(scenario_name)
         if skip_steps:
@@ -860,7 +867,7 @@ async def _run_play_job(data: dict):
         logger.exception("Play job failed")
         publish_event({"type": "error", "message": str(e)})
     finally:
-        _webcam_session_finalize(webcam_session, result_path)
+        await _webcam_session_finalize(webcam_session, result_path)
         if _is_multi_cycle:
             playback_service._cleanup_run_output_dir()
             playback_service._running = False
@@ -890,7 +897,7 @@ async def _run_play_group_job(data: dict):
         clear_event_buffer()
         mark_playback_active(True)
         publish_event({"type": "playback_reset", "group": True})
-        webcam_session = _webcam_session_start(iteration=1)
+        webcam_session = await _webcam_session_start(iteration=1)
 
         all_preflight_errors: list[str] = []
         for entry in entries:
@@ -1072,7 +1079,7 @@ async def _run_play_group_job(data: dict):
         logger.exception("Play group job failed")
         publish_event({"type": "error", "message": str(e)})
     finally:
-        _webcam_session_finalize(webcam_session, result_path)
+        await _webcam_session_finalize(webcam_session, result_path)
         playback_service._cleanup_run_output_dir()
         playback_service._running = False
         mark_playback_active(False)

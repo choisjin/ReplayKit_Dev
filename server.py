@@ -226,7 +226,10 @@ class ServerManagerApp:
         self.backend = ServerProcess(
             "백엔드",
             [VENV_PYTHON, "-m", "uvicorn", "backend.app.main:app",
-             "--host", "0.0.0.0", "--port", "8000"],
+             "--host", "0.0.0.0", "--port", "8000",
+             # 장시간 재생 중 일시적 event loop 지연이 있어도 WS가 끊기지 않도록
+             # ping interval/timeout을 기본값(20s) → 60s로 상향.
+             "--ws-ping-interval", "60", "--ws-ping-timeout", "60"],
             PROJECT_ROOT,
             "http://localhost:8000",
         )

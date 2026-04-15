@@ -1351,7 +1351,11 @@ class PlaybackService:
 
     async def _save_result(self, result: ScenarioResult, interim: bool = False) -> str:
         """Save execution result to JSON + Excel (런 폴더 내 result.json + result.xlsx).
-        interim=True: 중간 저장 — _run_output_dir을 유지."""
+        interim=True: 중간 저장 — _run_output_dir을 유지.
+
+        JSON 직렬화 + 파일 쓰기 + Excel workbook 생성은 모두 sync blocking이며
+        cycle 수/step 수에 비례해 초 단위로 커짐 → thread 이전해 event loop를 지킨다.
+        """
         timestamp = self._result_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
 
         if self._run_output_dir and self._run_output_dir.exists():
@@ -1360,18 +1364,20 @@ class PlaybackService:
             RESULTS_DIR.mkdir(parents=True, exist_ok=True)
             filepath = RESULTS_DIR / f"{result.scenario_name}_{timestamp}.json"
 
-        filepath.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+        await asyncio.to_thread(
+            filepath.write_text, result.model_dump_json(indent=2), "utf-8"
+        )
         logger.info("Result saved%s: %s", " (interim)" if interim else "", filepath)
 
-        # Excel 자동 생성
-        self._save_excel(filepath)
+        # Excel 자동 생성 (workbook 빌드 + 저장이 수 초 걸릴 수 있음)
+        await asyncio.to_thread(self._save_excel, filepath)
 
         if not interim:
             self._run_output_dir = None
         return str(filepath)
 
     def _save_excel(self, json_path: Path) -> None:
-        """result.json 옆에 Excel 파일을 자동 생성."""
+        """result.json 옆에 Excel 파일을 자동 생성. (thread에서 호출)"""
         try:
             from ..routers.results import _build_excel_workbook
             import json as _json
