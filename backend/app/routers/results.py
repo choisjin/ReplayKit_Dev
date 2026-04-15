@@ -1,12 +1,14 @@
 """Test results API routes."""
 
-import json
+import html as _html
 import io
-import subprocess
+import json
+import os
 import shutil
+import subprocess
 import zipfile
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse, StreamingResponse
@@ -104,6 +106,179 @@ def _resolve_image_path(rel_path: str | None) -> Path | None:
         p = p[idx + len("/screenshots/"):]
     full = SCREENSHOTS_DIR / p
     return full if full.exists() else None
+
+
+def _html_image_src(rel_path: str | None, html_dir: Path) -> str:
+    """저장된 이미지 경로(RESULTS_DIR 또는 SCREENSHOTS_DIR 기준)를 HTML이 위치한
+    디렉토리 기준 상대 경로로 변환. 파일이 존재하지 않으면 빈 문자열."""
+    if not rel_path:
+        return ""
+    rp = str(rel_path).replace("\\", "/")
+    # /screenshots/ 프리픽스가 포함된 경우 제거
+    idx = rp.find("/screenshots/")
+    if idx >= 0:
+        rp_ss = rp[idx + len("/screenshots/"):]
+    else:
+        rp_ss = rp
+    candidates = [
+        RESULTS_DIR / rp,
+        SCREENSHOTS_DIR / rp_ss,
+    ]
+    for abs_path in candidates:
+        try:
+            if abs_path.exists():
+                try:
+                    return abs_path.relative_to(html_dir).as_posix()
+                except ValueError:
+                    return os.path.relpath(str(abs_path), str(html_dir)).replace("\\", "/")
+        except OSError:
+            continue
+    return ""
+
+
+_HTML_STYLE = """
+body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 16px; font-size: 13px; color: #222; }
+h1 { font-size: 18px; margin: 0 0 8px; }
+.meta { margin: 0 0 12px; color: #555; }
+.meta span { display: inline-block; margin-right: 14px; }
+.meta b.status-pass { color: #2f7d32; }
+.meta b.status-fail { color: #c62828; }
+.meta b.status-error { color: #d84315; }
+table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+th, td { border: 1px solid #bbb; padding: 4px 6px; vertical-align: middle; text-align: center; word-break: break-word; font-size: 12px; }
+th { background: #4472C4; color: #fff; font-weight: 600; }
+tr.desc td { background: #D9E2F3; color: #44546A; font-size: 11px; }
+td.text { text-align: left; white-space: pre-wrap; }
+td.status-pass { background: #C6EFCE; font-weight: 600; }
+td.status-fail { background: #FFC7CE; font-weight: 600; }
+td.status-warning { background: #FFEB9C; font-weight: 600; }
+td.status-error { background: #F4B084; font-weight: 600; }
+img { max-width: 180px; max-height: 140px; display: block; margin: 0 auto; }
+.col-ts { width: 140px; }
+.col-num { width: 56px; }
+.col-status { width: 72px; }
+.col-delay, .col-dur { width: 70px; }
+.col-dev { width: 110px; }
+.col-img { width: 190px; }
+"""
+
+
+def _build_html_report(data: dict, output_path: Path) -> str:
+    """경량 HTML 리포트 문자열 생성. 이미지 태그는 output_path 기준 상대 경로 사용.
+
+    엑셀과 달리 이미지를 디코딩/재인코딩하지 않고 <img src>로 참조만 하므로
+    장시간 재생 시에도 메모리/CPU 비용이 거의 무시할 수 있다.
+    """
+    html_dir = output_path.parent
+
+    def e(v) -> str:
+        return _html.escape("" if v is None else str(v))
+
+    scenario_name = data.get("scenario_name", "")
+    status = data.get("status", "")
+    total_steps = data.get("total_steps", 0)
+    total_repeat = data.get("total_repeat", 1)
+    passed = data.get("passed_steps", 0)
+    failed = data.get("failed_steps", 0)
+    warned = data.get("warning_steps", 0)
+    errored = data.get("error_steps", 0)
+    started_at = data.get("started_at", "")
+    finished_at = data.get("finished_at", "")
+
+    def _fmt_ts(iso: str) -> str:
+        try:
+            from datetime import datetime as _dt
+            ts = _dt.fromisoformat(iso.replace("Z", "+00:00"))
+            return ts.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        except Exception:
+            return iso or ""
+
+    headers = [
+        ("Time Stamp", "col-ts"),
+        ("TOTAL", "col-num"),
+        ("CYCLE", "col-num"),
+        ("STEP", "col-num"),
+        ("Device", "col-dev"),
+        ("Command", ""),
+        ("Remark", ""),
+        ("Status", "col-status"),
+        ("DELAY", "col-delay"),
+        ("DURATION", "col-dur"),
+        ("Expected", "col-img"),
+        ("Actual", "col-img"),
+    ]
+    descs = [
+        "실행된 날짜/시간", "총 repeat", "현재 cycle", "스탭 순서", "장치",
+        "action", "설명", "pass/fail/error", "설정한 딜레이", "실제 걸린 시간",
+        "기대 이미지", "비교 이미지",
+    ]
+
+    parts: list[str] = []
+    parts.append("<!DOCTYPE html>")
+    parts.append('<html lang="ko"><head><meta charset="utf-8">')
+    parts.append(f"<title>{e(scenario_name)} - Test Report</title>")
+    parts.append(f"<style>{_HTML_STYLE}</style>")
+    parts.append("</head><body>")
+    parts.append(f"<h1>{e(scenario_name)}</h1>")
+    status_class = f"status-{status}" if status in ("pass", "fail", "error") else ""
+    parts.append('<div class="meta">')
+    parts.append(f'<span>상태: <b class="{status_class}">{e(status.upper())}</b></span>')
+    parts.append(f"<span>총 step: {total_steps}</span>")
+    parts.append(f"<span>repeat: {total_repeat}</span>")
+    parts.append(f"<span>pass: {passed}</span>")
+    parts.append(f"<span>fail: {failed}</span>")
+    if warned:
+        parts.append(f"<span>warning: {warned}</span>")
+    parts.append(f"<span>error: {errored}</span>")
+    parts.append(f"<span>시작: {e(_fmt_ts(started_at))}</span>")
+    parts.append(f"<span>종료: {e(_fmt_ts(finished_at))}</span>")
+    parts.append("</div>")
+
+    parts.append("<table><thead><tr>")
+    for h, cls in headers:
+        parts.append(f'<th class="{cls}">{e(h)}</th>')
+    parts.append("</tr><tr class='desc'>")
+    for d in descs:
+        parts.append(f"<td>{e(d)}</td>")
+    parts.append("</tr></thead><tbody>")
+
+    for sr in data.get("step_results", []):
+        st = sr.get("status", "")
+        ts_str = _fmt_ts(sr.get("timestamp", started_at))
+        command = sr.get("command", sr.get("message", ""))
+        description = sr.get("description", "")
+        delay_ms = sr.get("delay_ms", 0)
+        duration_ms = sr.get("execution_time_ms", 0)
+        dur_str = f"{duration_ms}ms" if duration_ms < 1000 else f"{duration_ms / 1000:.1f}s"
+        delay_str = f"{delay_ms}ms" if delay_ms else "-"
+        exp_src = _html_image_src(sr.get("expected_image"), html_dir)
+        act_src = _html_image_src(
+            sr.get("actual_annotated_image") or sr.get("actual_image"), html_dir
+        )
+        status_cls = f"status-{st}" if st in ("pass", "fail", "warning", "error") else ""
+        parts.append("<tr>")
+        parts.append(f"<td>{e(ts_str)}</td>")
+        parts.append(f"<td>{e(total_repeat)}</td>")
+        parts.append(f"<td>{e(sr.get('repeat_index', 1))}</td>")
+        parts.append(f"<td>{e(sr.get('step_id', ''))}</td>")
+        parts.append(f"<td>{e(sr.get('device_id', ''))}</td>")
+        parts.append(f'<td class="text">{e(command)}</td>')
+        parts.append(f'<td class="text">{e(description)}</td>')
+        parts.append(f'<td class="{status_cls}">{e(st.upper())}</td>')
+        parts.append(f"<td>{e(delay_str)}</td>")
+        parts.append(f"<td>{e(dur_str)}</td>")
+        if exp_src:
+            parts.append(f'<td><img loading="lazy" src="{e(exp_src)}" alt=""></td>')
+        else:
+            parts.append("<td>-</td>")
+        if act_src:
+            parts.append(f'<td><img loading="lazy" src="{e(act_src)}" alt=""></td>')
+        else:
+            parts.append("<td>-</td>")
+        parts.append("</tr>")
+
+    parts.append("</tbody></table></body></html>")
+    return "".join(parts)
 
 
 def _build_excel_workbook(data: dict, filepath: Path = None):
@@ -288,6 +463,16 @@ async def export_result_bundle(filename: str, export_path: str = ""):
     if filepath.name == "result.json" and filepath.parent != RESULTS_DIR:
         run_dir = filepath.parent
         folder_name = run_dir.name
+        # 런 폴더에는 result.html만 자동 생성되고 xlsx는 없을 수 있다.
+        # 번들 다운로드 시점에만 lazy로 xlsx를 생성하여 파일에 포함시킨다.
+        excel_path = run_dir / "result.xlsx"
+        if not excel_path.exists():
+            try:
+                data = json.loads(filepath.read_text(encoding="utf-8"))
+                wb = _build_excel_workbook(data, filepath)
+                wb.save(str(excel_path))
+            except Exception:
+                pass
     else:
         # 레거시: 임시 폴더에 결과물 수집
         data = json.loads(filepath.read_text(encoding="utf-8"))

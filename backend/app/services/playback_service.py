@@ -47,10 +47,13 @@ SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent.parent / "screenshots"
 # WebSocket이 끊어져도 백그라운드 재생은 계속 동작하고, 새로 연결된
 # client가 "subscribe" 하면 버퍼링된 최근 이벤트를 재전송 받아 상태를 복구할 수 있다.
 
-_EVENT_BUFFER_MAX = 2000  # 마지막 N개 이벤트만 유지 (long scenario 대비)
+_EVENT_BUFFER_MAX = 500  # 재연결 시 replay용 — 그 이전 이벤트는 result.json에서 복원 가능
 _event_subscribers: set["asyncio.Queue[dict]"] = set()
 _event_buffer: list[dict] = []
 _event_buffer_lock = asyncio.Lock()
+# 버퍼에 저장할 때 step_result payload에서 제거할 heavy 필드 집합.
+# 라이브 브로드캐스트에는 그대로 전달되고, 버퍼 replay 시에만 축약된 형태가 사용된다.
+_BUFFER_STRIP_FIELDS = {"sub_results", "match_location", "roi"}
 # 현재 재생이 실제로 진행 중인지 여부 — 중단/완료된 run의 버퍼를 새 subscriber에게 replay하지 않기 위해 사용.
 _playback_active: bool = False
 
@@ -89,9 +92,22 @@ def unsubscribe_events(q: "asyncio.Queue[dict]") -> None:
     logger.debug("Event subscriber removed (total=%d)", len(_event_subscribers))
 
 
+def _slim_for_buffer(event: dict) -> dict:
+    """버퍼 저장용 경량 복사본. step_result의 heavy 필드를 제거하여 장시간 재생 시
+    이벤트 버퍼 메모리 점유를 크게 낮춘다. 라이브 구독자에는 원본이 전달된다."""
+    if event.get("type") != "step_result":
+        return event
+    data = event.get("data")
+    if not isinstance(data, dict):
+        return event
+    slim_data = {k: v for k, v in data.items() if k not in _BUFFER_STRIP_FIELDS}
+    return {**event, "data": slim_data}
+
+
 def publish_event(event: dict) -> None:
-    """이벤트를 모든 구독자에게 브로드캐스트 + 버퍼에 추가."""
-    _event_buffer.append(event)
+    """이벤트를 모든 구독자에게 브로드캐스트 + 버퍼에 추가.
+    버퍼에는 축약본을 저장해 장시간 재생 시 메모리 점유를 억제한다."""
+    _event_buffer.append(_slim_for_buffer(event))
     if len(_event_buffer) > _EVENT_BUFFER_MAX:
         _event_buffer.pop(0)
     for q in list(_event_subscribers):
@@ -573,6 +589,13 @@ class PlaybackService:
                         step_result.expected_image = f"{scenario_name}/{step.expected_image}"
                     step_result.roi = step.roi
 
+                    # 모든 비교/주석 경로에서 재사용할 단일 ndarray를 먼저 로드.
+                    # 실패 스텝당 기존 3~5회 imread → 1회로 축소.
+                    act_img_ndarray = await asyncio.to_thread(safe_imread, actual_path)
+                    exp_img_ndarray = None
+                    if expected_path:
+                        exp_img_ndarray = await asyncio.to_thread(safe_imread, expected_path)
+
                     if mode == CompareMode.MULTI_CROP:
                         # --- Multi-crop mode ---
                         crop_items = [
@@ -583,7 +606,6 @@ class PlaybackService:
                             }
                             for ci in step.expected_images
                         ]
-                        # judge()는 SSIM/template matching이 CPU-bound — event loop 블록 방지 위해 thread 이전
                         judgement = await asyncio.to_thread(
                             self.image_compare.judge,
                             expected_path="",
@@ -591,6 +613,7 @@ class PlaybackService:
                             threshold_pass=step.similarity_threshold,
                             compare_mode="multi_crop",
                             crop_items=crop_items,
+                            img_act=act_img_ndarray,
                         )
                         step_result.status = judgement["status"]
                         step_result.sub_results = [SubResult(**sr) for sr in judgement.get("sub_results", [])]
@@ -604,23 +627,21 @@ class PlaybackService:
                                 await asyncio.to_thread(
                                     self.image_compare.generate_multi_crop_annotated,
                                     actual_path, judgement.get("sub_results", []), annotated_path,
+                                    act_img_ndarray,
                                 )
-                                step_result.actual_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_annotated.png"), scenario_name)
+                                step_result.actual_annotated_image = self._rel_path(annotated_path, scenario_name)
                             except Exception as e:
                                 logger.warning("Failed to generate multi-crop annotated image: %s", e)
 
                             # Generate annotated expected image: only crop regions visible, rest darkened
-                            if expected_path:
+                            if exp_img_ndarray is not None:
                                 def _build_multi_crop_expected_annotated():
                                     import cv2
-                                    img_exp = safe_imread(expected_path)
-                                    if img_exp is None:
-                                        return None
-                                    dark = (img_exp * 0.2).astype("uint8")
+                                    dark = (exp_img_ndarray * 0.2).astype("uint8")
                                     for ci in step.expected_images:
                                         if ci.roi:
                                             r = ci.roi
-                                            dark[r.y:r.y + r.height, r.x:r.x + r.width] = img_exp[r.y:r.y + r.height, r.x:r.x + r.width]
+                                            dark[r.y:r.y + r.height, r.x:r.x + r.width] = exp_img_ndarray[r.y:r.y + r.height, r.x:r.x + r.width]
                                             cv2.rectangle(dark, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 255, 0), 2)
                                     exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
                                     safe_imwrite(exp_ann_path, dark)
@@ -628,11 +649,10 @@ class PlaybackService:
                                 try:
                                     built = await asyncio.to_thread(_build_multi_crop_expected_annotated)
                                     if built:
-                                        step_result.expected_annotated_image = self._rel_path(str(actual_dir / f"{file_prefix}_expected_annotated.png"), scenario_name)
+                                        step_result.expected_annotated_image = self._rel_path(built, scenario_name)
                                 except Exception as e:
                                     logger.warning("Failed to generate multi-crop expected annotated: %s", e)
 
-                            # Build message from individual results
                             parts = [f"{sr.label or f'#{i+1}'}:{sr.status}({sr.score:.2f})" for i, sr in enumerate(step_result.sub_results)]
                             step_result.message = f"Multi-crop: {', '.join(parts)}"
 
@@ -646,19 +666,21 @@ class PlaybackService:
                             threshold_pass=step.similarity_threshold,
                             compare_mode="full_exclude",
                             exclude_rois=exclude_rois_dicts,
+                            img_exp=exp_img_ndarray,
+                            img_act=act_img_ndarray,
                         )
                         step_result.status = judgement["status"]
                         step_result.similarity_score = judgement["score"]
+                        _diff_array = judgement.get("diff_array")  # 재사용용 SSIM diff
 
                         if judgement["status"] == "error":
                             step_result.message = judgement.get("message", "Exclude comparison error")
                         else:
-                            # Generate annotated image with excluded regions
                             def _build_exclude_actual_annotated():
                                 import cv2
-                                img_annotated = safe_imread(actual_path)
-                                if img_annotated is None:
+                                if act_img_ndarray is None:
                                     return False
+                                img_annotated = act_img_ndarray.copy()
                                 overlay = img_annotated.copy()
                                 for r in step.exclude_rois:
                                     cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (128, 128, 128), -1)
@@ -681,23 +703,20 @@ class PlaybackService:
                                     await asyncio.to_thread(
                                         self.image_compare.generate_diff_heatmap,
                                         expected_path, actual_path, diff_path,
-                                        exclude_rois=exclude_rois_dicts,
+                                        None, exclude_rois_dicts,
+                                        exp_img_ndarray, act_img_ndarray, _diff_array,
                                     )
                                     step_result.diff_image = diff_rel
                                 except Exception as e:
                                     logger.warning("Failed to generate diff: %s", e)
 
-                            # Generate annotated expected image: gray out excluded regions
-                            if expected_path:
+                            if exp_img_ndarray is not None:
                                 def _build_exclude_expected_annotated():
                                     import cv2
-                                    img_exp = safe_imread(expected_path)
-                                    if img_exp is None:
-                                        return False
-                                    overlay = img_exp.copy()
+                                    overlay = exp_img_ndarray.copy()
                                     for r in step.exclude_rois:
                                         cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (128, 128, 128), -1)
-                                    cv2.addWeighted(overlay, 0.5, img_exp, 0.5, 0, overlay)
+                                    cv2.addWeighted(overlay, 0.5, exp_img_ndarray, 0.5, 0, overlay)
                                     for r in step.exclude_rois:
                                         cv2.rectangle(overlay, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 2)
                                     exp_ann_path = str(actual_dir / f"{file_prefix}_expected_annotated.png")
@@ -712,32 +731,33 @@ class PlaybackService:
                             step_result.message = f"Exclude {len(step.exclude_rois)} regions: {judgement['score']:.4f}"
 
                     else:
-                        # --- Full / Single-crop mode (existing behavior) ---
-                        compare_actual = actual_path
-                        if step.roi:
+                        # --- Full / Single-crop mode ---
+                        compare_actual_path = actual_path
+                        compare_actual_img = act_img_ndarray
+                        if step.roi and act_img_ndarray is not None:
                             def _crop_actual_roi():
-                                img_act = safe_imread(actual_path)
-                                if img_act is None:
-                                    return None
                                 r = step.roi
-                                cropped = img_act[r.y:r.y + r.height, r.x:r.x + r.width]
+                                cropped = act_img_ndarray[r.y:r.y + r.height, r.x:r.x + r.width]
                                 cropped_path = str(actual_dir / f"{file_prefix}_roi.png")
                                 safe_imwrite(cropped_path, cropped)
-                                return cropped_path
+                                return cropped_path, cropped
                             cropped_ret = await asyncio.to_thread(_crop_actual_roi)
                             if cropped_ret:
-                                compare_actual = cropped_ret
+                                compare_actual_path = cropped_ret[0]
+                                compare_actual_img = cropped_ret[1]
 
                         judgement = await asyncio.to_thread(
                             self.image_compare.judge,
                             expected_path,
-                            compare_actual,
+                            compare_actual_path,
                             threshold_pass=step.similarity_threshold,
+                            img_exp=exp_img_ndarray,
+                            img_act=compare_actual_img,
                         )
                         step_result.status = judgement["status"]
                         step_result.similarity_score = judgement["score"]
+                        _diff_array = judgement.get("diff_array")
 
-                        # 이미지 읽기 실패 시 에러 메시지 보존
                         if judgement["status"] == "error":
                             step_result.message = judgement.get("message", "Image comparison error")
                         else:
@@ -746,9 +766,9 @@ class PlaybackService:
                                 step_result.match_location = match_loc
                                 def _build_match_annotated():
                                     import cv2
-                                    img_annotated = safe_imread(actual_path)
-                                    if img_annotated is None:
+                                    if act_img_ndarray is None:
                                         return False
+                                    img_annotated = act_img_ndarray.copy()
                                     x, y = match_loc["x"], match_loc["y"]
                                     w, h = match_loc["width"], match_loc["height"]
                                     cv2.rectangle(img_annotated, (x, y), (x + w, y + h), (0, 0, 255), 3)
@@ -763,9 +783,9 @@ class PlaybackService:
                             elif step.roi:
                                 def _build_roi_annotated():
                                     import cv2
-                                    img_annotated = safe_imread(actual_path)
-                                    if img_annotated is None:
+                                    if act_img_ndarray is None:
                                         return False
+                                    img_annotated = act_img_ndarray.copy()
                                     r = step.roi
                                     cv2.rectangle(img_annotated, (r.x, r.y), (r.x + r.width, r.y + r.height), (0, 0, 255), 3)
                                     annotated_path = str(actual_dir / f"{file_prefix}_annotated.png")
@@ -784,7 +804,9 @@ class PlaybackService:
                                 try:
                                     await asyncio.to_thread(
                                         self.image_compare.generate_diff_heatmap,
-                                        expected_path, compare_actual, diff_path,
+                                        expected_path, compare_actual_path, diff_path,
+                                        None, None,
+                                        exp_img_ndarray, compare_actual_img, _diff_array,
                                     )
                                     step_result.diff_image = diff_rel
                                 except Exception as e:
@@ -795,6 +817,10 @@ class PlaybackService:
                                 step_result.message = f"{step_result.message}\n{sim_msg}"
                             else:
                                 step_result.message = sim_msg
+
+                    # 이미지 ndarray 즉시 해제하여 GC가 곧바로 수거할 수 있게 한다.
+                    act_img_ndarray = None
+                    exp_img_ndarray = None
                 else:
                     dev_label = ss_device["id"] if ss_device else step.device_id or "default"
                     if not step_result.message:
@@ -1417,11 +1443,11 @@ class PlaybackService:
         self._result_timestamp = ""
 
     async def _save_result(self, result: ScenarioResult, interim: bool = False) -> str:
-        """Save execution result to JSON + Excel (런 폴더 내 result.json + result.xlsx).
+        """Save execution result to JSON + HTML (런 폴더 내 result.json + result.html).
         interim=True: 중간 저장 — _run_output_dir을 유지.
 
-        JSON 직렬화 + 파일 쓰기 + Excel workbook 생성은 모두 sync blocking이며
-        cycle 수/step 수에 비례해 초 단위로 커짐 → thread 이전해 event loop를 지킨다.
+        JSON 직렬화/파일 쓰기/HTML 빌드를 thread로 이전해 event loop 블록을 막는다.
+        Excel은 무거우므로 자동 생성하지 않고 /api/results/export에서 on-demand 생성한다.
         """
         timestamp = self._result_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -1431,27 +1457,23 @@ class PlaybackService:
             RESULTS_DIR.mkdir(parents=True, exist_ok=True)
             filepath = RESULTS_DIR / f"{result.scenario_name}_{timestamp}.json"
 
-        await asyncio.to_thread(
-            filepath.write_text, result.model_dump_json(indent=2), "utf-8"
-        )
-        logger.info("Result saved%s: %s", " (interim)" if interim else "", filepath)
+        # model_dump 한 번만 수행하고 JSON/HTML 양쪽에 재사용 (JSON round-trip 제거)
+        data = result.model_dump()
 
-        # Excel 자동 생성 (workbook 빌드 + 저장이 수 초 걸릴 수 있음)
-        await asyncio.to_thread(self._save_excel, filepath)
+        def _write_json_and_html():
+            import json as _json
+            filepath.write_text(_json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+            try:
+                from ..routers.results import _build_html_report
+                html_path = filepath.with_suffix(".html")
+                html_str = _build_html_report(data, html_path)
+                html_path.write_text(html_str, encoding="utf-8")
+            except Exception as e:
+                logger.warning("HTML report generation failed: %s", e)
+
+        await asyncio.to_thread(_write_json_and_html)
+        logger.info("Result saved%s: %s", " (interim)" if interim else "", filepath)
 
         if not interim:
             self._run_output_dir = None
         return str(filepath)
-
-    def _save_excel(self, json_path: Path) -> None:
-        """result.json 옆에 Excel 파일을 자동 생성. (thread에서 호출)"""
-        try:
-            from ..routers.results import _build_excel_workbook
-            import json as _json
-            data = _json.loads(json_path.read_text(encoding="utf-8"))
-            wb = _build_excel_workbook(data, json_path)
-            excel_path = json_path.with_suffix(".xlsx")
-            wb.save(str(excel_path))
-            logger.info("Excel saved: %s", excel_path)
-        except Exception as e:
-            logger.warning("Excel auto-generation failed: %s", e)

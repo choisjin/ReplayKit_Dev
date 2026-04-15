@@ -64,6 +64,15 @@ class ImageCompareService:
                 "Install it with: pip install opencv-python-headless"
             )
 
+    @staticmethod
+    def _resolve_img(img, path):
+        """ndarray가 주어지면 그대로, 아니면 path에서 읽는다. 둘 다 없으면 None."""
+        if img is not None:
+            return img
+        if path:
+            return safe_imread(path)
+        return None
+
     # ------------------------------------------------------------------
     # Level 1 — Full-image SSIM
     # ------------------------------------------------------------------
@@ -73,6 +82,8 @@ class ImageCompareService:
         expected_path: str,
         actual_path: str,
         roi: Optional[dict] = None,
+        img_exp=None,
+        img_act=None,
     ) -> dict:
         """Return similarity score and diff image path.
 
@@ -80,10 +91,11 @@ class ImageCompareService:
             expected_path: path to expected screenshot PNG
             actual_path: path to actual screenshot PNG
             roi: optional dict with x, y, width, height to crop before comparing
+            img_exp/img_act: pre-loaded ndarrays (재사용 최적화용, 주어지면 path는 무시)
         """
         self._require_cv2()
-        img_exp = safe_imread(expected_path)
-        img_act = safe_imread(actual_path)
+        img_exp = self._resolve_img(img_exp, expected_path)
+        img_act = self._resolve_img(img_act, actual_path)
         if img_exp is None or img_act is None:
             return {"score": 0.0, "error": "Could not read one or both images"}
 
@@ -158,6 +170,8 @@ class ImageCompareService:
         expected_path: str,
         actual_path: str,
         exclude_rois: list[dict],
+        img_exp=None,
+        img_act=None,
     ) -> dict:
         """SSIM comparison with specified regions excluded.
 
@@ -165,8 +179,8 @@ class ImageCompareService:
         only the unmasked pixels for the final score.
         """
         self._require_cv2()
-        img_exp = safe_imread(expected_path)
-        img_act = safe_imread(actual_path)
+        img_exp = self._resolve_img(img_exp, expected_path)
+        img_act = self._resolve_img(img_act, actual_path)
         if img_exp is None or img_act is None:
             return {"score": 0.0, "error": "Could not read one or both images"}
 
@@ -217,13 +231,14 @@ class ImageCompareService:
         actual_path: str,
         crop_items: list[dict],
         threshold_pass: float = 0.95,
+        img_act=None,
     ) -> dict:
         """Compare multiple cropped expected images against a single actual screenshot.
 
         Returns per-crop sub-results. Overall status is fail if any crop fails.
         """
         self._require_cv2()
-        img_act = safe_imread(actual_path)
+        img_act = self._resolve_img(img_act, actual_path)
         if img_act is None:
             return {"error": "Could not read actual image", "sub_results": []}
 
@@ -323,16 +338,32 @@ class ImageCompareService:
         output_path: str,
         roi: Optional[dict] = None,
         exclude_rois: Optional[list[dict]] = None,
+        img_exp=None,
+        img_act=None,
+        diff_array=None,
     ) -> str:
-        """Generate a heatmap PNG highlighting differences."""
-        if exclude_rois:
-            result = self.compare_ssim_with_exclusions(expected_path, actual_path, exclude_rois)
-        else:
-            result = self.compare_ssim(expected_path, actual_path, roi=roi)
-        if "error" in result:
-            raise RuntimeError(result["error"])
+        """Generate a heatmap PNG highlighting differences.
 
-        diff = result["diff_array"]
+        diff_array가 주어지면 SSIM을 다시 계산하지 않고 재사용한다 (주로 judge() 이후
+        FAIL 케이스에서 호출될 때 호출자가 이미 계산한 diff를 넘겨 중복 계산 회피).
+        img_exp/img_act도 마찬가지로 재사용 가능.
+        """
+        if diff_array is not None:
+            diff = diff_array
+        else:
+            if exclude_rois:
+                result = self.compare_ssim_with_exclusions(
+                    expected_path, actual_path, exclude_rois,
+                    img_exp=img_exp, img_act=img_act,
+                )
+            else:
+                result = self.compare_ssim(
+                    expected_path, actual_path, roi=roi,
+                    img_exp=img_exp, img_act=img_act,
+                )
+            if "error" in result:
+                raise RuntimeError(result["error"])
+            diff = result["diff_array"]
         # Invert so differences are bright
         diff_inv = 255 - diff
         heatmap = cv2.applyColorMap(diff_inv, cv2.COLORMAP_JET)
@@ -353,11 +384,14 @@ class ImageCompareService:
         actual_path: str,
         sub_results: list[dict],
         output_path: str,
+        img_act=None,
     ) -> str:
         """Draw match boxes for each crop on the actual screenshot."""
-        img = safe_imread(actual_path)
-        if img is None:
+        src = img_act if img_act is not None else safe_imread(actual_path)
+        if src is None:
             raise RuntimeError("Could not read actual image")
+        # 원본 훼손 방지용 복사 (호출자가 같은 ndarray를 다른 용도로 재사용할 수 있음)
+        img = src.copy()
 
         for i, sr in enumerate(sub_results):
             loc = sr.get("match_location")
@@ -388,14 +422,21 @@ class ImageCompareService:
         compare_mode: str = "full",
         exclude_rois: Optional[list[dict]] = None,
         crop_items: Optional[list[dict]] = None,
+        img_exp=None,
+        img_act=None,
     ) -> dict:
-        """Return pass/fail judgement with mode-aware dispatch."""
+        """Return pass/fail judgement with mode-aware dispatch.
+
+        img_exp/img_act가 주어지면 내부 path 기반 imread를 생략한다.
+        FAIL 케이스에서 호출자가 diff 재사용을 원하면 반환 dict의 diff_array를 활용.
+        """
 
         # --- Multi-crop mode ---
         if compare_mode == "multi_crop" and crop_items:
             mc_result = self.compare_multi_crop(
                 actual_path, crop_items,
                 threshold_pass=threshold_pass,
+                img_act=img_act,
             )
             if "error" in mc_result:
                 return {"status": "error", "score": 0.0, "message": mc_result["error"], "sub_results": []}
@@ -410,15 +451,24 @@ class ImageCompareService:
 
         # --- Full-exclude mode ---
         if compare_mode == "full_exclude" and exclude_rois:
-            result = self.compare_ssim_with_exclusions(expected_path, actual_path, exclude_rois)
+            result = self.compare_ssim_with_exclusions(
+                expected_path, actual_path, exclude_rois,
+                img_exp=img_exp, img_act=img_act,
+            )
             if "error" in result:
                 return {"status": "error", "score": 0.0, "message": result["error"]}
             score = result["score"]
             status = "pass" if score >= threshold_pass else "fail"
-            return {"status": status, "score": score}
+            out: dict = {"status": status, "score": score}
+            if "diff_array" in result:
+                out["diff_array"] = result["diff_array"]
+            return out
 
         # --- Full / Single-crop mode (existing behavior) ---
-        result = self.compare_ssim(expected_path, actual_path, roi=roi)
+        result = self.compare_ssim(
+            expected_path, actual_path, roi=roi,
+            img_exp=img_exp, img_act=img_act,
+        )
         if "error" in result:
             return {"status": "error", "score": 0.0, "message": result["error"]}
 
@@ -428,4 +478,6 @@ class ImageCompareService:
         out: dict = {"status": status, "score": score}
         if "match_location" in result:
             out["match_location"] = result["match_location"]
+        if "diff_array" in result:
+            out["diff_array"] = result["diff_array"]
         return out
