@@ -928,7 +928,8 @@ class PlaybackService:
                         isap = self.dm.get_isap_service(device_id)
                         if isap:
                             await isap.async_disconnect()
-                        svc = ISAPAgentService(dev.address, port, device_id=dev.id)
+                        svc = ISAPAgentService(dev.address, port, device_id=dev.id,
+                                               key_overrides=dev.info.get("isap_keys"))
                         ok = await svc.async_connect()
                         if ok:
                             self.dm._isap_conns[dev.id] = svc

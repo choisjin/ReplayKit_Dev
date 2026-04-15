@@ -99,8 +99,10 @@ SCREEN_PORT_MAP: dict[str, int] = {
 }
 
 
-# Key tables from spec (표 113/114/115/117/119/121/123/125...).
-# 첫 번째 구현으로 MKBD와 CCP에 집중 — 필요 시 추가 확장 가능.
+# Key tables from spec (Connected_Wide_iSAP_Agent.docx).
+# 각 키의 group은 이름 앞부분(첫 "_" 전)으로 판별된다.
+# - 이 딕셔너리는 global default 이며, 각 디바이스는 info["isap_keys"]로
+#   cmd/key/visible을 개별 오버라이드 할 수 있다 (차종별 키 값 차이 대응).
 ISAP_KEYS: dict[str, dict] = {
     # MKBD (CMD_HKEY=0x60) — 표 113
     "MKBD_HOME":        {"cmd": CMD_HKEY, "key": 0x0A},
@@ -120,7 +122,7 @@ ISAP_KEYS: dict[str, dict] = {
     "MKBD_VOLUME":      {"cmd": CMD_HKEY, "key": 0x01, "dial": True},
     "MKBD_TUNE":        {"cmd": CMD_HKEY, "key": 0x04, "dial": True},
 
-    # CCP (0x80) — 표 115
+    # CCP (CMD_CCP=0x80) — 표 115
     "CCP_UP":           {"cmd": CMD_CCP, "key": 0x00},
     "CCP_DOWN":         {"cmd": CMD_CCP, "key": 0x01},
     "CCP_LEFT":         {"cmd": CMD_CCP, "key": 0x03},
@@ -135,14 +137,82 @@ ISAP_KEYS: dict[str, dict] = {
     "CCP_VOLUME":       {"cmd": CMD_CCP, "key": 0x01, "dial": True},
     "CCP_TUNE":         {"cmd": CMD_CCP, "key": 0x04, "dial": True},
 
-    # SWRC (0x70) — 스티어링 휠 리모콘
+    # RRC (CMD_RRC=0x90) — 표 118, 2 Monitor용 리어 리모콘
+    "RRC_UP":           {"cmd": CMD_RRC, "key": 0x00},
+    "RRC_DOWN":         {"cmd": CMD_RRC, "key": 0x01},
+    "RRC_LEFT":         {"cmd": CMD_RRC, "key": 0x03},
+    "RRC_RIGHT":        {"cmd": CMD_RRC, "key": 0x06},
+    "RRC_ENTER":        {"cmd": CMD_RRC, "key": 0x08},
+    "RRC_BACK":         {"cmd": CMD_RRC, "key": 0x09},
+    "RRC_MENU":         {"cmd": CMD_RRC, "key": 0x0A},
+    "RRC_HOME":         {"cmd": CMD_RRC, "key": 0x14},
+    "RRC_POWER_LEFT":   {"cmd": CMD_RRC, "key": 0x1A},
+    "RRC_POWER_RIGHT":  {"cmd": CMD_RRC, "key": 0x1B},
+    "RRC_VOLUME_LEFT":  {"cmd": CMD_RRC, "key": 0x17},
+    "RRC_VOLUME_RIGHT": {"cmd": CMD_RRC, "key": 0x18},
+    "RRC_JOGDIAL":          {"cmd": CMD_RRC, "key": 0x00, "dial": True},
+    "RRC_VOLUME_LEFT_DIAL":  {"cmd": CMD_RRC, "key": 0x02, "dial": True},
+    "RRC_VOLUME_RIGHT_DIAL": {"cmd": CMD_RRC, "key": 0x03, "dial": True},
+
+    # SWRC (CMD_SWRC=0x70) — 표 121, 스티어링 휠 리모콘
+    "SWRC_PTT":         {"cmd": CMD_SWRC, "key": 0x22},
     "SWRC_MODE":        {"cmd": CMD_SWRC, "key": 0x23},
     "SWRC_MUTE":        {"cmd": CMD_SWRC, "key": 0x24},
     "SWRC_SEEK_UP":     {"cmd": CMD_SWRC, "key": 0x0F},
     "SWRC_SEEK_DOWN":   {"cmd": CMD_SWRC, "key": 0x10},
+    "SWRC_CUSTOM":      {"cmd": CMD_SWRC, "key": 0x11},
     "SWRC_SEND":        {"cmd": CMD_SWRC, "key": 0x25},
     "SWRC_END":         {"cmd": CMD_SWRC, "key": 0x26},
     "SWRC_VOLUME":      {"cmd": CMD_SWRC, "key": 0x01, "dial": True},
+
+    # MIRROR (CMD_MIRROR=0x92) — 표 123
+    "MIRROR_SOS":                   {"cmd": CMD_MIRROR, "key": 0x27},
+    "MIRROR_CONCIERGE":              {"cmd": CMD_MIRROR, "key": 0x2A},
+    "MIRROR_CONCIERGE_POI":          {"cmd": CMD_MIRROR, "key": 0x2B},
+    "MIRROR_VOICE_LOCAL_SEARCH":     {"cmd": CMD_MIRROR, "key": 0x2C},
+    "MIRROR_ROADSIDE_ASSISTANT":     {"cmd": CMD_MIRROR, "key": 0x2D},
+
+    # OVERHEAD CONSOLE (CMD_OVERHEADCONSOLE=0x94) — 표 125
+    "OVERHEAD_SOS":                 {"cmd": CMD_OVERHEADCONSOLE, "key": 0x27},
+    "OVERHEAD_CONCIERGE":           {"cmd": CMD_OVERHEADCONSOLE, "key": 0x2A},
+    "OVERHEAD_CONCIERGE_POI":       {"cmd": CMD_OVERHEADCONSOLE, "key": 0x2B},
+    "OVERHEAD_VOICE_LOCAL_SEARCH":  {"cmd": CMD_OVERHEADCONSOLE, "key": 0x2C},
+    "OVERHEAD_ROADSIDE_ASSISTANT":  {"cmd": CMD_OVERHEADCONSOLE, "key": 0x2D},
+
+    # TRIP SWITCH (CMD_SWRC=0x70, Monitor 필드로 구분) — 표 126
+    "TRIP_MENU":         {"cmd": CMD_SWRC, "key": 0x31},
+    "TRIP_UP":           {"cmd": CMD_SWRC, "key": 0x32},
+    "TRIP_DOWN":         {"cmd": CMD_SWRC, "key": 0x33},
+    "TRIP_OK":           {"cmd": CMD_SWRC, "key": 0x34},
+    "TRIP_LFA":          {"cmd": CMD_SWRC, "key": 0x35},
+    "TRIP_CANCEL":       {"cmd": CMD_SWRC, "key": 0x36},
+    "TRIP_SET_MINUS":    {"cmd": CMD_SWRC, "key": 0x37},
+    "TRIP_RES_PLUS":     {"cmd": CMD_SWRC, "key": 0x38},
+    "TRIP_CRUISE":       {"cmd": CMD_SWRC, "key": 0x39},
+    "TRIP_CRUISE_SLD":   {"cmd": CMD_SWRC, "key": 0x3A},
+    "TRIP_SCC_DIST":     {"cmd": CMD_SWRC, "key": 0x3B},
+    "TRIP_PADD_DN":      {"cmd": CMD_SWRC, "key": 0x3C},
+    "TRIP_PADD_UP":      {"cmd": CMD_SWRC, "key": 0x3D},
+    "TRIP_ERROR":        {"cmd": CMD_SWRC, "key": 0x3E},
+    "TRIP_RESERVED":     {"cmd": CMD_SWRC, "key": 0x3F},
+
+    # GRIP CONTROL SWITCH (CMD_GRIPSW=0x72) — 표 128
+    "GRIP_RIGHT":        {"cmd": CMD_GRIPSW, "key": 0x41},
+    "GRIP_LEFT":         {"cmd": CMD_GRIPSW, "key": 0x42},
+    "GRIP_PUSH":         {"cmd": CMD_GRIPSW, "key": 0x43},
+
+    # OPTICAL SWITCH (CMD_OPSW=0x71) — 표 130
+    "OPTICAL_SWIPE_UP":    {"cmd": CMD_OPSW, "key": 0x51},
+    "OPTICAL_SWIPE_DOWN":  {"cmd": CMD_OPSW, "key": 0x52},
+    "OPTICAL_SWIPE_LEFT":  {"cmd": CMD_OPSW, "key": 0x53},
+    "OPTICAL_SWIPE_RIGHT": {"cmd": CMD_OPSW, "key": 0x54},
+    "OPTICAL_TOUCH":       {"cmd": CMD_OPSW, "key": 0x55},
+    "OPTICAL_OK":          {"cmd": CMD_OPSW, "key": 0x56},
+
+    # RHEOSTAT SWITCH (CMD_HKEY=0x60 per spec sample; 별도 CMD_RHEOSTAT 언급되나
+    # 실제 패킷 샘플은 0x60을 사용) — 표 131
+    "RHEOSTAT_UP":       {"cmd": CMD_HKEY, "key": 0x61},
+    "RHEOSTAT_DOWN":     {"cmd": CMD_HKEY, "key": 0x62},
 }
 
 
@@ -182,7 +252,15 @@ class ISAPAgentService:
         "hud":          (1920, 720),
     }
 
-    def __init__(self, host: str, port: int = 20000, device_id: str = ""):
+    def __init__(self, host: str, port: int = 20000, device_id: str = "",
+                 key_overrides: Optional[dict[str, dict]] = None):
+        """
+        Args:
+            key_overrides: 디바이스별 키 오버라이드. 각 항목은
+                {name: {"cmd": int, "key": int, "dial": bool, "visible": bool}}
+                visible=False면 UI에 표시되지 않음. cmd/key/dial 중 지정된 필드만
+                spec default를 덮어쓴다. 차종별로 키 값이 다를 때 사용.
+        """
         self.host = host
         self.port = port
         self.device_id = device_id
@@ -191,6 +269,7 @@ class ISAPAgentService:
             if p == port:
                 self.default_screen = name
                 break
+        self._key_overrides: dict[str, dict] = dict(key_overrides or {})
 
         self._socket: Optional[socket.socket] = None
         self._connected = False
@@ -655,10 +734,33 @@ class ISAPAgentService:
         with self._send_lock:
             self._make_send_packet(cmd, sub_cmd, RESPONSE_NOTHING, data)
 
+    def resolve_key(self, key_name: str) -> Optional[dict]:
+        """spec default + device override 병합된 키 정보 반환.
+
+        override는 cmd/key/dial 개별 필드만 덮어쓴다 (visible은 무시 — UI 전용).
+        반환 dict에 cmd/key가 없으면 None.
+        """
+        base = ISAP_KEYS.get(key_name, {})
+        ov = self._key_overrides.get(key_name, {})
+        merged = dict(base)
+        for k in ("cmd", "key", "dial"):
+            if k in ov:
+                merged[k] = ov[k]
+        if "cmd" not in merged or "key" not in merged:
+            return None
+        return merged
+
+    def set_key_overrides(self, overrides: Optional[dict[str, dict]]) -> None:
+        """디바이스 키 오버라이드 일괄 갱신 (설정 모달 저장 시 호출)."""
+        self._key_overrides = dict(overrides or {})
+
+    def get_key_overrides(self) -> dict[str, dict]:
+        return dict(self._key_overrides)
+
     def send_key_by_name(self, key_name: str, sub_cmd: int = SHORT_KEY,
                          screen_type: str = "front_center",
                          direction: Optional[int] = None) -> None:
-        info = ISAP_KEYS.get(key_name)
+        info = self.resolve_key(key_name)
         if not info:
             raise ValueError(f"Unknown iSAP key: {key_name}")
         cmd = info["cmd"]

@@ -1113,7 +1113,8 @@ class DeviceManager:
                     try:
                         if isap:
                             isap.disconnect()
-                        svc = ISAPAgentService(dev.address, port, device_id=dev.id)
+                        svc = ISAPAgentService(dev.address, port, device_id=dev.id,
+                                       key_overrides=dev.info.get("isap_keys"))
                         ok = await svc.async_connect()
                         if ok:
                             self._isap_conns[dev.id] = svc
@@ -1606,7 +1607,8 @@ class DeviceManager:
                 if not port:
                     continue
                 try:
-                    svc = ISAPAgentService(dev.address, port, device_id=dev.id)
+                    svc = ISAPAgentService(dev.address, port, device_id=dev.id,
+                                       key_overrides=dev.info.get("isap_keys"))
                     ok = await svc.async_connect()
                     if ok:
                         self._isap_conns[dev.id] = svc
@@ -1765,7 +1767,8 @@ class DeviceManager:
             if not port:
                 return f"iSAP {dev.id}: no port configured"
             try:
-                svc = ISAPAgentService(dev.address, port, device_id=dev.id)
+                svc = ISAPAgentService(dev.address, port, device_id=dev.id,
+                                       key_overrides=dev.info.get("isap_keys"))
                 ok = await svc.async_connect()
                 if ok:
                     self._isap_conns[dev.id] = svc

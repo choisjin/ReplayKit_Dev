@@ -120,6 +120,10 @@ interface HkmcKeyInfo {
   name: string;
   group: string;
   is_dial: boolean;
+  // iSAP per-device 지원 필드 (HKMC는 기본값)
+  cmd?: number;
+  key?: number;
+  visible?: boolean;
 }
 
 // Annotated thumbnail: draws expected image with colored region rectangles
@@ -283,6 +287,10 @@ export default function RecordPage() {
 
   // HKMC hardware keys
   const [hkmcKeys, setHkmcKeys] = useState<HkmcKeyInfo[]>([]);
+  // iSAP 키 설정 모달
+  const [isapKeysModalOpen, setIsapKeysModalOpen] = useState(false);
+  const [isapKeysDraft, setIsapKeysDraft] = useState<HkmcKeyInfo[]>([]);
+  const [isapKeysSaving, setIsapKeysSaving] = useState(false);
   const [hkmcSubCommands, setHkmcSubCommands] = useState<Record<string, number>>({});
 
   // HKMC 디스플레이 모드: standard(기본형) / integrated(일체형 — 클러스터+AVN)
@@ -552,24 +560,24 @@ export default function RecordPage() {
     }).catch(() => { setModuleFunctions([]); setModuleDescription(''); });
   }, [selectedModuleName]);
 
-  // Fetch HKMC hardware keys once (when any HKMC device exists)
+  // Fetch hardware keys — HKMC는 글로벌, iSAP은 선택된 디바이스별로 재조회
   useEffect(() => {
-    const hasHkmc = primaryDevices.some(d => d.type === 'hkmc6th');
-    const hasIsap = primaryDevices.some(d => d.type === 'isap_agent');
-    if (hasHkmc && hkmcKeys.length === 0) {
-      deviceApi.listHkmcKeys().then(res => {
+    const dev = primaryDevices.find(d => d.id === screenshotDeviceId);
+    if (dev?.type === 'isap_agent') {
+      deviceApi.listIsapKeys(dev.id).then(res => {
         setHkmcKeys(res.data.keys || []);
         setHkmcSubCommands(res.data.sub_commands || {});
       }).catch(() => {});
+    } else if (dev?.type === 'hkmc6th') {
+      if (hkmcKeys.length === 0) {
+        deviceApi.listHkmcKeys().then(res => {
+          setHkmcKeys(res.data.keys || []);
+          setHkmcSubCommands(res.data.sub_commands || {});
+        }).catch(() => {});
+      }
     }
-    if (hasIsap && hkmcKeys.length === 0) {
-      // iSAP Agent: use isap-keys endpoint. Reuses the hkmcKeys state/pickers.
-      deviceApi.listIsapKeys().then(res => {
-        setHkmcKeys(res.data.keys || []);
-        setHkmcSubCommands(res.data.sub_commands || {});
-      }).catch(() => {});
-    }
-  }, [primaryDevices]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenshotDeviceId, primaryDevices]);
 
   // Stop screenshot polling when leaving page
   useEffect(() => {
@@ -2804,32 +2812,29 @@ export default function RecordPage() {
                     : t('record.gestureHint', { device: screenDevice?.name || screenshotDeviceId || '' })}
                 </div>
                 {isScreenHkmc && hkmcKeys.length > 0 && testingStepIndex == null && (() => {
-                  const HARD_KEY_GROUPS: Record<string, string[]> = {
-                    MKBD: ['MKBD_NAV', 'MKBD_RADIO', 'MKBD_MEDIA', 'MKBD_CUSTOM', 'MKBD_SETUP'],
-                    CCP: ['CCP_BACK', 'CCP_HOME', 'CCP_MENU', 'CCP_POWER',
-                          'CCP_VOLUME_ANTI_CLOCK', 'CCP_VOLUME_CLOCK',
-                          'CCP_TUNE_ANTI_CLOCK', 'CCP_TUNE_CLOCK',
-                          'CCP_JOGDIAL_ANTI_CLOCK', 'CCP_JOGDIAL_CLOCK',
-                          'CCP_JOGDIAL_CLOCK_Right', 'CCP_JOGDIAL_CLOCK_Left',
-                          'CCP_RIGHT', 'CCP_LEFT', 'CCP_UP', 'CCP_DOWN', 'CCP_ENTER', 'CCP_TUNE_PUSH'],
-                    SWRC: ['SWRC_MUTE', 'SWRC_VOLUME_ANTI_CLOCK', 'SWRC_VOLUME_CLOCK',
-                           'SWRC_PTT', 'SWRC_CUSTOM', 'SWRC_SEND', 'SWRC_END'],
-                  };
-                  const customKeys = hkmcKeys.filter(k => !Object.values(HARD_KEY_GROUPS).flat().includes(k.name));
-                  const customGroups: Record<string, HkmcKeyInfo[]> = {};
-                  customKeys.forEach(k => {
-                    const g = k.group || 'CUSTOM';
-                    if (!customGroups[g]) customGroups[g] = [];
-                    customGroups[g].push(k);
+                  // visible=false 키는 숨김. 그룹별로 details로 묶어 표시.
+                  // 그룹 순서는 spec 문서 순서에 맞춘다 (iSAP 기준).
+                  const GROUP_ORDER = ['MKBD', 'CCP', 'RRC', 'SWRC', 'MIRROR', 'OVERHEAD', 'TRIP', 'GRIP', 'OPTICAL', 'RHEOSTAT'];
+                  const visibleKeys = hkmcKeys.filter(k => k.visible !== false);
+                  const byGroup: Record<string, HkmcKeyInfo[]> = {};
+                  visibleKeys.forEach(k => {
+                    const g = k.group || 'OTHER';
+                    if (!byGroup[g]) byGroup[g] = [];
+                    byGroup[g].push(k);
                   });
+                  const groups = [
+                    ...GROUP_ORDER.filter(g => byGroup[g]),
+                    ...Object.keys(byGroup).filter(g => !GROUP_ORDER.includes(g)).sort(),
+                  ];
+                  const isIsap = screenDevice?.type === 'isap_agent';
                   return (
                     <div style={{ marginTop: 4, width: '100%' }}>
-                      {Object.entries(HARD_KEY_GROUPS).map(([group, keyNames]) => {
-                        const keys = hkmcKeys.filter(k => keyNames.includes(k.name));
-                        if (keys.length === 0) return null;
+                      {groups.map((group) => {
+                        const keys = byGroup[group];
+                        if (!keys || keys.length === 0) return null;
                         return (
                           <details key={group} style={{ marginBottom: 2 }}>
-                            <summary style={{ fontSize: 11, color: subTextColor, cursor: 'pointer', userSelect: 'none' }}>{group}</summary>
+                            <summary style={{ fontSize: 11, color: subTextColor, cursor: 'pointer', userSelect: 'none' }}>{group} <span style={{ color: '#888' }}>({keys.length})</span></summary>
                             <div style={{ padding: '2px 0 2px 4px' }}>
                               {keys.map(k => {
                                 let downTs = 0;
@@ -2867,82 +2872,12 @@ export default function RecordPage() {
                           </details>
                         );
                       })}
-                      {Object.entries(customGroups).map(([group, keys]) => (
-                        <details key={group} style={{ marginBottom: 2 }}>
-                          <summary style={{ fontSize: 11, color: '#d4a017', cursor: 'pointer', userSelect: 'none' }}>{group}</summary>
-                          <div style={{ padding: '2px 0 2px 4px' }}>
-                            {keys.map(k => {
-                              let downTs = 0;
-                              let longTimer = 0;
-                              return (
-                              <Tag key={k.name} closable
-                                className="hk-btn"
-                                onClose={async (e) => { e.preventDefault(); try { await customKeysApi.remove(k.name); const r = await deviceApi.listHkmcKeys(); setHkmcKeys(r.data.keys || []); } catch {} }}
-                                style={{ fontSize: 10, cursor: 'pointer', margin: '0 2px 2px 0' }}
-                                onMouseDown={(e) => {
-                                  downTs = Date.now();
-                                  const tag = e.currentTarget;
-                                  tag.classList.remove('long-done');
-                                  tag.classList.add('pressing');
-                                  longTimer = window.setTimeout(() => { tag.classList.add('long-done'); }, HKMC_LONG_PRESS_MS);
-                                }}
-                                onMouseUp={(e) => {
-                                  clearTimeout(longTimer);
-                                  const tag = e.currentTarget;
-                                  const held = Date.now() - downTs;
-                                  const isLong = held >= HKMC_LONG_PRESS_MS;
-                                  const sub = isLong ? HKMC_LONG_KEY : HKMC_SHORT_KEY;
-                                  const label = k.name + (isLong ? ' (Long)' : '');
-                                  executeAction('hkmc_key', { key_name: k.name, sub_cmd: sub, screen_type: screenType }, label);
-                                  tag.classList.remove('pressing', 'long-done');
-                                }}
-                                onMouseLeave={(e) => {
-                                  clearTimeout(longTimer);
-                                  downTs = 0;
-                                  e.currentTarget.classList.remove('pressing', 'long-done');
-                                }}
-                              >{k.name.replace(`${group}_`, '')}</Tag>
-                              );
-                            })}
-                          </div>
-                        </details>
-                      ))}
-                      <Popover trigger="click" title={t('record.addCustomKey')} content={
-                        <div style={{ width: 240 }}>
-                          <Input size="small" placeholder={t('record.customKeyName')} id="ck-name" style={{ marginBottom: 4 }} />
-                          <Input size="small" placeholder={t('record.customKeyGroup')} id="ck-group" defaultValue="CUSTOM" style={{ marginBottom: 4 }} />
-                          <Select size="small" defaultValue={0x80} style={{ width: '100%', marginBottom: 4 }} id="ck-cmd"
-                            options={[
-                              { label: 'MKBD (0x60)', value: 0x60 }, { label: 'SWC (0x70)', value: 0x70 },
-                              { label: 'CCP (0x80)', value: 0x80 }, { label: 'RRC (0x90)', value: 0x90 },
-                            ]} onChange={(v) => { const el = document.getElementById('ck-cmd') as any; if (el) el.dataset.value = v; }}
-                          />
-                          <Input size="small" placeholder={t('record.customKeyCode')} id="ck-code" style={{ marginBottom: 4 }} />
-                          <Button size="small" type="primary" block onClick={async () => {
-                            const nameEl = document.getElementById('ck-name') as HTMLInputElement;
-                            const groupEl = document.getElementById('ck-group') as HTMLInputElement;
-                            const cmdEl = document.getElementById('ck-cmd') as any;
-                            const codeEl = document.getElementById('ck-code') as HTMLInputElement;
-                            const name = nameEl?.value?.trim();
-                            const group = groupEl?.value?.trim() || 'CUSTOM';
-                            const cmd = cmdEl?.dataset?.value ? parseInt(cmdEl.dataset.value) : 0x80;
-                            const codeStr = codeEl?.value?.trim() || '0';
-                            const keyCode = codeStr.startsWith('0x') ? parseInt(codeStr, 16) : parseInt(codeStr);
-                            if (!name) { message.warning(t('record.enterKeyName')); return; }
-                            const keyName = `${group}_${name}`;
-                            try {
-                              await customKeysApi.add({ name, group, key_name: keyName, cmd, key_code: keyCode });
-                              const r = await deviceApi.listHkmcKeys();
-                              setHkmcKeys(r.data.keys || []);
-                              message.success(t('record.customKeyAdded'));
-                              if (nameEl) nameEl.value = '';
-                              if (codeEl) codeEl.value = '';
-                            } catch (e: any) { message.error(e.response?.data?.detail || t('record.customKeyAddFailed')); }
-                          }}>{t('record.add')}</Button>
-                        </div>
-                      }>
-                        <Button size="small" icon={<PlusOutlined />} style={{ fontSize: 10, marginTop: 4 }}>{t('record.addCustomKey')}</Button>
-                      </Popover>
+                      {isIsap && (
+                        <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, marginTop: 4 }}
+                          onClick={() => { setIsapKeysDraft(hkmcKeys.map(k => ({ ...k }))); setIsapKeysModalOpen(true); }}>
+                          키 설정
+                        </Button>
+                      )}
                     </div>
                   );
                 })()}
@@ -3839,6 +3774,125 @@ export default function RecordPage() {
             )}
           </div>
         )}
+      </Modal>
+      {/* iSAP 키 설정 모달 — 디바이스별 키 값/표시 여부 관리 */}
+      <Modal
+        title={`iSAP 키 설정${screenshotDeviceId ? ` — ${screenshotDeviceId}` : ''}`}
+        open={isapKeysModalOpen}
+        onCancel={() => setIsapKeysModalOpen(false)}
+        width={720}
+        confirmLoading={isapKeysSaving}
+        okText={t('common.save')}
+        cancelText={t('common.cancel')}
+        onOk={async () => {
+          if (!screenshotDeviceId) return;
+          setIsapKeysSaving(true);
+          try {
+            // full dict: 모든 키에 대해 cmd/key/visible 전송 (dial은 spec default 유지)
+            const payload: Record<string, { cmd: number; key: number; visible: boolean }> = {};
+            for (const k of isapKeysDraft) {
+              payload[k.name] = {
+                cmd: typeof k.cmd === 'number' ? k.cmd : 0,
+                key: typeof k.key === 'number' ? k.key : 0,
+                visible: k.visible !== false,
+              };
+            }
+            await deviceApi.updateIsapKeys(screenshotDeviceId, payload);
+            // 저장 후 재조회
+            const r = await deviceApi.listIsapKeys(screenshotDeviceId);
+            setHkmcKeys(r.data.keys || []);
+            message.success('저장됨');
+            setIsapKeysModalOpen(false);
+          } catch (e: any) {
+            message.error(e.response?.data?.detail || '저장 실패');
+          } finally {
+            setIsapKeysSaving(false);
+          }
+        }}
+      >
+        <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+          <div style={{ fontSize: 11, color: subTextColor, marginBottom: 8 }}>
+            체크박스로 표시할 키를 선택하고, 필요 시 key 값을 차종에 맞게 수정하세요. (cmd는 전문 지식 필요 시에만 변경)
+          </div>
+          {(() => {
+            const GROUP_ORDER = ['MKBD', 'CCP', 'RRC', 'SWRC', 'MIRROR', 'OVERHEAD', 'TRIP', 'GRIP', 'OPTICAL', 'RHEOSTAT'];
+            const byGroup: Record<string, { k: HkmcKeyInfo; idx: number }[]> = {};
+            isapKeysDraft.forEach((k, idx) => {
+              const g = k.group || 'OTHER';
+              if (!byGroup[g]) byGroup[g] = [];
+              byGroup[g].push({ k, idx });
+            });
+            const groups = [
+              ...GROUP_ORDER.filter(g => byGroup[g]),
+              ...Object.keys(byGroup).filter(g => !GROUP_ORDER.includes(g)).sort(),
+            ];
+            return groups.map(group => {
+              const items = byGroup[group];
+              const allVisible = items.every(({ k }) => k.visible !== false);
+              return (
+                <details key={group} open style={{ marginBottom: 8, border: '1px solid #2a2a2a', borderRadius: 4, padding: 6 }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                    {group} <span style={{ color: '#888', fontSize: 11 }}>({items.length})</span>
+                    <Button size="small" type="link" style={{ fontSize: 10, padding: '0 4px' }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setIsapKeysDraft(prev => prev.map((x, i) =>
+                          items.find(it => it.idx === i) ? { ...x, visible: !allVisible } : x));
+                      }}>{allVisible ? '전체 해제' : '전체 선택'}</Button>
+                  </summary>
+                  <table style={{ width: '100%', fontSize: 11, marginTop: 4 }}>
+                    <thead>
+                      <tr style={{ color: '#888', textAlign: 'left' }}>
+                        <th style={{ width: 40 }}>표시</th>
+                        <th>이름</th>
+                        <th style={{ width: 70 }}>cmd</th>
+                        <th style={{ width: 70 }}>key</th>
+                        <th style={{ width: 50 }}>dial</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map(({ k, idx }) => (
+                        <tr key={k.name}>
+                          <td>
+                            <input type="checkbox" checked={k.visible !== false}
+                              onChange={(e) => {
+                                const v = e.target.checked;
+                                setIsapKeysDraft(prev => prev.map((x, i) => i === idx ? { ...x, visible: v } : x));
+                              }} />
+                          </td>
+                          <td style={{ fontFamily: 'monospace' }}>{k.name}</td>
+                          <td>
+                            <Input size="small" style={{ width: 60, fontFamily: 'monospace' }}
+                              value={`0x${(k.cmd ?? 0).toString(16).toUpperCase().padStart(2, '0')}`}
+                              onChange={(e) => {
+                                const v = e.target.value.trim();
+                                const n = v.startsWith('0x') || v.startsWith('0X') ? parseInt(v, 16) : parseInt(v);
+                                if (!isNaN(n)) {
+                                  setIsapKeysDraft(prev => prev.map((x, i) => i === idx ? { ...x, cmd: n } : x));
+                                }
+                              }} />
+                          </td>
+                          <td>
+                            <Input size="small" style={{ width: 60, fontFamily: 'monospace' }}
+                              value={`0x${(k.key ?? 0).toString(16).toUpperCase().padStart(2, '0')}`}
+                              onChange={(e) => {
+                                const v = e.target.value.trim();
+                                const n = v.startsWith('0x') || v.startsWith('0X') ? parseInt(v, 16) : parseInt(v);
+                                if (!isNaN(n)) {
+                                  setIsapKeysDraft(prev => prev.map((x, i) => i === idx ? { ...x, key: n } : x));
+                                }
+                              }} />
+                          </td>
+                          <td>{k.is_dial ? '✓' : ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </details>
+              );
+            });
+          })()}
+        </div>
       </Modal>
       <Image
         src={annotatedPreviewSrc}

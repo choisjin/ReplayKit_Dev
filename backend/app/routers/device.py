@@ -872,19 +872,37 @@ async def close_dlt_viewer():
 
 
 @router.get("/isap-keys")
-async def list_isap_keys():
-    """List all available iSAP Agent hardware key names."""
+async def list_isap_keys(device_id: Optional[str] = None):
+    """List iSAP Agent hardware keys (merged with per-device override).
+
+    device_id가 지정되면 해당 디바이스의 info["isap_keys"] 오버라이드를
+    spec default에 병합하여 반환한다. cmd/key/dial/visible 각 항목별로
+    override가 있으면 덮어쓰고, 없으면 spec 값을 사용 (visible 기본 True).
+    """
     from ..services.isap_agent_service import (
         ISAP_KEYS, SHORT_KEY, LONG_KEY, PRESS_KEY, RELEASE_KEY, KNOB_KEY,
         MONITOR_MAP, SCREEN_PORT_MAP,
     )
+    overrides: dict[str, dict] = {}
+    if device_id:
+        dev = dm.get_device(device_id)
+        if dev:
+            overrides = dev.info.get("isap_keys") or {}
     keys = []
     for name, info in ISAP_KEYS.items():
-        group = name.split("_")[0]  # MKBD, CCP, SWRC, ...
+        ov = overrides.get(name, {})
+        group = name.split("_")[0]  # MKBD, CCP, SWRC, RRC, MIRROR, OVERHEAD, TRIP, GRIP, OPTICAL, RHEOSTAT
+        cmd = ov.get("cmd", info["cmd"])
+        key = ov.get("key", info["key"])
+        is_dial = ov.get("dial", info.get("dial", False))
+        visible = ov.get("visible", True)
         keys.append({
             "name": name,
             "group": group,
-            "is_dial": info.get("dial", False),
+            "cmd": cmd,
+            "key": key,
+            "is_dial": is_dial,
+            "visible": visible,
         })
     return {
         "keys": keys,
@@ -898,6 +916,55 @@ async def list_isap_keys():
         "monitors": MONITOR_MAP,
         "screen_ports": SCREEN_PORT_MAP,
     }
+
+
+class UpdateIsapKeysRequest(BaseModel):
+    device_id: str
+    # name → {cmd?, key?, dial?, visible?}  (각 필드 선택적)
+    keys: dict[str, dict]
+
+
+@router.post("/isap-keys")
+async def update_isap_keys(req: UpdateIsapKeysRequest):
+    """Save per-device iSAP key overrides (차종별 키 값 + 표시 여부)."""
+    from ..services.isap_agent_service import ISAP_KEYS
+    dev = dm.get_device(req.device_id)
+    if not dev:
+        raise HTTPException(status_code=404, detail=f"Device {req.device_id} not found")
+    if dev.type != "isap_agent":
+        raise HTTPException(status_code=400, detail=f"Device {req.device_id} is not an iSAP agent")
+    # 정규화: 알려진 키만 수용, 빈/잘못된 값 필터
+    clean: dict[str, dict] = {}
+    for name, ov in (req.keys or {}).items():
+        if name not in ISAP_KEYS:
+            continue
+        entry: dict = {}
+        if "cmd" in ov and ov["cmd"] is not None:
+            try:
+                entry["cmd"] = int(ov["cmd"])
+            except (TypeError, ValueError):
+                pass
+        if "key" in ov and ov["key"] is not None:
+            try:
+                entry["key"] = int(ov["key"])
+            except (TypeError, ValueError):
+                pass
+        if "dial" in ov and ov["dial"] is not None:
+            entry["dial"] = bool(ov["dial"])
+        if "visible" in ov and ov["visible"] is not None:
+            entry["visible"] = bool(ov["visible"])
+        if entry:
+            clean[name] = entry
+    if clean:
+        dev.info["isap_keys"] = clean
+    else:
+        dev.info.pop("isap_keys", None)
+    # 연결된 service에 즉시 반영
+    svc = dm.get_isap_service(req.device_id)
+    if svc:
+        svc.set_key_overrides(dev.info.get("isap_keys"))
+    dm._save_auxiliary_devices()
+    return {"status": "ok", "device_id": req.device_id, "count": len(clean)}
 
 
 @router.get("/hkmc-keys")
