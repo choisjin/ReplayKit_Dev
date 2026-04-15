@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Button, Card, Col, Image, Input, Modal, Radio, Row, Select, Slider, Space, InputNumber, message, List, Tag, Popover, Tooltip, Splitter } from 'antd';
-import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined, CopyOutlined, ZoomInOutlined, ZoomOutOutlined, HolderOutlined, SettingOutlined } from '@ant-design/icons';
+import { PlayCircleOutlined, PauseOutlined, PlusOutlined, SwapOutlined, FolderOpenOutlined, SaveOutlined, DeleteOutlined, BranchesOutlined, ScissorOutlined, CameraOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, WarningOutlined, EditOutlined, CopyOutlined, ZoomInOutlined, ZoomOutOutlined, HolderOutlined, SettingOutlined, StopOutlined } from '@ant-design/icons';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -299,6 +299,12 @@ export default function RecordPage() {
   const [randDragRegion, setRandDragRegion] = useState<RandRegion>(null);
   const [randHkModalOpen, setRandHkModalOpen] = useState(false);
   const [randRegionModal, setRandRegionModal] = useState<null | 'sk' | 'drag'>(null);
+  // Random 반복 실행
+  const [randRepeatCount, setRandRepeatCount] = useState<number>(1);
+  const [randIntervalMs, setRandIntervalMs] = useState<number>(200);
+  const [randRunning, setRandRunning] = useState<boolean>(false);
+  const [randProgress, setRandProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const randStopRef = useRef<boolean>(false);
   // Region 모달용 canvas/drag ref
   const randRegionCanvasRef = useRef<HTMLCanvasElement>(null);
   const randRegionScreenshotRef = useRef<string>('');
@@ -858,6 +864,42 @@ export default function RecordPage() {
     else if (roll < 0.90) randSK();
     else randDrag();
   }, [randHK, randSK, randDrag]);
+
+  // 반복 실행 헬퍼: randRepeatCount 만큼 fn을 간격(randIntervalMs) 두고 실행.
+  // executeAction이 fire-and-forget이므로 setTimeout 체이닝으로 직렬화.
+  // 녹화 중이면 각 iteration마다 step이 순차 추가됨 (재생 시 동일 순서 실행).
+  const runRandomRepeat = useCallback((fn: () => void) => {
+    if (randRunning) return;
+    const total = Math.max(1, Math.floor(randRepeatCount || 1));
+    const interval = Math.max(0, Math.floor(randIntervalMs || 0));
+    randStopRef.current = false;
+    setRandRunning(true);
+    setRandProgress({ current: 0, total });
+    let i = 0;
+    const tick = () => {
+      if (randStopRef.current || i >= total) {
+        setRandRunning(false);
+        return;
+      }
+      try {
+        fn();
+      } catch (e) {
+        console.error('RAND action error:', e);
+      }
+      i += 1;
+      setRandProgress({ current: i, total });
+      if (i < total && !randStopRef.current) {
+        setTimeout(tick, interval);
+      } else {
+        setRandRunning(false);
+      }
+    };
+    tick();
+  }, [randRunning, randRepeatCount, randIntervalMs]);
+
+  const stopRandRepeat = useCallback(() => {
+    randStopRef.current = true;
+  }, []);
 
   // Region 모달 canvas 그리기 (screenshot + 기존/현재 드래그 사각형)
   const drawRandRegionCanvas = useCallback((dragRect?: { x: number; y: number; w: number; h: number }) => {
@@ -3104,35 +3146,67 @@ export default function RecordPage() {
                       {canConfigKeys && (
                         <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
                           <span style={{ fontSize: 11, color: subTextColor, marginRight: 2 }}>Random:</span>
+                          {/* 반복 횟수 */}
+                          <InputNumber
+                            size="small"
+                            min={1} max={100000}
+                            value={randRepeatCount}
+                            onChange={(v) => setRandRepeatCount(Math.max(1, Math.floor(v || 1)))}
+                            style={{ width: 70, fontSize: 10 }}
+                            title="반복 횟수"
+                            disabled={randRunning}
+                          />
+                          {/* 간격 (ms) */}
+                          <InputNumber
+                            size="small"
+                            min={0} max={60000} step={50}
+                            value={randIntervalMs}
+                            onChange={(v) => setRandIntervalMs(Math.max(0, Math.floor(v || 0)))}
+                            style={{ width: 70, fontSize: 10 }}
+                            title="간격 (ms)"
+                            disabled={randRunning}
+                            suffix="ms"
+                          />
                           {/* HK */}
-                          <Button.Group>
-                            <Button size="small" danger style={{ fontSize: 10, padding: '0 6px', height: 22 }}
-                              onClick={randHK}>
+                          <Button.Group style={{ marginLeft: 2 }}>
+                            <Button size="small" danger disabled={randRunning} style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                              onClick={() => runRandomRepeat(randHK)}>
                               HK{randHkKeysConfig && randHkKeysConfig.length > 0 ? ` (${randHkKeysConfig.length})` : ''}
                             </Button>
-                            <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
+                            <Button size="small" icon={<SettingOutlined />} disabled={randRunning} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
                               onClick={() => setRandHkModalOpen(true)} title="HK 설정" />
                           </Button.Group>
                           {/* SK */}
                           <Button.Group style={{ marginLeft: 2 }}>
-                            <Button size="small" danger style={{ fontSize: 10, padding: '0 6px', height: 22 }}
-                              onClick={randSK}>
+                            <Button size="small" danger disabled={randRunning} style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                              onClick={() => runRandomRepeat(randSK)}>
                               SK{randSkRegion ? ' ▣' : ''}
                             </Button>
-                            <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
+                            <Button size="small" icon={<SettingOutlined />} disabled={randRunning} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
                               onClick={() => openRandRegionModal('sk')} title="SK 영역 설정" />
                           </Button.Group>
                           {/* DRAG */}
                           <Button.Group style={{ marginLeft: 2 }}>
-                            <Button size="small" danger style={{ fontSize: 10, padding: '0 6px', height: 22 }}
-                              onClick={randDrag}>
+                            <Button size="small" danger disabled={randRunning} style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                              onClick={() => runRandomRepeat(randDrag)}>
                               DRAG{randDragRegion ? ' ▣' : ''}
                             </Button>
-                            <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
+                            <Button size="small" icon={<SettingOutlined />} disabled={randRunning} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
                               onClick={() => openRandRegionModal('drag')} title="DRAG 영역 설정" />
                           </Button.Group>
-                          <Button size="small" type="primary" danger style={{ fontSize: 10, padding: '0 8px', height: 22, marginLeft: 4 }}
-                            onClick={allRand}>ALL RAND</Button>
+                          <Button size="small" type="primary" danger disabled={randRunning} style={{ fontSize: 10, padding: '0 8px', height: 22, marginLeft: 4 }}
+                            onClick={() => runRandomRepeat(allRand)}>ALL RAND</Button>
+                          {/* 진행 상태 / 중지 */}
+                          {randRunning && (
+                            <>
+                              <span style={{ fontSize: 10, color: '#faad14', marginLeft: 6 }}>
+                                {randProgress.current}/{randProgress.total}
+                              </span>
+                              <Button size="small" danger type="primary" icon={<StopOutlined />}
+                                style={{ fontSize: 10, padding: '0 6px', height: 22, marginLeft: 2 }}
+                                onClick={stopRandRepeat}>중지</Button>
+                            </>
+                          )}
                           <span style={{ flex: 1 }} />
                           <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, height: 22 }}
                             onClick={() => { setIsapKeysDraft(hkmcKeys.map(k => ({ ...k }))); setIsapKeysModalOpen(true); }}>
