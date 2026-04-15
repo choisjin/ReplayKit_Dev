@@ -595,8 +595,18 @@ export default function RecordPage() {
     let refW = deviceRes.width;
     let refH = deviceRes.height;
     if (isIsap) {
-      const natW = (el as HTMLCanvasElement).width || (el as HTMLVideoElement).videoWidth || 0;
-      const natH = (el as HTMLCanvasElement).height || (el as HTMLVideoElement).videoHeight || 0;
+      let natW = (el as HTMLCanvasElement).width || (el as HTMLVideoElement).videoWidth || 0;
+      let natH = (el as HTMLCanvasElement).height || (el as HTMLVideoElement).videoHeight || 0;
+      // viewCrop가 켜진 경우 canvas.width/height는 cropped region 크기이므로
+      // crop 비율로 나눠 full natural 크기를 복원해야 좌표 계산이 일관된다.
+      if (viewCropEnabled && natW > 0 && natH > 0) {
+        const cropFracW = viewCropX[1] - viewCropX[0];
+        const cropFracH = viewCropY[1] - viewCropY[0];
+        if (cropFracW > 0 && cropFracH > 0) {
+          natW = Math.round(natW / cropFracW);
+          natH = Math.round(natH / cropFracH);
+        }
+      }
       if (natW > 0 && natH > 0) {
         refW = natW;
         refH = natH;
