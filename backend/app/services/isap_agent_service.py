@@ -532,57 +532,28 @@ class ISAPAgentService:
         elif screen_type == "cluster":
             self.screen_width_cluster, self.screen_height_cluster = w, h
 
-    def _detect_letterbox(self, img, screen_type: str, threshold: int = 8) -> tuple[int, int, int, int]:
-        """JPEG 가장자리의 letterbox(검은 띠) 크기를 검출하여 (top, bottom, left, right) 반환.
-
-        매 프레임 detect는 비용이 크므로 첫 검출 결과를 screen_type 별로 캐시한다.
-        """
-        cache = getattr(self, "_letterbox_cache", None)
-        if cache is None:
-            cache = {}
-            self._letterbox_cache = cache
-        if screen_type in cache:
-            return cache[screen_type]
-
-        import numpy as np
-        gray = img if img.ndim == 2 else img.mean(axis=2)
-        h, w = gray.shape[:2]
-        row_max = gray.max(axis=1)  # 각 row의 최대 픽셀값
-        col_max = gray.max(axis=0)
-        top = 0
-        while top < h and row_max[top] < threshold:
-            top += 1
-        bottom = h - 1
-        while bottom >= 0 and row_max[bottom] < threshold:
-            bottom -= 1
-        left = 0
-        while left < w and col_max[left] < threshold:
-            left += 1
-        right = w - 1
-        while right >= 0 and col_max[right] < threshold:
-            right -= 1
-        # 최소 검증: content 영역이 너무 작으면 letterbox 미존재로 간주
-        content_h = max(0, bottom - top + 1)
-        content_w = max(0, right - left + 1)
-        if content_h < h * 0.3 or content_w < w * 0.3:
-            result = (0, h - 1, 0, w - 1)
-        else:
-            result = (top, bottom, left, right)
-        cache[screen_type] = result
-        return result
-
     def screencap_bytes(self, screen_type: str = "front_center",
                         fmt: str = "jpeg", timeout: float = 10.0) -> bytes:
         """화면 캡쳐 후 지정 포맷의 바이트 반환.
 
         Agent가 JPEG/PNG/BMP를 직접 지원하면 변환 없이 반환.
 
-        Agent가 reported screen size와 다른 해상도로 JPEG를 보낼 수 있다.
-        예: 3840×850 reported인데 JPEG는 3840×1440 (top/bottom letterbox 포함).
-        이 경우:
-        1) JPEG의 검은 letterbox 영역을 검출해서 잘라냄 (실제 컨텐츠만 추출)
-        2) 잘라낸 결과를 reported size로 리사이즈 → 픽셀-터치좌표 1:1 매핑
-        - GET_SCREENSIZE 실패(default 사용)인 경우: 실제 JPEG 크기로 stored 갱신
+        Agent가 reported screen size와 다른 해상도로 JPEG를 보낼 수 있다 (예:
+        3840×850 reported인데 framebuffer는 3840×1440). 이 경우 framebuffer 안의
+        실제 logical screen 영역을 정확히 잘라내야 터치 좌표가 일치한다.
+
+        실험적으로 확인된 사실:
+        - cluster 등 다른 monitor: JPEG 크기 ≈ reported → 그대로 사용 가능
+        - front_center: JPEG height > reported height → 추가 padding이 framebuffer에
+          포함됨. 패딩 픽셀이 순수 black이 아닐 수도 있어(JPEG 압축 노이즈 등)
+          letterbox 검출보다는 단순히 정중앙에서 reported 크기만큼 잘라내는 게
+          가장 안정적이다.
+
+        전략:
+        - JPEG dims == reported: 그대로
+        - JPEG dims > reported (한쪽 또는 양쪽): center-crop to reported
+        - JPEG dims < reported: cv2.resize로 확대 (드문 경우)
+        - GET_SCREENSIZE 실패(default 사용): 실제 JPEG dims로 stored 갱신
         """
         fmt_map = {"jpeg": IMG_JPEG, "png": IMG_PNG, "bmp": IMG_BMP24}
         sub_cmd = fmt_map.get(fmt, IMG_JPEG)
@@ -622,26 +593,30 @@ class ISAPAgentService:
                         screen_type, actual_w, actual_h, req_w, req_h, agent_responded,
                     )
 
-                if agent_responded:
-                    # 1) letterbox 영역 검출 후 crop
-                    top, bottom, left, right = self._detect_letterbox(img, screen_type)
-                    if (top, bottom, left, right) != (0, actual_h - 1, 0, actual_w - 1):
-                        cropped = img[top:bottom + 1, left:right + 1]
-                        if key + ":crop" not in self._size_warn_seen:
-                            self._size_warn_seen.add(key + ":crop")
-                            logger.info(
-                                "iSAP %s: letterbox cropped → content (%d,%d)..(%d,%d) size %dx%d",
-                                screen_type, left, top, right, bottom,
-                                cropped.shape[1], cropped.shape[0],
-                            )
-                        img = cropped
-                    # 2) crop 후에도 reported size와 다르면 리사이즈
-                    ch, cw = img.shape[:2]
-                    if (cw, ch) != (req_w, req_h):
-                        img = cv2.resize(img, (req_w, req_h), interpolation=cv2.INTER_AREA)
-                else:
-                    # GET_SCREENSIZE 실패 — 실제 JPEG 크기로 stored 갱신
+                if not agent_responded:
+                    # GET_SCREENSIZE 실패 — 실제 JPEG dims로 stored 갱신, 이미지는 그대로
                     self._set_screen_size(screen_type, actual_w, actual_h)
+                else:
+                    # Center-crop or resize to reported size
+                    if actual_w >= req_w and actual_h >= req_h:
+                        x_off = (actual_w - req_w) // 2
+                        y_off = (actual_h - req_h) // 2
+                        img = img[y_off:y_off + req_h, x_off:x_off + req_w]
+                        if key + ":ccrop" not in self._size_warn_seen:
+                            self._size_warn_seen.add(key + ":ccrop")
+                            logger.info(
+                                "iSAP %s: center-cropped @ (%d,%d) → %dx%d",
+                                screen_type, x_off, y_off, req_w, req_h,
+                            )
+                    else:
+                        # 한 쪽이라도 JPEG가 더 작으면 단순 리사이즈 (드문 경우)
+                        img = cv2.resize(img, (req_w, req_h), interpolation=cv2.INTER_AREA)
+                        if key + ":resize" not in self._size_warn_seen:
+                            self._size_warn_seen.add(key + ":resize")
+                            logger.info(
+                                "iSAP %s: resized %dx%d → %dx%d (JPEG smaller)",
+                                screen_type, actual_w, actual_h, req_w, req_h,
+                            )
 
             ext = ".jpg" if fmt == "jpeg" else ".png"
             params = [cv2.IMWRITE_JPEG_QUALITY, 60] if fmt == "jpeg" else []
