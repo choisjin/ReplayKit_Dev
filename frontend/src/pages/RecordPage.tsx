@@ -579,7 +579,10 @@ export default function RecordPage() {
   }, []);
 
   // Helper: convert element coords to device coords (canvas 또는 video)
-  // 항상 deviceRes(디바이스 실제 해상도) 기준으로 변환
+  // 기본은 deviceRes(agent/device 보고 해상도) 기준으로 매핑.
+  // 단 iSAP은 agent의 reported size와 실제 JPEG dims가 다른 경우가 있어
+  // (front_center: 보고 850 vs JPEG 1440) canvas/video의 natural 크기를
+  // 직접 사용해 JPEG 픽셀 좌표를 그대로 agent에 전달한다.
   const toDeviceCoords = (el: HTMLCanvasElement | HTMLVideoElement, clientX: number, clientY: number) => {
     const rect = el.getBoundingClientRect();
     // border 영역 제외: clientLeft/clientTop = border 두께
@@ -587,18 +590,30 @@ export default function RecordPage() {
     const by = el.clientTop || 0;
     const cw = el.clientWidth;
     const ch = el.clientHeight;
+    // iSAP: canvas/video의 natural(intrinsic) 크기를 좌표계로 사용
+    const isIsap = screenDevice?.type === 'isap_agent';
+    let refW = deviceRes.width;
+    let refH = deviceRes.height;
+    if (isIsap) {
+      const natW = (el as HTMLCanvasElement).width || (el as HTMLVideoElement).videoWidth || 0;
+      const natH = (el as HTMLCanvasElement).height || (el as HTMLVideoElement).videoHeight || 0;
+      if (natW > 0 && natH > 0) {
+        refW = natW;
+        refH = natH;
+      }
+    }
     if (viewCropEnabled) {
       const cropW = viewCropX[1] - viewCropX[0];
       const cropH = viewCropY[1] - viewCropY[0];
       const fracX = (clientX - rect.left - bx) / cw;
       const fracY = (clientY - rect.top - by) / ch;
-      let x = Math.round((viewCropX[0] + fracX * cropW) * deviceRes.width);
-      const y = Math.round((viewCropY[0] + fracY * cropH) * deviceRes.height);
+      let x = Math.round((viewCropX[0] + fracX * cropW) * refW);
+      const y = Math.round((viewCropY[0] + fracY * cropH) * refH);
       if (isScreenHkmc && hkmcDisplayMode === 'integrated') return { x: x + 1920, y };
       return { x, y };
     }
-    const scaleX = deviceRes.width / cw;
-    const scaleY = deviceRes.height / ch;
+    const scaleX = refW / cw;
+    const scaleY = refH / ch;
     let x = Math.round((clientX - rect.left - bx) * scaleX);
     const y = Math.round((clientY - rect.top - by) * scaleY);
     if (isScreenHkmc && hkmcDisplayMode === 'integrated') x += 1920;
