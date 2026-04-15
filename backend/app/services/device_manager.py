@@ -1506,26 +1506,8 @@ class DeviceManager:
         return list(self._devices.values())
 
     def list_primary(self) -> list[ManagedDevice]:
-        """List primary devices (screen-controllable: ADB, Linux, etc.).
-
-        HKMC/iSAP는 screen size가 GET_SCREENSIZE 응답 지연/실패 시 default(1920×720)로
-        시작했다가 첫 screencap 응답에서 실제 크기로 자기 보정될 수 있으므로,
-        list 시점에 service의 최신 get_info()를 반영한다.
-        """
-        primaries = [d for d in self._devices.values() if d.category == "primary"]
-        for d in primaries:
-            try:
-                if d.type == "hkmc6th":
-                    svc = self._hkmc_conns.get(d.id)
-                    if svc and svc.is_connected:
-                        d.info["screens"] = svc.get_info()["screens"]
-                elif d.type == "isap_agent":
-                    svc = self._isap_conns.get(d.id)
-                    if svc and svc.is_connected:
-                        d.info["screens"] = svc.get_info()["screens"]
-            except Exception:
-                pass
-        return primaries
+        """List primary devices (screen-controllable: ADB, Linux, etc.)."""
+        return [d for d in self._devices.values() if d.category == "primary"]
 
     def list_auxiliary(self) -> list[ManagedDevice]:
         """List auxiliary devices (serial, USB, etc.)."""
