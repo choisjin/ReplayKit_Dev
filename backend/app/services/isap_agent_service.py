@@ -538,21 +538,20 @@ class ISAPAgentService:
 
         Agent가 JPEG/PNG/BMP를 직접 지원하면 변환 없이 반환.
 
-        Agent가 reported screen size와 다른 해상도로 JPEG를 보낼 수 있다 (예:
-        3840×850 reported인데 framebuffer는 3840×1440). 이 경우 framebuffer 안의
-        실제 logical screen 영역을 정확히 잘라내야 터치 좌표가 일치한다.
-
-        실험적으로 확인된 사실:
-        - cluster 등 다른 monitor: JPEG 크기 ≈ reported → 그대로 사용 가능
-        - front_center: JPEG height > reported height → 추가 padding이 framebuffer에
-          포함됨. 패딩 픽셀이 순수 black이 아닐 수도 있어(JPEG 압축 노이즈 등)
-          letterbox 검출보다는 단순히 정중앙에서 reported 크기만큼 잘라내는 게
-          가장 안정적이다.
+        ADB Connected_Wide와 같은 "2해상도" 상황 보정:
+        - Agent의 GET_SCREENSIZE → logical screen size (= touch 좌표계)
+          ADB `wm size`의 "Override size" 또는 `dumpsys display`의 `logicalFrame`에 해당
+        - Agent가 실제로 보내는 JPEG → physical framebuffer
+          ADB `DisplayDeviceInfo`의 deviceWidth/Height에 해당
+        - 둘이 다른 경우 framebuffer에서 logical 영역(좌상단 origin)을 잘라내서
+          touch 좌표와 1:1 매핑되게 만든다. ADB는 Android OS가 Override를
+          내부 처리해서 screencap이 자동으로 logical 사이즈로 오지만, iSAP agent는
+          그런 메커니즘이 없으므로 클라이언트가 직접 crop 처리.
 
         전략:
         - JPEG dims == reported: 그대로
-        - JPEG dims > reported (한쪽 또는 양쪽): center-crop to reported
-        - JPEG dims < reported: cv2.resize로 확대 (드문 경우)
+        - JPEG dims > reported: top-left crop (0, 0)..(req_w, req_h)
+        - JPEG dims < reported: cv2.resize로 확대 (드문 edge case)
         - GET_SCREENSIZE 실패(default 사용): 실제 JPEG dims로 stored 갱신
         """
         fmt_map = {"jpeg": IMG_JPEG, "png": IMG_PNG, "bmp": IMG_BMP24}
@@ -597,16 +596,14 @@ class ISAPAgentService:
                     # GET_SCREENSIZE 실패 — 실제 JPEG dims로 stored 갱신, 이미지는 그대로
                     self._set_screen_size(screen_type, actual_w, actual_h)
                 else:
-                    # Center-crop or resize to reported size
+                    # ADB Connected_Wide와 동일: logical 영역은 framebuffer 좌상단 origin
                     if actual_w >= req_w and actual_h >= req_h:
-                        x_off = (actual_w - req_w) // 2
-                        y_off = (actual_h - req_h) // 2
-                        img = img[y_off:y_off + req_h, x_off:x_off + req_w]
-                        if key + ":ccrop" not in self._size_warn_seen:
-                            self._size_warn_seen.add(key + ":ccrop")
+                        img = img[0:req_h, 0:req_w]
+                        if key + ":tlcrop" not in self._size_warn_seen:
+                            self._size_warn_seen.add(key + ":tlcrop")
                             logger.info(
-                                "iSAP %s: center-cropped @ (%d,%d) → %dx%d",
-                                screen_type, x_off, y_off, req_w, req_h,
+                                "iSAP %s: top-left cropped → %dx%d (physical %dx%d)",
+                                screen_type, req_w, req_h, actual_w, actual_h,
                             )
                     else:
                         # 한 쪽이라도 JPEG가 더 작으면 단순 리사이즈 (드문 경우)
@@ -819,6 +816,10 @@ class ISAPAgentService:
     # ------------------------------------------------------------------
 
     def get_info(self) -> dict:
+        fw, fh = self.get_screen_size("front_center")
+        rlw, rlh = self.get_screen_size("rear_left")
+        rrw, rrh = self.get_screen_size("rear_right")
+        cw, ch = self.get_screen_size("cluster")
         return {
             "host": self.host,
             "port": self.port,
@@ -826,13 +827,9 @@ class ISAPAgentService:
             "agent_version": self.agent_version,
             "default_screen": self.default_screen,
             "screens": {
-                "front_center": {"width": self.screen_width_front or self._DEFAULT_SCREEN_SIZES["front_center"][0],
-                                 "height": self.screen_height_front or self._DEFAULT_SCREEN_SIZES["front_center"][1]},
-                "rear_left":    {"width": self.screen_width_rear_l or self._DEFAULT_SCREEN_SIZES["rear_left"][0],
-                                 "height": self.screen_height_rear_l or self._DEFAULT_SCREEN_SIZES["rear_left"][1]},
-                "rear_right":   {"width": self.screen_width_rear_r or self._DEFAULT_SCREEN_SIZES["rear_right"][0],
-                                 "height": self.screen_height_rear_r or self._DEFAULT_SCREEN_SIZES["rear_right"][1]},
-                "cluster":      {"width": self.screen_width_cluster or self._DEFAULT_SCREEN_SIZES["cluster"][0],
-                                 "height": self.screen_height_cluster or self._DEFAULT_SCREEN_SIZES["cluster"][1]},
+                "front_center": {"width": fw, "height": fh},
+                "rear_left":    {"width": rlw, "height": rlh},
+                "rear_right":   {"width": rrw, "height": rrh},
+                "cluster":      {"width": cw, "height": ch},
             },
         }
