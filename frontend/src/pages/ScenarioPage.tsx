@@ -368,7 +368,7 @@ export default function ScenarioPage() {
   const endPlaying = () => {
     playingRef.current = false;
     if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
-    endPlaying();
+    setPlaying(false);
   };
 
   // --- Filtered scenarios by group ---
