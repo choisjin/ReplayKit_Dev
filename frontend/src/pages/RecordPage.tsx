@@ -306,6 +306,8 @@ export default function RecordPage() {
   const [randRunning, setRandRunning] = useState<boolean>(false);
   const [randProgress, setRandProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
   const randStopRef = useRef<boolean>(false);
+  // 하드키 롱프레스 타이머 — 리렌더에도 유지 (키이름 → {downTs, timer})
+  const hkTimerRef = useRef<Map<string, { downTs: number; timer: number }>>(new Map());
   // Region 모달용 canvas/drag ref
   const randRegionCanvasRef = useRef<HTMLCanvasElement>(null);
   const randRegionScreenshotRef = useRef<string>('');
@@ -3128,38 +3130,49 @@ export default function RecordPage() {
                           <details key={group} style={{ marginBottom: 2 }}>
                             <summary style={{ fontSize: 11, color: subTextColor, cursor: 'pointer', userSelect: 'none' }}>{group} <span style={{ color: '#888' }}>({keys.length})</span></summary>
                             <div style={{ padding: '2px 0 2px 4px' }}>
-                              {keys.map(k => {
-                                let downTs = 0;
-                                let longTimer = 0;
-                                return (
+                              {keys.map(k => (
                                 <Button key={k.name} size="small"
                                   className="hk-btn"
                                   style={{ fontSize: 10, padding: '0 6px', height: 22, margin: '0 2px 2px 0' }}
                                   onMouseDown={(e) => {
-                                    downTs = Date.now();
+                                    // 이전 잔여 타이머가 있으면 먼저 정리 (빠른 재클릭 방어)
+                                    const prev = hkTimerRef.current.get(k.name);
+                                    if (prev) clearTimeout(prev.timer);
                                     const btn = e.currentTarget;
                                     btn.classList.remove('long-done');
                                     btn.classList.add('pressing');
-                                    longTimer = window.setTimeout(() => { btn.classList.add('long-done'); }, HKMC_LONG_PRESS_MS);
+                                    const timer = window.setTimeout(() => { btn.classList.add('long-done'); }, HKMC_LONG_PRESS_MS);
+                                    hkTimerRef.current.set(k.name, { downTs: Date.now(), timer });
                                   }}
                                   onMouseUp={(e) => {
-                                    clearTimeout(longTimer);
-                                    const btn = e.currentTarget;
-                                    const held = Date.now() - downTs;
-                                    const isLong = held >= HKMC_LONG_PRESS_MS;
-                                    const sub = isLong ? HKMC_LONG_KEY : HKMC_SHORT_KEY;
-                                    const label = k.name + (isLong ? ' (Long)' : '');
-                                    executeAction('hkmc_key', { key_name: k.name, sub_cmd: sub, screen_type: screenType }, label);
-                                    btn.classList.remove('pressing', 'long-done');
+                                    const entry = hkTimerRef.current.get(k.name);
+                                    if (entry) {
+                                      clearTimeout(entry.timer);
+                                      const held = Date.now() - entry.downTs;
+                                      const isLong = held >= HKMC_LONG_PRESS_MS;
+                                      const sub = isLong ? HKMC_LONG_KEY : HKMC_SHORT_KEY;
+                                      const label = k.name + (isLong ? ' (Long)' : '');
+                                      executeAction('hkmc_key', { key_name: k.name, sub_cmd: sub, screen_type: screenType }, label);
+                                    }
+                                    hkTimerRef.current.delete(k.name);
+                                    e.currentTarget.classList.remove('pressing', 'long-done');
                                   }}
                                   onMouseLeave={(e) => {
-                                    clearTimeout(longTimer);
-                                    downTs = 0;
+                                    const entry = hkTimerRef.current.get(k.name);
+                                    if (entry) clearTimeout(entry.timer);
+                                    hkTimerRef.current.delete(k.name);
+                                    e.currentTarget.classList.remove('pressing', 'long-done');
+                                  }}
+                                  onContextMenu={(e) => {
+                                    // 우클릭 시에도 타이머 정리 (우클릭 메뉴 열리면 mouseup 안 옴)
+                                    e.preventDefault();
+                                    const entry = hkTimerRef.current.get(k.name);
+                                    if (entry) clearTimeout(entry.timer);
+                                    hkTimerRef.current.delete(k.name);
                                     e.currentTarget.classList.remove('pressing', 'long-done');
                                   }}
                                 >{k.name.replace(`${group}_`, '')}</Button>
-                                );
-                              })}
+                              ))}
                             </div>
                           </details>
                         );
