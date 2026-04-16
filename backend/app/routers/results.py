@@ -137,180 +137,235 @@ def _html_image_src(rel_path: str | None, html_dir: Path) -> str:
 
 
 _HTML_STYLE = """
-body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 16px; font-size: 13px; color: #222; }
-h1 { font-size: 18px; margin: 0 0 8px; }
-.meta { margin: 0 0 12px; color: #555; }
-.meta span { display: inline-block; margin-right: 14px; }
-.meta b.status-pass { color: #2f7d32; }
-.meta b.status-fail { color: #c62828; }
-.meta b.status-error { color: #d84315; }
-.controls { position: sticky; top: 0; z-index: 10; background: #fff; padding: 8px 0 10px;
-  border-bottom: 1px solid #e0e0e0; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.controls label { font-size: 12px; color: #555; }
-.controls input[type="text"] { font-size: 12px; padding: 4px 8px; border: 1px solid #bbb;
-  border-radius: 3px; min-width: 240px; }
-.controls button { font-size: 12px; padding: 4px 10px; border: 1px solid #4472C4; background: #4472C4;
-  color: #fff; border-radius: 3px; cursor: pointer; }
-.controls button:hover { background: #365899; }
-.controls button.secondary { background: #fff; color: #4472C4; }
-.controls button.secondary:hover { background: #f0f4fb; }
-.controls .count { margin-left: auto; color: #666; font-size: 12px; }
-/* Tabulator 커스텀 — simple 테마 위에 프로젝트 색상만 덮어씀 */
-.tabulator { border: 1px solid #bbb; font-size: 12px; }
-.tabulator .tabulator-header { background: #4472C4; color: #fff; font-weight: 600; border-bottom: 1px solid #365899; }
-.tabulator .tabulator-header .tabulator-col { background: #4472C4; color: #fff; border-right: 1px solid #365899; }
-.tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover { background: #365899; }
-.tabulator .tabulator-header .tabulator-col .tabulator-col-title { color: #fff; padding: 6px 4px; }
+*,*::before,*::after { box-sizing: border-box; }
+body { font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  margin: 0; padding: 16px 20px; font-size: 13px; color: #1a1a2e; background: #f5f7fa; }
+h1 { font-size: 20px; font-weight: 700; margin: 0 0 6px; color: #1a1a2e; letter-spacing: -0.3px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 14px; color: #555; font-size: 12px; }
+.meta .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px;
+  border-radius: 12px; font-weight: 600; font-size: 12px; }
+.meta .badge.pass { background: #dcfce7; color: #15803d; }
+.meta .badge.fail { background: #fee2e2; color: #b91c1c; }
+.meta .badge.error { background: #ffedd5; color: #9a3412; }
+.meta .stat { padding: 2px 8px; border-radius: 4px; background: #e8ecf1; font-weight: 500; }
+.controls { position: sticky; top: 0; z-index: 20; background: #fff; padding: 10px 16px;
+  border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); margin-bottom: 12px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.controls input[type="text"] { font-size: 12px; padding: 6px 10px; border: 1px solid #d1d5db;
+  border-radius: 6px; min-width: 260px; outline: none; transition: border-color 0.15s; }
+.controls input[type="text"]:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+.controls button { font-size: 12px; padding: 6px 14px; border: none; border-radius: 6px;
+  cursor: pointer; font-weight: 500; transition: all 0.15s; }
+.controls .btn-primary { background: #3b82f6; color: #fff; }
+.controls .btn-primary:hover { background: #2563eb; }
+.controls .btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+.controls .btn-secondary:hover { background: #e5e7eb; }
+.controls .count { margin-left: auto; color: #6b7280; font-size: 12px; }
+/* Tabulator 테마 오버라이드 */
+.tabulator { border: none; border-radius: 8px; overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08); font-size: 12px; background: #fff; }
+.tabulator .tabulator-header { background: #1e3a5f; color: #fff; font-weight: 600;
+  border-bottom: 2px solid #15294a; }
+.tabulator .tabulator-header .tabulator-col { background: transparent; color: #fff;
+  border-right: 1px solid rgba(255,255,255,0.1); }
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover { background: rgba(255,255,255,0.1); }
+.tabulator .tabulator-header .tabulator-col .tabulator-col-title { color: #fff; padding: 8px 6px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+.tabulator .tabulator-header .tabulator-col .tabulator-col-sorter { color: rgba(255,255,255,0.5); }
+.tabulator .tabulator-header .tabulator-header-filter { padding: 4px 4px 6px; }
 .tabulator .tabulator-header .tabulator-header-filter input,
 .tabulator .tabulator-header .tabulator-header-filter select {
-  font-size: 11px; padding: 3px 4px; border: 1px solid #bbb; border-radius: 2px;
-  background: #fff; color: #222; box-sizing: border-box; width: 100%;
-}
-.tabulator-row .tabulator-cell { padding: 4px 6px; border-right: 1px solid #ddd; vertical-align: middle; }
-.tabulator-row.tabulator-row-even { background: #f7f9fc; }
-.tabulator-row:hover { background: #fffbe6; }
-.status-cell { text-align: center; font-weight: 600; border-radius: 2px; padding: 2px 6px; }
-.status-cell.pass { background: #C6EFCE; color: #2f7d32; }
-.status-cell.fail { background: #FFC7CE; color: #c62828; }
-.status-cell.warning { background: #FFEB9C; color: #8f6a00; }
-.status-cell.error { background: #F4B084; color: #9a2b00; }
-.img-thumb { max-width: 170px; max-height: 130px; display: block; margin: 0 auto; cursor: pointer; }
-/* 전체화면 이미지 프리뷰 */
-.preview-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none;
+  font-size: 11px; padding: 4px 6px; border: 1px solid #d1d5db; border-radius: 4px;
+  background: #fff; color: #374151; width: 100%; outline: none; }
+.tabulator .tabulator-header .tabulator-header-filter input:focus,
+.tabulator .tabulator-header .tabulator-header-filter select:focus {
+  border-color: #60a5fa; box-shadow: 0 0 0 2px rgba(96,165,250,0.2); }
+.tabulator .tabulator-tableholder { background: #fff; }
+.tabulator-row { border-bottom: 1px solid #f0f0f0; }
+.tabulator-row .tabulator-cell { padding: 5px 8px; border-right: 1px solid #f3f4f6; }
+.tabulator-row.tabulator-row-even { background: #fafbfc; }
+.tabulator-row:hover { background: #eff6ff !important; }
+.tabulator-row.tabulator-row-even:hover { background: #eff6ff !important; }
+/* Status 배지 */
+.st-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 11px;
+  font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; }
+.st-badge.pass { background: #dcfce7; color: #15803d; }
+.st-badge.fail { background: #fee2e2; color: #b91c1c; }
+.st-badge.warning { background: #fef9c3; color: #854d0e; }
+.st-badge.error { background: #ffedd5; color: #9a3412; }
+.img-thumb { max-width: 170px; max-height: 130px; display: block; margin: 0 auto;
+  cursor: pointer; border-radius: 4px; border: 1px solid #e5e7eb; transition: transform 0.15s; }
+.img-thumb:hover { transform: scale(1.03); box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+/* 이미지 프리뷰 */
+.preview-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.88); display: none;
   align-items: center; justify-content: center; z-index: 9999; cursor: zoom-out; }
 .preview-overlay.open { display: flex; }
-.preview-overlay img { max-width: 95vw; max-height: 95vh; box-shadow: 0 0 40px rgba(0,0,0,0.5); }
+.preview-overlay img { max-width: 95vw; max-height: 95vh; border-radius: 6px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.4); }
 @media print {
-  body { margin: 8px; }
+  body { margin: 8px; padding: 0; background: #fff; }
   .controls { display: none !important; }
   .tabulator .tabulator-header .tabulator-header-filter { display: none !important; }
   .tabulator-row { page-break-inside: avoid; }
-  .img-thumb { max-width: 140px; max-height: 110px; }
+  .tabulator { box-shadow: none; border: 1px solid #ccc; }
+  .img-thumb { max-width: 140px; max-height: 110px; border: none; }
 }
 """
 
 # Tabulator 기반 리포트 초기화 스크립트 — 데이터는 window.__REPORT_DATA__ 전역에서 읽는다.
 _HTML_SCRIPT = r"""
 (function(){
-  function statusFormatter(cell){
-    var v = (cell.getValue() || '').toString();
-    var lv = v.toLowerCase();
-    return '<div class="status-cell ' + lv + '">' + v.toUpperCase() + '</div>';
+  /* ---------- 셀 포맷터 ---------- */
+  function statusFmt(cell){
+    var v = (cell.getValue() || '').toString().toLowerCase();
+    return '<span class="st-badge ' + v + '">' + v.toUpperCase() + '</span>';
   }
-  function imageFormatter(cell){
+  function imgFmt(cell){
     var v = cell.getValue();
-    if (!v) return '<span style="color:#999">-</span>';
+    if (!v) return '<span style="color:#bbb">—</span>';
     return '<img class="img-thumb" loading="lazy" src="' + v + '" alt="">';
   }
+
+  /* ---------- 고유값 수집 헬퍼 ---------- */
+  function uniqueVals(data, field){
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < data.length; i++){
+      var v = data[i][field];
+      if (v == null || v === '') continue;
+      var s = String(v);
+      if (!seen[s]) { seen[s] = true; out.push(s); }
+    }
+    out.sort(function(a,b){ return a.localeCompare(b, undefined, {numeric:true}); });
+    return out;
+  }
+
+  /* ---------- 드롭다운 헤더 필터 에디터 (리스트형) ---------- */
+  function listEditor(field, placeholder){
+    return function(cell, onRendered, success, cancel, editorParams){
+      var vals = editorParams.values || [];
+      var select = document.createElement('select');
+      select.style.cssText = 'width:100%; font-size:11px; padding:3px 4px; border:1px solid #d1d5db; border-radius:4px; background:#fff; color:#374151; cursor:pointer;';
+      var opt0 = document.createElement('option');
+      opt0.value = ''; opt0.textContent = placeholder || '전체';
+      select.appendChild(opt0);
+      for (var i = 0; i < vals.length; i++){
+        var opt = document.createElement('option');
+        opt.value = vals[i]; opt.textContent = vals[i];
+        select.appendChild(opt);
+      }
+      var cur = cell.getValue();
+      if (cur) select.value = cur;
+      select.addEventListener('change', function(){ success(select.value); });
+      return select;
+    };
+  }
+
+  /* ---------- 이미지 프리뷰 ---------- */
   function onImgClick(e){
-    if (e.target && e.target.classList && e.target.classList.contains('img-thumb')) {
-      var ov = document.getElementById('preview-overlay');
-      var pi = document.getElementById('preview-img');
-      pi.src = e.target.src;
-      ov.classList.add('open');
+    if (e.target && e.target.classList.contains('img-thumb')){
+      document.getElementById('preview-img').src = e.target.src;
+      document.getElementById('preview-overlay').classList.add('open');
     }
   }
   function closePreview(){
-    var ov = document.getElementById('preview-overlay');
-    ov.classList.remove('open');
+    document.getElementById('preview-overlay').classList.remove('open');
     document.getElementById('preview-img').src = '';
   }
-  function buildColumns(meta){
-    var cols = [
-      { title: "Time Stamp", field: "timestamp", width: 150, headerFilter: "input" },
-      { title: "Cycle",      field: "cycle",     width: 70,  hozAlign: "center",
-        headerFilter: "list", headerFilterParams: { values: true, clearable: true } },
-      { title: "Step",       field: "step_id",   width: 70,  hozAlign: "center",
-        headerFilter: "list", headerFilterParams: { values: true, clearable: true } },
-      { title: "Device",     field: "device",    width: 120, hozAlign: "center",
-        headerFilter: "list", headerFilterParams: { values: true, clearable: true } },
-      { title: "Command",    field: "command",   widthGrow: 2, headerFilter: "input" },
-      { title: "Remark",     field: "description", widthGrow: 2, headerFilter: "input" },
-      { title: "Status",     field: "status",    width: 90, hozAlign: "center",
-        headerFilter: "list", headerFilterParams: { values: ["pass","fail","warning","error"], clearable: true },
-        formatter: statusFormatter },
-      { title: "Delay",      field: "delay",     width: 80, hozAlign: "center", headerFilter: "input" },
-      { title: "Duration",   field: "duration",  width: 90, hozAlign: "center", headerFilter: "input" },
-      { title: "Expected",   field: "expected_src", width: 200, hozAlign: "center",
-        formatter: imageFormatter, headerSort: false, headerFilter: false },
-      { title: "Actual",     field: "actual_src", width: 200, hozAlign: "center",
-        formatter: imageFormatter, headerSort: false, headerFilter: false },
+
+  /* ---------- 컬럼 정의 ---------- */
+  function buildColumns(data){
+    var tsVals   = uniqueVals(data, 'timestamp');
+    var cyVals   = uniqueVals(data, 'cycle');
+    var stepVals = uniqueVals(data, 'step_id');
+    var devVals  = uniqueVals(data, 'device');
+    var delVals  = uniqueVals(data, 'delay');
+    var durVals  = uniqueVals(data, 'duration');
+
+    return [
+      { title:"Time Stamp", field:"timestamp", width:150,
+        headerFilter:listEditor('timestamp','전체'), headerFilterParams:{values:tsVals}, headerFilterFunc:"=" },
+      { title:"Cycle", field:"cycle", width:70, hozAlign:"center",
+        headerFilter:listEditor('cycle','전체'), headerFilterParams:{values:cyVals}, headerFilterFunc:"=" },
+      { title:"Step", field:"step_id", width:70, hozAlign:"center",
+        headerFilter:listEditor('step_id','전체'), headerFilterParams:{values:stepVals}, headerFilterFunc:"=" },
+      { title:"Device", field:"device", width:120, hozAlign:"center",
+        headerFilter:listEditor('device','전체'), headerFilterParams:{values:devVals}, headerFilterFunc:"=" },
+      { title:"Command", field:"command", widthGrow:2,
+        headerFilter:"input", headerFilterPlaceholder:"검색..." },
+      { title:"Remark", field:"description", widthGrow:2,
+        headerFilter:"input", headerFilterPlaceholder:"검색..." },
+      { title:"Status", field:"status", width:90, hozAlign:"center", formatter:statusFmt,
+        headerFilter:listEditor('status','전체'), headerFilterParams:{values:["pass","fail","warning","error"]}, headerFilterFunc:"=" },
+      { title:"Delay", field:"delay", width:80, hozAlign:"center",
+        headerFilter:listEditor('delay','전체'), headerFilterParams:{values:delVals}, headerFilterFunc:"=" },
+      { title:"Duration", field:"duration", width:90, hozAlign:"center",
+        headerFilter:listEditor('duration','전체'), headerFilterParams:{values:durVals}, headerFilterFunc:"=" },
+      { title:"Expected", field:"expected_src", width:200, hozAlign:"center",
+        formatter:imgFmt, headerSort:false },
+      { title:"Actual", field:"actual_src", width:200, hozAlign:"center",
+        formatter:imgFmt, headerSort:false },
     ];
-    return cols;
   }
 
-  function init(){
-    var data = (window.__REPORT_DATA__ && window.__REPORT_DATA__.rows) || [];
-    var meta = window.__REPORT_DATA__ || {};
-    var totalEl = document.getElementById('filter-total');
-    if (totalEl) totalEl.textContent = data.length;
-
-    var table = new Tabulator("#results-table", {
-      data: data,
-      columns: buildColumns(meta),
-      layout: "fitDataStretch",
-      height: "calc(100vh - 160px)",
-      rowHeight: 140,
-      placeholder: "표시할 결과가 없습니다",
-    });
-    window.__table = table;
-
-    table.on("dataFiltered", function(filters, rows){
-      var el = document.getElementById('filter-visible');
-      if (el) el.textContent = rows.length;
-    });
-
-    // 전역 검색 — 모든 텍스트 필드 OR substring 매칭
-    var gEl = document.getElementById('filter-text');
-    if (gEl) {
-      gEl.addEventListener('input', function(){
-        var v = (gEl.value || '').trim().toLowerCase();
-        if (!v) {
-          table.removeFilter(globalFilter);
-          return;
-        }
-        table.removeFilter(globalFilter);
-        table.addFilter(globalFilter, { q: v });
-      });
-    }
-
-    var resetBtn = document.getElementById('filter-reset');
-    if (resetBtn) resetBtn.addEventListener('click', function(){
-      table.clearHeaderFilter();
-      if (gEl) gEl.value = '';
-      table.removeFilter(globalFilter);
-    });
-
-    var pdfBtn = document.getElementById('pdf-btn');
-    if (pdfBtn) pdfBtn.addEventListener('click', function(){
-      table.print(false, true);
-    });
-
-    // 이미지 클릭 → 전체화면 프리뷰
-    document.getElementById('results-table').addEventListener('click', onImgClick);
-    document.getElementById('preview-overlay').addEventListener('click', closePreview);
-    document.addEventListener('keydown', function(e){
-      if (e.key === 'Escape') closePreview();
-    });
-  }
-
-  // 전역 검색용 커스텀 필터 — 텍스트 필드 전반을 OR 매칭
+  /* ---------- 전역 검색 필터 ---------- */
+  var TEXT_FIELDS = ["timestamp","cycle","step_id","device","command","description","status","delay","duration"];
   function globalFilter(row, params){
     var q = params.q;
     if (!q) return true;
-    var fields = ["timestamp","cycle","step_id","device","command","description","status","delay","duration"];
-    for (var i = 0; i < fields.length; i++) {
-      var v = row[fields[i]];
+    for (var i = 0; i < TEXT_FIELDS.length; i++){
+      var v = row[TEXT_FIELDS[i]];
       if (v != null && String(v).toLowerCase().indexOf(q) !== -1) return true;
     }
     return false;
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
+  /* ---------- 초기화 ---------- */
+  function init(){
+    var data = (window.__REPORT_DATA__ && window.__REPORT_DATA__.rows) || [];
+    document.getElementById('filter-total').textContent = data.length;
+
+    var table = new Tabulator("#results-table", {
+      data: data,
+      columns: buildColumns(data),
+      layout: "fitDataStretch",
+      height: "calc(100vh - 170px)",
+      rowHeight: 140,
+      placeholder: "표시할 결과가 없습니다",
+      headerSortClickElement: "icon",
+    });
+    window.__table = table;
+
+    table.on("dataFiltered", function(filters, rows){
+      document.getElementById('filter-visible').textContent = rows.length;
+    });
+
+    // 전역 검색
+    var gEl = document.getElementById('filter-text');
+    gEl.addEventListener('input', function(){
+      var v = (gEl.value || '').trim().toLowerCase();
+      table.removeFilter(globalFilter);
+      if (v) table.addFilter(globalFilter, { q: v });
+    });
+
+    // 필터 초기화
+    document.getElementById('filter-reset').addEventListener('click', function(){
+      table.clearHeaderFilter();
+      gEl.value = '';
+      table.removeFilter(globalFilter);
+    });
+
+    // PDF 저장
+    document.getElementById('pdf-btn').addEventListener('click', function(){ table.print(false, true); });
+
+    // 이미지 프리뷰
+    document.getElementById('results-table').addEventListener('click', onImgClick);
+    document.getElementById('preview-overlay').addEventListener('click', closePreview);
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closePreview(); });
   }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();
 """
 
@@ -389,26 +444,27 @@ def _build_html_report(data: dict, output_path: Path) -> str:
     parts.append(f"<style>{_HTML_STYLE}</style>")
     parts.append("</head><body>")
     parts.append(f"<h1>{e(scenario_name)}</h1>")
-    status_class = f"status-{status}" if status in ("pass", "fail", "error") else ""
+    status_cls = status if status in ("pass", "fail", "error") else ""
     parts.append('<div class="meta">')
-    parts.append(f'<span>상태: <b class="{status_class}">{e(status.upper())}</b></span>')
-    parts.append(f"<span>총 step: {total_steps}</span>")
-    parts.append(f"<span>repeat: {total_repeat}</span>")
-    parts.append(f"<span>pass: {passed}</span>")
-    parts.append(f"<span>fail: {failed}</span>")
+    parts.append(f'<span class="badge {status_cls}">{e(status.upper())}</span>')
+    parts.append(f'<span class="stat">Step: {total_steps}</span>')
+    parts.append(f'<span class="stat">Repeat: {total_repeat}</span>')
+    parts.append(f'<span class="stat" style="background:#dcfce7;color:#15803d">Pass: {passed}</span>')
+    if failed:
+        parts.append(f'<span class="stat" style="background:#fee2e2;color:#b91c1c">Fail: {failed}</span>')
     if warned:
-        parts.append(f"<span>warning: {warned}</span>")
-    parts.append(f"<span>error: {errored}</span>")
-    parts.append(f"<span>시작: {e(_fmt_ts(started_at))}</span>")
-    parts.append(f"<span>종료: {e(_fmt_ts(finished_at))}</span>")
+        parts.append(f'<span class="stat" style="background:#fef9c3;color:#854d0e">Warn: {warned}</span>')
+    if errored:
+        parts.append(f'<span class="stat" style="background:#ffedd5;color:#9a3412">Error: {errored}</span>')
+    parts.append(f"<span>{e(_fmt_ts(started_at))} ~ {e(_fmt_ts(finished_at))}</span>")
     parts.append("</div>")
 
     # 상단 컨트롤 — 전역 검색, 필터 초기화, PDF 저장
     parts.append('<div class="controls">')
-    parts.append('<label>전체 검색 <input id="filter-text" type="text" placeholder="모든 열 substring"></label>')
-    parts.append('<button id="filter-reset" class="secondary" type="button">필터 초기화</button>')
-    parts.append('<button id="pdf-btn" type="button">📄 PDF로 저장</button>')
-    parts.append('<span class="count">표시 <b id="filter-visible">0</b> / <b id="filter-total">0</b></span>')
+    parts.append('<input id="filter-text" type="text" placeholder="전체 검색 (모든 열)">')
+    parts.append('<button id="filter-reset" class="btn-secondary" type="button">필터 초기화</button>')
+    parts.append('<button id="pdf-btn" class="btn-primary" type="button">PDF 저장</button>')
+    parts.append('<span class="count"><b id="filter-visible">0</b> / <b id="filter-total">0</b></span>')
     parts.append("</div>")
 
     # Tabulator 렌더 타겟
