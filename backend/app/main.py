@@ -321,6 +321,11 @@ app.include_router(results.router)
 app.include_router(settings.router)
 app.include_router(webcam.router)
 
+# Serve app static assets (Tabulator 등 라이브러리)
+_static_dir = Path(__file__).resolve().parent / "static"
+if _static_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+
 # Serve screenshots statically
 screenshots_dir = Path(__file__).resolve().parent.parent / "screenshots"
 screenshots_dir.mkdir(parents=True, exist_ok=True)

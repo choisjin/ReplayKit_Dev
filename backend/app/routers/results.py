@@ -320,8 +320,8 @@ def _build_html_report(data: dict, output_path: Path) -> str:
 
     데이터는 window.__REPORT_DATA__에 JSON으로 임베드되고,
     Tabulator가 열별 필터/정렬/검색/이미지 썸네일을 모두 렌더링한다.
-    라이브러리 파일(tabulator.min.js/css)은 output_path와 같은 디렉토리의
-    'assets/' 하위에 복사돼 있어야 한다 (_save_result에서 처리).
+    라이브러리 파일은 /static/tabulator/ 에서 서빙 (별도 복사 불필요).
+    export-bundle ZIP에만 assets/로 포함된다.
     """
     html_dir = output_path.parent
 
@@ -385,7 +385,7 @@ def _build_html_report(data: dict, output_path: Path) -> str:
     parts.append("<!DOCTYPE html>")
     parts.append('<html lang="ko"><head><meta charset="utf-8">')
     parts.append(f"<title>{e(scenario_name)} - Test Report</title>")
-    parts.append('<link rel="stylesheet" href="./assets/tabulator_simple.min.css">')
+    parts.append('<link rel="stylesheet" href="/static/tabulator/tabulator_simple.min.css">')
     parts.append(f"<style>{_HTML_STYLE}</style>")
     parts.append("</head><body>")
     parts.append(f"<h1>{e(scenario_name)}</h1>")
@@ -419,7 +419,7 @@ def _build_html_report(data: dict, output_path: Path) -> str:
 
     # 데이터 임베드 + 라이브러리 로드 + 초기화
     parts.append(f'<script>window.__REPORT_DATA__ = {payload_json};</script>')
-    parts.append('<script src="./assets/tabulator.min.js"></script>')
+    parts.append('<script src="/static/tabulator/tabulator.min.js"></script>')
     parts.append(f"<script>{_HTML_SCRIPT}</script>")
     parts.append("</body></html>")
     return "".join(parts)
@@ -652,25 +652,53 @@ async def export_result_bundle(filename: str, export_path: str = ""):
                     except Exception:
                         pass
 
+    # result.html이 /static/tabulator/ 절대경로를 참조하므로, ZIP 배포용으로
+    # assets/를 런 폴더에 임시 복사 + HTML 내 경로를 상대경로로 패치한다.
+    _tabulator_src = Path(__file__).resolve().parent.parent / "static" / "tabulator"
+    _tmp_assets_dir = run_dir / "assets"
+    _patched_html = False
+    if _tabulator_src.is_dir():
+        _tmp_assets_dir.mkdir(exist_ok=True)
+        for _tf in ("tabulator.min.js", "tabulator_simple.min.css"):
+            _src = _tabulator_src / _tf
+            _dst = _tmp_assets_dir / _tf
+            if _src.is_file() and not _dst.exists():
+                shutil.copy2(str(_src), str(_dst))
+        _html_file = run_dir / "result.html"
+        if _html_file.is_file():
+            _htxt = _html_file.read_text(encoding="utf-8")
+            _htxt_new = _htxt.replace("/static/tabulator/", "./assets/")
+            if _htxt_new != _htxt:
+                _html_file.write_text(_htxt_new, encoding="utf-8")
+                _patched_html = True
+
     # ZIP 압축
-    if export_path:
-        # 지정 경로에 저장
-        zip_path = Path(export_path)
-        if zip_path.is_dir():
-            zip_path = zip_path / f"{folder_name}.zip"
-        zip_path.parent.mkdir(parents=True, exist_ok=True)
-        _zip_directory(run_dir, zip_path)
-        return {"path": str(zip_path), "folder": folder_name, "size": zip_path.stat().st_size}
-    else:
-        # 브라우저 다운로드
-        buf = io.BytesIO()
-        _zip_directory_to_buffer(run_dir, buf)
-        buf.seek(0)
-        return StreamingResponse(
-            buf,
-            media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{folder_name}.zip"'},
-        )
+    try:
+        if export_path:
+            zip_path = Path(export_path)
+            if zip_path.is_dir():
+                zip_path = zip_path / f"{folder_name}.zip"
+            zip_path.parent.mkdir(parents=True, exist_ok=True)
+            _zip_directory(run_dir, zip_path)
+            return {"path": str(zip_path), "folder": folder_name, "size": zip_path.stat().st_size}
+        else:
+            buf = io.BytesIO()
+            _zip_directory_to_buffer(run_dir, buf)
+            buf.seek(0)
+            return StreamingResponse(
+                buf,
+                media_type="application/zip",
+                headers={"Content-Disposition": f'attachment; filename="{folder_name}.zip"'},
+            )
+    finally:
+        # ZIP용 임시 assets 정리 + HTML 경로 복원 (런 폴더가 원본이면 패치 원복)
+        if _patched_html:
+            _html_file = run_dir / "result.html"
+            if _html_file.is_file():
+                _htxt = _html_file.read_text(encoding="utf-8")
+                _html_file.write_text(_htxt.replace("./assets/", "/static/tabulator/"), encoding="utf-8")
+        if _tmp_assets_dir.is_dir() and _tabulator_src.is_dir():
+            shutil.rmtree(str(_tmp_assets_dir), ignore_errors=True)
 
 
 @router.post("/open-folder")
