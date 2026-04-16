@@ -182,7 +182,8 @@ h1 { font-size: 20px; font-weight: 700; margin: 0 0 6px; color: #1a1a2e; letter-
   border-color: #60a5fa; box-shadow: 0 0 0 2px rgba(96,165,250,0.2); }
 .tabulator .tabulator-tableholder { background: #fff; }
 .tabulator-row { border-bottom: 1px solid #f0f0f0; }
-.tabulator-row .tabulator-cell { padding: 5px 8px; border-right: 1px solid #f3f4f6; }
+.tabulator-row .tabulator-cell { padding: 4px 6px; border-right: 1px solid #f3f4f6;
+  vertical-align: middle; display: flex; align-items: center; min-height: 28px; }
 .tabulator-row.tabulator-row-even { background: #fafbfc; }
 .tabulator-row:hover { background: #eff6ff !important; }
 .tabulator-row.tabulator-row-even:hover { background: #eff6ff !important; }
@@ -206,8 +207,11 @@ h1 { font-size: 20px; font-weight: 700; margin: 0 0 6px; color: #1a1a2e; letter-
   body { margin: 8px; padding: 0; background: #fff; }
   .controls { display: none !important; }
   .tabulator .tabulator-header .tabulator-header-filter { display: none !important; }
+  .tabulator { box-shadow: none; border: 1px solid #ccc; height: auto !important;
+    max-height: none !important; overflow: visible !important; }
+  .tabulator .tabulator-tableholder { height: auto !important; max-height: none !important;
+    overflow: visible !important; }
   .tabulator-row { page-break-inside: avoid; }
-  .tabulator { box-shadow: none; border: 1px solid #ccc; }
   .img-thumb { max-width: 140px; max-height: 110px; border: none; }
 }
 """
@@ -292,9 +296,9 @@ _HTML_SCRIPT = r"""
       { title:"Device", field:"device", width:120, hozAlign:"center",
         headerFilter:listEditor('device','전체'), headerFilterParams:{values:devVals}, headerFilterFunc:"=" },
       { title:"Command", field:"command", widthGrow:2,
-        headerFilter:"input", headerFilterPlaceholder:"검색..." },
+        headerFilter:listEditor('command','전체'), headerFilterParams:{values:uniqueVals(data,'command')}, headerFilterFunc:"=" },
       { title:"Remark", field:"description", widthGrow:2,
-        headerFilter:"input", headerFilterPlaceholder:"검색..." },
+        headerFilter:listEditor('description','전체'), headerFilterParams:{values:uniqueVals(data,'description')}, headerFilterFunc:"=" },
       { title:"Status", field:"status", width:90, hozAlign:"center", formatter:statusFmt,
         headerFilter:listEditor('status','전체'), headerFilterParams:{values:["pass","fail","warning","error"]}, headerFilterFunc:"=" },
       { title:"Delay", field:"delay", width:80, hozAlign:"center",
@@ -329,8 +333,8 @@ _HTML_SCRIPT = r"""
       data: data,
       columns: buildColumns(data),
       layout: "fitDataStretch",
-      height: "calc(100vh - 170px)",
-      rowHeight: 140,
+      maxHeight: "calc(100vh - 170px)",
+      renderVertical: "basic",
       placeholder: "표시할 결과가 없습니다",
       headerSortClickElement: "icon",
     });
@@ -355,8 +359,8 @@ _HTML_SCRIPT = r"""
       table.removeFilter(globalFilter);
     });
 
-    // PDF 저장
-    document.getElementById('pdf-btn').addEventListener('click', function(){ table.print(false, true); });
+    // PDF 저장 — window.print()로 전체 행 출력 (가상 렌더링 우회)
+    document.getElementById('pdf-btn').addEventListener('click', function(){ window.print(); });
 
     // 이미지 프리뷰
     document.getElementById('results-table').addEventListener('click', onImgClick);
