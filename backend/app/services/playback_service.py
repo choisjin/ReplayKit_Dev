@@ -54,6 +54,36 @@ _event_buffer_lock = asyncio.Lock()
 # 버퍼에 저장할 때 step_result payload에서 제거할 heavy 필드 집합.
 # 라이브 브로드캐스트에는 그대로 전달되고, 버퍼 replay 시에만 축약된 형태가 사용된다.
 _BUFFER_STRIP_FIELDS = {"sub_results", "match_location", "roi"}
+
+# 현재 실행 중인 백그라운드 재생 태스크 — stop() 이 완전 종료를 기다릴 수 있도록
+# 외부(main.py _run_play_job 등)에서 등록한다.
+_bg_playback_task: "asyncio.Task | None" = None
+
+
+def set_bg_playback_task(task: "asyncio.Task | None") -> None:
+    """백그라운드 재생 태스크 참조 등록. 새 재생 시작 시 호출."""
+    global _bg_playback_task
+    _bg_playback_task = task
+
+
+async def await_bg_playback_task(timeout: float = 15.0) -> bool:
+    """등록된 백그라운드 재생 태스크가 완전히 종료될 때까지 대기.
+
+    Returns True if the task finished (or was None), False on timeout.
+    재시작 로직이 stop 직후 즉시 새 재생을 시작할 수 있도록 동기화 목적으로 사용.
+    """
+    t = _bg_playback_task
+    if t is None or t.done():
+        return True
+    try:
+        await asyncio.wait_for(asyncio.shield(t), timeout=timeout)
+        return True
+    except asyncio.TimeoutError:
+        logger.warning("Background playback task did not finish within %ss", timeout)
+        return False
+    except Exception:
+        # 태스크 내부 예외는 무시 — 종료만 기다림
+        return True
 # 현재 재생이 실제로 진행 중인지 여부 — 중단/완료된 run의 버퍼를 새 subscriber에게 replay하지 않기 위해 사용.
 _playback_active: bool = False
 
@@ -174,8 +204,15 @@ class PlaybackService:
         return not self._pause_event.is_set()
 
     async def stop(self) -> None:
+        """재생 중단 요청 + 백그라운드 태스크가 실제로 종료될 때까지 대기.
+
+        호출이 리턴되면 이전 run이 완전히 정리된 상태이므로, 호출자는 바로
+        다음 재생을 시작할 수 있다. 장시간 블록되는 액션(예: 모듈 커맨드)이
+        걸려 있으면 최대 15초 대기 후 반환한다.
+        """
         self._should_stop = True
         self._pause_event.set()  # 일시정지 중이면 풀어서 루프 종료 가능하게
+        await await_bg_playback_task(timeout=15.0)
 
     async def pause(self) -> None:
         self._pause_event.clear()

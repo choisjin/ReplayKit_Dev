@@ -949,12 +949,13 @@ async def stop_playback():
         publish_event, mark_playback_active,
     )
     was_running = playback_svc.is_running
-    await playback_svc.stop()
-    # 새 WS 연결 시 이전 run의 버퍼가 replay되지 않도록 즉시 inactive 처리
+    # race 방지: stop이 bg task 종료를 기다리는 동안 새 WS가 연결되더라도
+    # 이전 run의 버퍼가 replay되지 않도록 먼저 inactive로 표시.
     mark_playback_active(False)
-    # 연결되어 있는 기존 subscriber들에게도 알림
+    # stop()은 내부적으로 bg 재생 태스크 종료까지 대기 (최대 15초).
+    await playback_svc.stop()
     publish_event({"type": "playback_stopped", "result_filename": "", "source": "rest"})
-    return {"status": "stopping", "was_running": was_running}
+    return {"status": "stopped", "was_running": was_running}
 
 
 @router.get("/playback/status")

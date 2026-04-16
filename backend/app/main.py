@@ -1142,7 +1142,7 @@ async def websocket_playback(websocket: WebSocket):
     - 새 WS가 연결되면 최근 이벤트 버퍼를 replay 받아 현재 상태를 복구
     """
     global _playback_bg_task
-    from .services.playback_service import subscribe_events, unsubscribe_events, publish_event, mark_playback_active
+    from .services.playback_service import subscribe_events, unsubscribe_events, publish_event, mark_playback_active, set_bg_playback_task
     await websocket.accept()
     logger.info("Playback WebSocket connected")
 
@@ -1180,18 +1180,20 @@ async def websocket_playback(websocket: WebSocket):
                     publish_event({"type": "error", "message": "이미 재생 중입니다"})
                     continue
                 _playback_bg_task = asyncio.create_task(_run_play_job(data))
+                set_bg_playback_task(_playback_bg_task)
 
             elif action == "play_group":
                 if playback_service.is_running or (_playback_bg_task and not _playback_bg_task.done()):
                     publish_event({"type": "error", "message": "이미 재생 중입니다"})
                     continue
                 _playback_bg_task = asyncio.create_task(_run_play_group_job(data))
+                set_bg_playback_task(_playback_bg_task)
 
             elif action == "stop":
+                # stop()은 내부적으로 백그라운드 재생 태스크가 완전 종료될 때까지 대기.
+                # 반환 시점에 이전 run은 정리되었으므로 바로 다음 play를 받을 수 있다.
+                mark_playback_active(False)  # race 방지: 다른 WS가 연결돼도 이전 run 버퍼 replay 금지
                 await playback_service.stop()
-                # 중단 즉시 inactive로 표시 — 새 WS가 연결되어도 이전 run의 버퍼가 replay되지 않도록.
-                # 백그라운드 태스크의 finally에서도 다시 False로 설정되지만 여기서 먼저 걸어야 race가 없다.
-                mark_playback_active(False)
                 publish_event({"type": "playback_stopped", "result_filename": ""})
 
             elif action == "pause":
