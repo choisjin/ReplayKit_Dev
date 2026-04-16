@@ -440,7 +440,8 @@ def _build_html_report(data: dict, output_path: Path) -> str:
     parts.append("<!DOCTYPE html>")
     parts.append('<html lang="ko"><head><meta charset="utf-8">')
     parts.append(f"<title>{e(scenario_name)} - Test Report</title>")
-    parts.append('<link rel="stylesheet" href="/static/tabulator/tabulator_simple.min.css">')
+    parts.append('<script>var _tBase = location.protocol==="file:" ? "../../app/static/tabulator/" : "/static/tabulator/";</script>')
+    parts.append('<script>document.write(\'<link rel="stylesheet" href="\'+_tBase+\'tabulator_simple.min.css">\');</script>')
     parts.append(f"<style>{_HTML_STYLE}</style>")
     parts.append("</head><body>")
     parts.append(f"<h1>{e(scenario_name)}</h1>")
@@ -475,7 +476,7 @@ def _build_html_report(data: dict, output_path: Path) -> str:
 
     # 데이터 임베드 + 라이브러리 로드 + 초기화
     parts.append(f'<script>window.__REPORT_DATA__ = {payload_json};</script>')
-    parts.append('<script src="/static/tabulator/tabulator.min.js"></script>')
+    parts.append('<script>document.write(\'<script src="\'+_tBase+\'tabulator.min.js"><\\/script>\');</script>')
     parts.append(f"<script>{_HTML_SCRIPT}</script>")
     parts.append("</body></html>")
     return "".join(parts)
@@ -723,7 +724,11 @@ async def export_result_bundle(filename: str, export_path: str = ""):
         _html_file = run_dir / "result.html"
         if _html_file.is_file():
             _htxt = _html_file.read_text(encoding="utf-8")
-            _htxt_new = _htxt.replace("/static/tabulator/", "./assets/")
+            # 프로토콜 감지 로직을 ./assets/ 고정으로 교체
+            _htxt_new = _htxt.replace(
+                'var _tBase = location.protocol==="file:" ? "../../app/static/tabulator/" : "/static/tabulator/";',
+                'var _tBase = "./assets/";',
+            )
             if _htxt_new != _htxt:
                 _html_file.write_text(_htxt_new, encoding="utf-8")
                 _patched_html = True
@@ -752,7 +757,13 @@ async def export_result_bundle(filename: str, export_path: str = ""):
             _html_file = run_dir / "result.html"
             if _html_file.is_file():
                 _htxt = _html_file.read_text(encoding="utf-8")
-                _html_file.write_text(_htxt.replace("./assets/", "/static/tabulator/"), encoding="utf-8")
+                _html_file.write_text(
+                    _htxt.replace(
+                        'var _tBase = "./assets/";',
+                        'var _tBase = location.protocol==="file:" ? "../../app/static/tabulator/" : "/static/tabulator/";',
+                    ),
+                    encoding="utf-8",
+                )
         if _tmp_assets_dir.is_dir() and _tabulator_src.is_dir():
             shutil.rmtree(str(_tmp_assets_dir), ignore_errors=True)
 
