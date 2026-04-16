@@ -448,20 +448,29 @@ class PlaybackService:
     async def execute_single_step(self, step: Step, scenario_name: str, device_map: Optional[dict[str, str]] = None) -> StepResult:
         """Execute a single step with verification (for testing individual steps).
 
+        매 호출마다 ``actual_<ms_timestamp>/`` 서브디렉토리에 캡처를 저장하여
+        이전 테스트 이미지와의 경로 충돌을 원천 차단한다 (브라우저/antd Image
+        컴포넌트의 preview 캐싱 우회 목적). cleanup은 clean-test-screenshots가
+        ``actual*`` 패턴을 일괄 삭제한다.
+
         이전 full playback이 중간에 끊겨 _run_output_dir이 남아 있으면 스크린샷이
-        results 폴더로 저장되어 프론트엔드(/screenshots/ 기준)에서 404가 난다.
-        테스트 모드는 항상 SCREENSHOTS_DIR/{scenario}/actual/ 경로를 쓰도록 상태 리셋.
+        results 폴더로 저장되어 프론트엔드(/screenshots/ 기준)에서 404가 나므로
+        상태를 명시적으로 리셋한다.
         """
         self._should_stop = False  # 이전 재생 중단 플래그 초기화
-        self._paused = False
+        self._pause_event.set()    # 이전 재생이 pause 상태로 끝난 경우 풀어줌
         self._device_map = device_map or {}
         self._current_iteration = 0  # 단일 테스트는 항상 0번째
         # 이전 run의 stale 상태 제거 — 프론트 이미지 URL 일관성 보장
         self._run_output_dir = None
         self._run_output_dir_owned = False
-        self._result_timestamp = ""
+        # 매 호출마다 고유 ms timestamp → actual_<ms> 서브디렉토리 사용
+        self._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         self._group_scenario_index = 0
-        return await self._execute_step(step, scenario_name, verify=True)
+        try:
+            return await self._execute_step(step, scenario_name, verify=True)
+        finally:
+            self._result_timestamp = ""
 
     # ------------------------------------------------------------------
     # Internal

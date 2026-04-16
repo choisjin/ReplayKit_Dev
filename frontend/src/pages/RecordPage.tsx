@@ -204,6 +204,7 @@ export default function RecordPage() {
     h264Mode, h264Size, videoRef, sendControl,
     screenType, setScreenType, refreshScreenshot,
     screenAlive, streamFps,
+    pauseScreenStream, resumeScreenStream,
   } = useDevice();
 
   const [recording, setRecording] = useState(false);
@@ -1097,12 +1098,21 @@ export default function RecordPage() {
       return;
     }
     setTestingStepIndex(stepIdx);
+    // 라이브 스크린 미러와 test-step이 동일 HKMC 에이전트의 _capture_lock을 두고 경쟁하면
+    // 백엔드가 오래된 캡처 버퍼를 반환할 수 있다. 테스트 동안 스트림을 일시정지한다.
+    pauseScreenStream();
     try {
       const { _imageVer, ...currentStep } = steps[stepIdx];
-      const res = await scenarioApi.testStep(scenarioName, stepIdx, currentStep);
+      // 현재 라이브 뷰의 device/screen_type을 override로 전달 — 스텝에 저장된 값이
+      // 사용자가 실제로 보고 있는 화면과 다를 때 발생하는 stale image 문제 회피
+      const overrides = screenshotDeviceId
+        ? { screenshotDeviceId, screenType }
+        : undefined;
+      const res = await scenarioApi.testStep(scenarioName, stepIdx, currentStep, overrides);
       const result = { ...res.data, _ts: Date.now() };
       setTestResult(result);
       setTestResultModalOpen(true);
+      resumeScreenStream();
       refreshScreenshot();
       // 백그라운드 CMD/SSH 결과 폴링: 메시지에 [BG_TASK:bg_x]가 있으면 서버에 폴링
       const bgMatch = result.message?.match?.(/\[BG_TASK:(bg_\d+)\]/);
@@ -1149,10 +1159,11 @@ export default function RecordPage() {
       }
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('record.stepTestFailed'));
+      resumeScreenStream();
     } finally {
       setTestingStepIndex(null);
     }
-  }, [scenarioName, steps, refreshScreenshot]);
+  }, [scenarioName, steps, refreshScreenshot, pauseScreenStream, resumeScreenStream, screenshotDeviceId, screenType]);
 
   const drawCaptureCanvas = useCallback((dragRect?: { x: number; y: number; w: number; h: number }) => {
     const canvas = captureCanvasRef.current;
@@ -4050,7 +4061,8 @@ export default function RecordPage() {
                   <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>{t('record.expectedImageLabel')}</div>
                   {(() => {
                     const imgSrc = `/screenshots/${testResult.expected_annotated_image || testResult.expected_image}?t=${testResult._ts || ''}`;
-                    return <Image src={imgSrc} preview={{ src: imgSrc }} style={{ width: '100%', borderRadius: 4, border: isDark ? '1px solid #333' : '1px solid #d9d9d9' }} />;
+                    // key=imgSrc: antd Image 컴포넌트가 preview src를 내부 캐싱하므로 src 변경 시 강제 리마운트
+                    return <Image key={imgSrc} src={imgSrc} preview={{ src: imgSrc }} style={{ width: '100%', borderRadius: 4, border: isDark ? '1px solid #333' : '1px solid #d9d9d9' }} />;
                   })()}
                 </Col>
               )}
@@ -4066,7 +4078,8 @@ export default function RecordPage() {
                   </div>
                   {(() => {
                     const imgSrc = `/screenshots/${testResult.actual_annotated_image || testResult.actual_image}?t=${testResult._ts || ''}`;
-                    return <Image src={imgSrc} preview={{ src: imgSrc }} style={{ width: '100%', borderRadius: 4, border: isDark ? '1px solid #333' : '1px solid #d9d9d9' }} />;
+                    // key=imgSrc: antd Image 컴포넌트가 preview src를 내부 캐싱하므로 src 변경 시 강제 리마운트
+                    return <Image key={imgSrc} src={imgSrc} preview={{ src: imgSrc }} style={{ width: '100%', borderRadius: 4, border: isDark ? '1px solid #333' : '1px solid #d9d9d9' }} />;
                   })()}
                 </Col>
               )}

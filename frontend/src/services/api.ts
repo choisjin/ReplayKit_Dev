@@ -81,8 +81,14 @@ export const scenarioApi = {
     api.post('/scenario/record/crop-from-expected', { scenario_name: scenarioName, step_index: stepIndex, crop, crop_label: cropLabel || '', replace_index: replaceIndex }),
   updateStep: (scenarioName: string, stepIndex: number, updates: Record<string, any>) =>
     api.post('/scenario/record/update-step', { scenario_name: scenarioName, step_index: stepIndex, updates }),
-  testStep: (scenarioName: string, stepIndex: number, stepData?: any) =>
-    api.post('/scenario/test-step', { scenario_name: scenarioName, step_index: stepIndex, step_data: stepData }),
+  testStep: (scenarioName: string, stepIndex: number, stepData?: any, overrides?: { screenshotDeviceId?: string; screenType?: string }) =>
+    api.post('/scenario/test-step', {
+      scenario_name: scenarioName,
+      step_index: stepIndex,
+      step_data: stepData,
+      screenshot_device_id_override: overrides?.screenshotDeviceId,
+      screen_type_override: overrides?.screenType,
+    }),
   getCmdResult: (taskId: string) => api.get(`/scenario/cmd-result/${taskId}`),
   cancelCmdTask: (taskId: string) => api.delete(`/scenario/cmd-result/${taskId}`),
   cleanTestScreenshots: (scenarioName: string) => api.post(`/scenario/clean-test-screenshots?scenario_name=${encodeURIComponent(scenarioName)}`),

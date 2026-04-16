@@ -810,26 +810,39 @@ class TestStepRequest(BaseModel):
     scenario_name: str
     step_index: int  # 0-based
     step_data: Optional[dict] = None  # current (unsaved) step data from frontend
+    # 프론트엔드 라이브 뷰가 현재 보고 있는 화면과 동일한 장면을 캡처하도록 강제하는 override.
+    # 스텝에 저장된 screenshot_device_id/screen_type이 사용자가 보고 있는 화면과 다를 때
+    # 발생하는 "stale image" 이슈를 차단한다.
+    screenshot_device_id_override: Optional[str] = None
+    screen_type_override: Optional[str] = None
 
 
 @router.post("/clean-test-screenshots")
 async def clean_test_screenshots(scenario_name: str = ""):
-    """단일 스텝 테스트 임시 스크린샷(actual/) 삭제."""
+    """단일 스텝 테스트 임시 스크린샷(actual*/) 삭제.
+
+    execute_single_step이 매 호출마다 ``actual_<ms_timestamp>/`` 서브디렉토리에
+    캡처를 저장하므로, 패턴으로 일괄 삭제한다. 레거시 ``actual/`` 디렉토리도 함께.
+    """
     import shutil
     cleaned = 0
+
+    def _wipe(scenario_dir: Path) -> int:
+        n = 0
+        if not scenario_dir.is_dir():
+            return 0
+        for entry in scenario_dir.iterdir():
+            if entry.is_dir() and (entry.name == "actual" or entry.name.startswith("actual_")):
+                shutil.rmtree(str(entry), ignore_errors=True)
+                n += 1
+        return n
+
     if scenario_name:
-        actual = SCREENSHOTS_DIR / scenario_name / "actual"
-        if actual.is_dir():
-            shutil.rmtree(str(actual), ignore_errors=True)
-            cleaned += 1
+        cleaned += _wipe(SCREENSHOTS_DIR / scenario_name)
     else:
-        # 전체 시나리오의 actual 폴더 삭제
         if SCREENSHOTS_DIR.is_dir():
             for d in SCREENSHOTS_DIR.iterdir():
-                actual = d / "actual"
-                if actual.is_dir():
-                    shutil.rmtree(str(actual), ignore_errors=True)
-                    cleaned += 1
+                cleaned += _wipe(d)
     return {"cleaned": cleaned}
 
 
@@ -870,6 +883,22 @@ async def test_step(req: TestStepRequest):
         step = scenario.steps[req.step_index]
         scenario_name = scenario.name
         device_map = dict(scenario.device_map) if scenario.device_map else {}
+
+    # 프론트엔드가 라이브 뷰 기준으로 보낸 override를 스텝 복사본에 적용.
+    # 이후 execute_single_step은 이 override된 값으로 스크린샷 디바이스를 해결한다.
+    if req.screenshot_device_id_override:
+        step = step.model_copy(update={
+            "screenshot_device_id": req.screenshot_device_id_override,
+            "screen_type": req.screen_type_override or step.screen_type,
+        })
+    elif req.screen_type_override:
+        step = step.model_copy(update={"screen_type": req.screen_type_override})
+
+    logger.info(
+        "test-step: scenario=%s step_id=%s type=%s screenshot_dev=%s screen_type=%s",
+        scenario_name, step.id, step.type,
+        step.screenshot_device_id, step.screen_type,
+    )
 
     result = await playback_svc.execute_single_step(step, scenario_name, device_map=device_map)
     return result.model_dump()
