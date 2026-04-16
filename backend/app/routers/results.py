@@ -182,8 +182,7 @@ h1 { font-size: 20px; font-weight: 700; margin: 0 0 6px; color: #1a1a2e; letter-
   border-color: #60a5fa; box-shadow: 0 0 0 2px rgba(96,165,250,0.2); }
 .tabulator .tabulator-tableholder { background: #fff; }
 .tabulator-row { border-bottom: 1px solid #f0f0f0; }
-.tabulator-row .tabulator-cell { padding: 4px 6px; border-right: 1px solid #f3f4f6;
-  vertical-align: middle; display: flex; align-items: center; min-height: 28px; }
+.tabulator-row .tabulator-cell { padding: 4px 6px; border-right: 1px solid #f3f4f6; }
 .tabulator-row.tabulator-row-even { background: #fafbfc; }
 .tabulator-row:hover { background: #eff6ff !important; }
 .tabulator-row.tabulator-row-even:hover { background: #eff6ff !important; }
@@ -286,28 +285,29 @@ _HTML_SCRIPT = r"""
     var delVals  = uniqueVals(data, 'delay');
     var durVals  = uniqueVals(data, 'duration');
 
+    var va = "middle";
     return [
-      { title:"Time Stamp", field:"timestamp", width:150,
+      { title:"Time Stamp", field:"timestamp", width:150, vertAlign:va,
         headerFilter:listEditor('timestamp','전체'), headerFilterParams:{values:tsVals}, headerFilterFunc:"=" },
-      { title:"Cycle", field:"cycle", width:70, hozAlign:"center",
+      { title:"Cycle", field:"cycle", width:70, hozAlign:"center", vertAlign:va,
         headerFilter:listEditor('cycle','전체'), headerFilterParams:{values:cyVals}, headerFilterFunc:"=" },
-      { title:"Step", field:"step_id", width:70, hozAlign:"center",
+      { title:"Step", field:"step_id", width:70, hozAlign:"center", vertAlign:va,
         headerFilter:listEditor('step_id','전체'), headerFilterParams:{values:stepVals}, headerFilterFunc:"=" },
-      { title:"Device", field:"device", width:120, hozAlign:"center",
+      { title:"Device", field:"device", width:120, hozAlign:"center", vertAlign:va,
         headerFilter:listEditor('device','전체'), headerFilterParams:{values:devVals}, headerFilterFunc:"=" },
-      { title:"Command", field:"command", widthGrow:2,
+      { title:"Command", field:"command", widthGrow:2, vertAlign:va,
         headerFilter:listEditor('command','전체'), headerFilterParams:{values:uniqueVals(data,'command')}, headerFilterFunc:"=" },
-      { title:"Remark", field:"description", widthGrow:2,
+      { title:"Remark", field:"description", widthGrow:2, vertAlign:va,
         headerFilter:listEditor('description','전체'), headerFilterParams:{values:uniqueVals(data,'description')}, headerFilterFunc:"=" },
-      { title:"Status", field:"status", width:90, hozAlign:"center", formatter:statusFmt,
+      { title:"Status", field:"status", width:90, hozAlign:"center", vertAlign:va, formatter:statusFmt,
         headerFilter:listEditor('status','전체'), headerFilterParams:{values:["pass","fail","warning","error"]}, headerFilterFunc:"=" },
-      { title:"Delay", field:"delay", width:80, hozAlign:"center",
+      { title:"Delay", field:"delay", width:80, hozAlign:"center", vertAlign:va,
         headerFilter:listEditor('delay','전체'), headerFilterParams:{values:delVals}, headerFilterFunc:"=" },
-      { title:"Duration", field:"duration", width:90, hozAlign:"center",
+      { title:"Duration", field:"duration", width:90, hozAlign:"center", vertAlign:va,
         headerFilter:listEditor('duration','전체'), headerFilterParams:{values:durVals}, headerFilterFunc:"=" },
-      { title:"Expected", field:"expected_src", width:200, hozAlign:"center",
+      { title:"Expected", field:"expected_src", width:200, hozAlign:"center", vertAlign:va,
         formatter:imgFmt, headerSort:false },
-      { title:"Actual", field:"actual_src", width:200, hozAlign:"center",
+      { title:"Actual", field:"actual_src", width:200, hozAlign:"center", vertAlign:va,
         formatter:imgFmt, headerSort:false },
     ];
   }
@@ -337,6 +337,8 @@ _HTML_SCRIPT = r"""
       renderVertical: "basic",
       placeholder: "표시할 결과가 없습니다",
       headerSortClickElement: "icon",
+      rowHeight: false,
+      cellVertAlign: "middle",
     });
     window.__table = table;
 
