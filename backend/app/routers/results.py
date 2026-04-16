@@ -144,6 +144,15 @@ h1 { font-size: 18px; margin: 0 0 8px; }
 .meta b.status-pass { color: #2f7d32; }
 .meta b.status-fail { color: #c62828; }
 .meta b.status-error { color: #d84315; }
+.controls { position: sticky; top: 0; z-index: 10; background: #fff; padding: 8px 0 10px; border-bottom: 1px solid #e0e0e0; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.controls label { font-size: 12px; color: #555; }
+.controls select, .controls input[type="text"] { font-size: 12px; padding: 3px 6px; border: 1px solid #bbb; border-radius: 3px; }
+.controls input[type="text"] { min-width: 180px; }
+.controls button { font-size: 12px; padding: 4px 10px; border: 1px solid #4472C4; background: #4472C4; color: #fff; border-radius: 3px; cursor: pointer; }
+.controls button:hover { background: #365899; }
+.controls button.secondary { background: #fff; color: #4472C4; }
+.controls button.secondary:hover { background: #f0f4fb; }
+.controls .count { margin-left: auto; color: #666; font-size: 12px; }
 table { border-collapse: collapse; width: 100%; table-layout: fixed; }
 th, td { border: 1px solid #bbb; padding: 4px 6px; vertical-align: middle; text-align: center; word-break: break-word; font-size: 12px; }
 th { background: #4472C4; color: #fff; font-weight: 600; }
@@ -160,6 +169,73 @@ img { max-width: 180px; max-height: 140px; display: block; margin: 0 auto; }
 .col-delay, .col-dur { width: 70px; }
 .col-dev { width: 110px; }
 .col-img { width: 190px; }
+@media print {
+  body { margin: 8px; }
+  .controls { display: none !important; }
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; }
+  img { max-width: 140px; max-height: 110px; }
+  a[href]:after { content: ""; }
+}
+"""
+
+# 필터/PDF 버튼을 위한 클라이언트 JS — 외부 의존성 없음, 순수 바닐라.
+_HTML_SCRIPT = """
+(function(){
+  var rows = null;
+  function init(){
+    rows = Array.prototype.slice.call(document.querySelectorAll('tbody tr.step-row'));
+    var total = rows.length;
+    var totalEl = document.getElementById('filter-total');
+    if (totalEl) totalEl.textContent = total;
+    ['filter-status','filter-cycle','filter-text'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (!el) return;
+      var ev = el.tagName === 'INPUT' ? 'input' : 'change';
+      el.addEventListener(ev, applyFilters);
+    });
+    var resetBtn = document.getElementById('filter-reset');
+    if (resetBtn) resetBtn.addEventListener('click', function(){
+      document.getElementById('filter-status').value = 'all';
+      var cy = document.getElementById('filter-cycle');
+      if (cy) cy.value = 'all';
+      document.getElementById('filter-text').value = '';
+      applyFilters();
+    });
+    var pdfBtn = document.getElementById('pdf-btn');
+    if (pdfBtn) pdfBtn.addEventListener('click', function(){ window.print(); });
+    applyFilters();
+  }
+  function applyFilters(){
+    if (!rows) return;
+    var sEl = document.getElementById('filter-status');
+    var cEl = document.getElementById('filter-cycle');
+    var tEl = document.getElementById('filter-text');
+    var sv = sEl ? sEl.value : 'all';
+    var cv = cEl ? cEl.value : 'all';
+    var tv = tEl && tEl.value ? tEl.value.toLowerCase() : '';
+    var visible = 0;
+    for (var i = 0; i < rows.length; i++){
+      var r = rows[i];
+      var st = r.getAttribute('data-status') || '';
+      var cy = r.getAttribute('data-cycle') || '';
+      var tx = (r.getAttribute('data-text') || '').toLowerCase();
+      var show = true;
+      if (sv !== 'all' && st !== sv) show = false;
+      if (show && cv !== 'all' && cy !== cv) show = false;
+      if (show && tv && tx.indexOf(tv) === -1) show = false;
+      r.style.display = show ? '' : 'none';
+      if (show) visible++;
+    }
+    var cnt = document.getElementById('filter-visible');
+    if (cnt) cnt.textContent = visible;
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
 """
 
 
@@ -213,6 +289,16 @@ def _build_html_report(data: dict, output_path: Path) -> str:
         "기대 이미지", "비교 이미지",
     ]
 
+    # 필터 UI 구성에 필요한 cycle 목록 미리 수집
+    step_results = data.get("step_results", [])
+    cycle_set: set[int] = set()
+    for sr in step_results:
+        try:
+            cycle_set.add(int(sr.get("repeat_index", 1)))
+        except (TypeError, ValueError):
+            pass
+    cycles_sorted = sorted(cycle_set)
+
     parts: list[str] = []
     parts.append("<!DOCTYPE html>")
     parts.append('<html lang="ko"><head><meta charset="utf-8">')
@@ -234,6 +320,27 @@ def _build_html_report(data: dict, output_path: Path) -> str:
     parts.append(f"<span>종료: {e(_fmt_ts(finished_at))}</span>")
     parts.append("</div>")
 
+    # --- 필터 / PDF 저장 컨트롤 (인쇄 시 숨김) ---
+    parts.append('<div class="controls">')
+    parts.append('<label>상태 <select id="filter-status">')
+    parts.append('<option value="all">전체</option>')
+    parts.append('<option value="pass">PASS</option>')
+    parts.append('<option value="fail">FAIL</option>')
+    parts.append('<option value="warning">WARNING</option>')
+    parts.append('<option value="error">ERROR</option>')
+    parts.append("</select></label>")
+    if len(cycles_sorted) > 1:
+        parts.append('<label>Cycle <select id="filter-cycle">')
+        parts.append('<option value="all">전체</option>')
+        for cy in cycles_sorted:
+            parts.append(f'<option value="{cy}">#{cy}</option>')
+        parts.append("</select></label>")
+    parts.append('<label>검색 <input id="filter-text" type="text" placeholder="command / remark / device"></label>')
+    parts.append('<button id="filter-reset" class="secondary" type="button">필터 초기화</button>')
+    parts.append('<button id="pdf-btn" type="button">📄 PDF로 저장</button>')
+    parts.append('<span class="count">표시 <b id="filter-visible">0</b> / <b id="filter-total">0</b></span>')
+    parts.append("</div>")
+
     parts.append("<table><thead><tr>")
     for h, cls in headers:
         parts.append(f'<th class="{cls}">{e(h)}</th>')
@@ -242,11 +349,12 @@ def _build_html_report(data: dict, output_path: Path) -> str:
         parts.append(f"<td>{e(d)}</td>")
     parts.append("</tr></thead><tbody>")
 
-    for sr in data.get("step_results", []):
+    for sr in step_results:
         st = sr.get("status", "")
         ts_str = _fmt_ts(sr.get("timestamp", started_at))
         command = sr.get("command", sr.get("message", ""))
         description = sr.get("description", "")
+        device_id = sr.get("device_id", "")
         delay_ms = sr.get("delay_ms", 0)
         duration_ms = sr.get("execution_time_ms", 0)
         dur_str = f"{duration_ms}ms" if duration_ms < 1000 else f"{duration_ms / 1000:.1f}s"
@@ -256,12 +364,16 @@ def _build_html_report(data: dict, output_path: Path) -> str:
             sr.get("actual_annotated_image") or sr.get("actual_image"), html_dir
         )
         status_cls = f"status-{st}" if st in ("pass", "fail", "warning", "error") else ""
-        parts.append("<tr>")
+        # 행 단위 data-* 속성 — 필터 JS가 참조
+        search_text = f"{command} {description} {device_id}"
+        parts.append(
+            f'<tr class="step-row" data-status="{e(st)}" data-cycle="{e(sr.get("repeat_index", 1))}" data-text="{e(search_text)}">'
+        )
         parts.append(f"<td>{e(ts_str)}</td>")
         parts.append(f"<td>{e(total_repeat)}</td>")
         parts.append(f"<td>{e(sr.get('repeat_index', 1))}</td>")
         parts.append(f"<td>{e(sr.get('step_id', ''))}</td>")
-        parts.append(f"<td>{e(sr.get('device_id', ''))}</td>")
+        parts.append(f"<td>{e(device_id)}</td>")
         parts.append(f'<td class="text">{e(command)}</td>')
         parts.append(f'<td class="text">{e(description)}</td>')
         parts.append(f'<td class="{status_cls}">{e(st.upper())}</td>')
@@ -277,7 +389,9 @@ def _build_html_report(data: dict, output_path: Path) -> str:
             parts.append("<td>-</td>")
         parts.append("</tr>")
 
-    parts.append("</tbody></table></body></html>")
+    parts.append("</tbody></table>")
+    parts.append(f"<script>{_HTML_SCRIPT}</script>")
+    parts.append("</body></html>")
     return "".join(parts)
 
 
