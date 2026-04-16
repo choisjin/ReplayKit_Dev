@@ -803,11 +803,15 @@ export default function RecordPage() {
   // 참조 스트레스 스크립트(CCIC) RAND_HK/SK/DRAG 패턴을 버튼화
   // ----------------------------------------------------------------
   const _randBounds = useCallback((): { w: number; h: number } => {
-    // canvas natural → deviceRes 순으로 폴백 (iSAP은 canvas natural이 touch space)
-    const el = canvasRef.current;
-    if (el && el.width > 0 && el.height > 0) return { w: el.width, h: el.height };
+    // iSAP은 agent 보고 해상도와 JPEG 크기가 다를 수 있어 canvas natural 사용.
+    // HKMC/ADB는 deviceRes(agent 보고 해상도)를 신뢰 — canvas는 viewCrop 시
+    // 잘린 영역 크기만 반영하므로 좌표 범위가 틀어진다.
+    if (screenDevice?.type === 'isap_agent') {
+      const el = canvasRef.current;
+      if (el && el.width > 0 && el.height > 0) return { w: el.width, h: el.height };
+    }
     return { w: deviceRes.width || 1920, h: deviceRes.height || 720 };
-  }, [deviceRes]);
+  }, [deviceRes, screenDevice]);
 
   const _pickRandInRegion = useCallback((region: RandRegion): { x: number; y: number } => {
     const { w, h } = _randBounds();
@@ -846,17 +850,23 @@ export default function RecordPage() {
   }, [hkmcKeys, randHkKeysConfig, screenType, executeAction]);
 
   const randSK = useCallback(() => {
-    const { x, y } = _pickRandInRegion(randSkRegion);
+    let { x, y } = _pickRandInRegion(randSkRegion);
+    // 일체형: 클러스터(0-1920) + AVN(1920-3840) 합산 좌표계 → AVN 영역 오프셋
+    if (isScreenHkmc && hkmcDisplayMode === 'integrated') x += 1920;
     const label = `RAND SK: (${x},${y})`;
     executeAction('hkmc_touch', { x, y, screen_type: screenType }, label);
-  }, [_pickRandInRegion, randSkRegion, screenType, executeAction]);
+  }, [_pickRandInRegion, randSkRegion, screenType, executeAction, isScreenHkmc, hkmcDisplayMode]);
 
   const randDrag = useCallback(() => {
     const p1 = _pickRandInRegion(randDragRegion);
     const p2 = _pickRandInRegion(randDragRegion);
+    if (isScreenHkmc && hkmcDisplayMode === 'integrated') {
+      p1.x += 1920;
+      p2.x += 1920;
+    }
     const label = `RAND DRAG: (${p1.x},${p1.y})→(${p2.x},${p2.y})`;
     executeAction('hkmc_swipe', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, duration_ms: 300, screen_type: screenType }, label);
-  }, [_pickRandInRegion, randDragRegion, screenType, executeAction]);
+  }, [_pickRandInRegion, randDragRegion, screenType, executeAction, isScreenHkmc, hkmcDisplayMode]);
 
   const allRand = useCallback(() => {
     // 참조 스크립트 가중치: HK 20% / SK 70% / DRAG 10%
