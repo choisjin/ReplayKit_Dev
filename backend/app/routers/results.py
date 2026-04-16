@@ -144,92 +144,168 @@ h1 { font-size: 18px; margin: 0 0 8px; }
 .meta b.status-pass { color: #2f7d32; }
 .meta b.status-fail { color: #c62828; }
 .meta b.status-error { color: #d84315; }
-.controls { position: sticky; top: 0; z-index: 10; background: #fff; padding: 8px 0 10px; border-bottom: 1px solid #e0e0e0; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.controls { position: sticky; top: 0; z-index: 10; background: #fff; padding: 8px 0 10px;
+  border-bottom: 1px solid #e0e0e0; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .controls label { font-size: 12px; color: #555; }
-.controls select, .controls input[type="text"] { font-size: 12px; padding: 3px 6px; border: 1px solid #bbb; border-radius: 3px; }
-.controls input[type="text"] { min-width: 180px; }
-.controls button { font-size: 12px; padding: 4px 10px; border: 1px solid #4472C4; background: #4472C4; color: #fff; border-radius: 3px; cursor: pointer; }
+.controls input[type="text"] { font-size: 12px; padding: 4px 8px; border: 1px solid #bbb;
+  border-radius: 3px; min-width: 240px; }
+.controls button { font-size: 12px; padding: 4px 10px; border: 1px solid #4472C4; background: #4472C4;
+  color: #fff; border-radius: 3px; cursor: pointer; }
 .controls button:hover { background: #365899; }
 .controls button.secondary { background: #fff; color: #4472C4; }
 .controls button.secondary:hover { background: #f0f4fb; }
 .controls .count { margin-left: auto; color: #666; font-size: 12px; }
-table { border-collapse: collapse; width: 100%; table-layout: fixed; }
-th, td { border: 1px solid #bbb; padding: 4px 6px; vertical-align: middle; text-align: center; word-break: break-word; font-size: 12px; }
-th { background: #4472C4; color: #fff; font-weight: 600; }
-tr.desc td { background: #D9E2F3; color: #44546A; font-size: 11px; }
-td.text { text-align: left; white-space: pre-wrap; }
-td.status-pass { background: #C6EFCE; font-weight: 600; }
-td.status-fail { background: #FFC7CE; font-weight: 600; }
-td.status-warning { background: #FFEB9C; font-weight: 600; }
-td.status-error { background: #F4B084; font-weight: 600; }
-img { max-width: 180px; max-height: 140px; display: block; margin: 0 auto; }
-.col-ts { width: 140px; }
-.col-num { width: 56px; }
-.col-status { width: 72px; }
-.col-delay, .col-dur { width: 70px; }
-.col-dev { width: 110px; }
-.col-img { width: 190px; }
+/* Tabulator 커스텀 — simple 테마 위에 프로젝트 색상만 덮어씀 */
+.tabulator { border: 1px solid #bbb; font-size: 12px; }
+.tabulator .tabulator-header { background: #4472C4; color: #fff; font-weight: 600; border-bottom: 1px solid #365899; }
+.tabulator .tabulator-header .tabulator-col { background: #4472C4; color: #fff; border-right: 1px solid #365899; }
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover { background: #365899; }
+.tabulator .tabulator-header .tabulator-col .tabulator-col-title { color: #fff; padding: 6px 4px; }
+.tabulator .tabulator-header .tabulator-header-filter input,
+.tabulator .tabulator-header .tabulator-header-filter select {
+  font-size: 11px; padding: 3px 4px; border: 1px solid #bbb; border-radius: 2px;
+  background: #fff; color: #222; box-sizing: border-box; width: 100%;
+}
+.tabulator-row .tabulator-cell { padding: 4px 6px; border-right: 1px solid #ddd; vertical-align: middle; }
+.tabulator-row.tabulator-row-even { background: #f7f9fc; }
+.tabulator-row:hover { background: #fffbe6; }
+.status-cell { text-align: center; font-weight: 600; border-radius: 2px; padding: 2px 6px; }
+.status-cell.pass { background: #C6EFCE; color: #2f7d32; }
+.status-cell.fail { background: #FFC7CE; color: #c62828; }
+.status-cell.warning { background: #FFEB9C; color: #8f6a00; }
+.status-cell.error { background: #F4B084; color: #9a2b00; }
+.img-thumb { max-width: 170px; max-height: 130px; display: block; margin: 0 auto; cursor: pointer; }
+/* 전체화면 이미지 프리뷰 */
+.preview-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: none;
+  align-items: center; justify-content: center; z-index: 9999; cursor: zoom-out; }
+.preview-overlay.open { display: flex; }
+.preview-overlay img { max-width: 95vw; max-height: 95vh; box-shadow: 0 0 40px rgba(0,0,0,0.5); }
 @media print {
   body { margin: 8px; }
   .controls { display: none !important; }
-  thead { display: table-header-group; }
-  tr { page-break-inside: avoid; }
-  img { max-width: 140px; max-height: 110px; }
-  a[href]:after { content: ""; }
+  .tabulator .tabulator-header .tabulator-header-filter { display: none !important; }
+  .tabulator-row { page-break-inside: avoid; }
+  .img-thumb { max-width: 140px; max-height: 110px; }
 }
 """
 
-# 필터/PDF 버튼을 위한 클라이언트 JS — 외부 의존성 없음, 순수 바닐라.
-_HTML_SCRIPT = """
+# Tabulator 기반 리포트 초기화 스크립트 — 데이터는 window.__REPORT_DATA__ 전역에서 읽는다.
+_HTML_SCRIPT = r"""
 (function(){
-  var rows = null;
+  function statusFormatter(cell){
+    var v = (cell.getValue() || '').toString();
+    var lv = v.toLowerCase();
+    return '<div class="status-cell ' + lv + '">' + v.toUpperCase() + '</div>';
+  }
+  function imageFormatter(cell){
+    var v = cell.getValue();
+    if (!v) return '<span style="color:#999">-</span>';
+    return '<img class="img-thumb" loading="lazy" src="' + v + '" alt="">';
+  }
+  function onImgClick(e){
+    if (e.target && e.target.classList && e.target.classList.contains('img-thumb')) {
+      var ov = document.getElementById('preview-overlay');
+      var pi = document.getElementById('preview-img');
+      pi.src = e.target.src;
+      ov.classList.add('open');
+    }
+  }
+  function closePreview(){
+    var ov = document.getElementById('preview-overlay');
+    ov.classList.remove('open');
+    document.getElementById('preview-img').src = '';
+  }
+  function buildColumns(meta){
+    var cols = [
+      { title: "Time Stamp", field: "timestamp", width: 150, headerFilter: "input" },
+      { title: "Cycle",      field: "cycle",     width: 70,  hozAlign: "center",
+        headerFilter: "list", headerFilterParams: { values: true, clearable: true } },
+      { title: "Step",       field: "step_id",   width: 70,  hozAlign: "center",
+        headerFilter: "list", headerFilterParams: { values: true, clearable: true } },
+      { title: "Device",     field: "device",    width: 120, hozAlign: "center",
+        headerFilter: "list", headerFilterParams: { values: true, clearable: true } },
+      { title: "Command",    field: "command",   widthGrow: 2, headerFilter: "input" },
+      { title: "Remark",     field: "description", widthGrow: 2, headerFilter: "input" },
+      { title: "Status",     field: "status",    width: 90, hozAlign: "center",
+        headerFilter: "list", headerFilterParams: { values: ["pass","fail","warning","error"], clearable: true },
+        formatter: statusFormatter },
+      { title: "Delay",      field: "delay",     width: 80, hozAlign: "center", headerFilter: "input" },
+      { title: "Duration",   field: "duration",  width: 90, hozAlign: "center", headerFilter: "input" },
+      { title: "Expected",   field: "expected_src", width: 200, hozAlign: "center",
+        formatter: imageFormatter, headerSort: false, headerFilter: false },
+      { title: "Actual",     field: "actual_src", width: 200, hozAlign: "center",
+        formatter: imageFormatter, headerSort: false, headerFilter: false },
+    ];
+    return cols;
+  }
+
   function init(){
-    rows = Array.prototype.slice.call(document.querySelectorAll('tbody tr.step-row'));
-    var total = rows.length;
+    var data = (window.__REPORT_DATA__ && window.__REPORT_DATA__.rows) || [];
+    var meta = window.__REPORT_DATA__ || {};
     var totalEl = document.getElementById('filter-total');
-    if (totalEl) totalEl.textContent = total;
-    ['filter-status','filter-cycle','filter-text'].forEach(function(id){
-      var el = document.getElementById(id);
-      if (!el) return;
-      var ev = el.tagName === 'INPUT' ? 'input' : 'change';
-      el.addEventListener(ev, applyFilters);
+    if (totalEl) totalEl.textContent = data.length;
+
+    var table = new Tabulator("#results-table", {
+      data: data,
+      columns: buildColumns(meta),
+      layout: "fitDataStretch",
+      height: "calc(100vh - 160px)",
+      rowHeight: 140,
+      placeholder: "표시할 결과가 없습니다",
     });
+    window.__table = table;
+
+    table.on("dataFiltered", function(filters, rows){
+      var el = document.getElementById('filter-visible');
+      if (el) el.textContent = rows.length;
+    });
+
+    // 전역 검색 — 모든 텍스트 필드 OR substring 매칭
+    var gEl = document.getElementById('filter-text');
+    if (gEl) {
+      gEl.addEventListener('input', function(){
+        var v = (gEl.value || '').trim().toLowerCase();
+        if (!v) {
+          table.removeFilter(globalFilter);
+          return;
+        }
+        table.removeFilter(globalFilter);
+        table.addFilter(globalFilter, { q: v });
+      });
+    }
+
     var resetBtn = document.getElementById('filter-reset');
     if (resetBtn) resetBtn.addEventListener('click', function(){
-      document.getElementById('filter-status').value = 'all';
-      var cy = document.getElementById('filter-cycle');
-      if (cy) cy.value = 'all';
-      document.getElementById('filter-text').value = '';
-      applyFilters();
+      table.clearHeaderFilter();
+      if (gEl) gEl.value = '';
+      table.removeFilter(globalFilter);
     });
+
     var pdfBtn = document.getElementById('pdf-btn');
-    if (pdfBtn) pdfBtn.addEventListener('click', function(){ window.print(); });
-    applyFilters();
+    if (pdfBtn) pdfBtn.addEventListener('click', function(){
+      table.print(false, true);
+    });
+
+    // 이미지 클릭 → 전체화면 프리뷰
+    document.getElementById('results-table').addEventListener('click', onImgClick);
+    document.getElementById('preview-overlay').addEventListener('click', closePreview);
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape') closePreview();
+    });
   }
-  function applyFilters(){
-    if (!rows) return;
-    var sEl = document.getElementById('filter-status');
-    var cEl = document.getElementById('filter-cycle');
-    var tEl = document.getElementById('filter-text');
-    var sv = sEl ? sEl.value : 'all';
-    var cv = cEl ? cEl.value : 'all';
-    var tv = tEl && tEl.value ? tEl.value.toLowerCase() : '';
-    var visible = 0;
-    for (var i = 0; i < rows.length; i++){
-      var r = rows[i];
-      var st = r.getAttribute('data-status') || '';
-      var cy = r.getAttribute('data-cycle') || '';
-      var tx = (r.getAttribute('data-text') || '').toLowerCase();
-      var show = true;
-      if (sv !== 'all' && st !== sv) show = false;
-      if (show && cv !== 'all' && cy !== cv) show = false;
-      if (show && tv && tx.indexOf(tv) === -1) show = false;
-      r.style.display = show ? '' : 'none';
-      if (show) visible++;
+
+  // 전역 검색용 커스텀 필터 — 텍스트 필드 전반을 OR 매칭
+  function globalFilter(row, params){
+    var q = params.q;
+    if (!q) return true;
+    var fields = ["timestamp","cycle","step_id","device","command","description","status","delay","duration"];
+    for (var i = 0; i < fields.length; i++) {
+      var v = row[fields[i]];
+      if (v != null && String(v).toLowerCase().indexOf(q) !== -1) return true;
     }
-    var cnt = document.getElementById('filter-visible');
-    if (cnt) cnt.textContent = visible;
+    return false;
   }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
@@ -240,10 +316,12 @@ _HTML_SCRIPT = """
 
 
 def _build_html_report(data: dict, output_path: Path) -> str:
-    """경량 HTML 리포트 문자열 생성. 이미지 태그는 output_path 기준 상대 경로 사용.
+    """Tabulator 기반 경량 HTML 리포트.
 
-    엑셀과 달리 이미지를 디코딩/재인코딩하지 않고 <img src>로 참조만 하므로
-    장시간 재생 시에도 메모리/CPU 비용이 거의 무시할 수 있다.
+    데이터는 window.__REPORT_DATA__에 JSON으로 임베드되고,
+    Tabulator가 열별 필터/정렬/검색/이미지 썸네일을 모두 렌더링한다.
+    라이브러리 파일(tabulator.min.js/css)은 output_path와 같은 디렉토리의
+    'assets/' 하위에 복사돼 있어야 한다 (_save_result에서 처리).
     """
     html_dir = output_path.parent
 
@@ -269,40 +347,45 @@ def _build_html_report(data: dict, output_path: Path) -> str:
         except Exception:
             return iso or ""
 
-    headers = [
-        ("Time Stamp", "col-ts"),
-        ("TOTAL", "col-num"),
-        ("CYCLE", "col-num"),
-        ("STEP", "col-num"),
-        ("Device", "col-dev"),
-        ("Command", ""),
-        ("Remark", ""),
-        ("Status", "col-status"),
-        ("DELAY", "col-delay"),
-        ("DURATION", "col-dur"),
-        ("Expected", "col-img"),
-        ("Actual", "col-img"),
-    ]
-    descs = [
-        "실행된 날짜/시간", "총 repeat", "현재 cycle", "스탭 순서", "장치",
-        "action", "설명", "pass/fail/error", "설정한 딜레이", "실제 걸린 시간",
-        "기대 이미지", "비교 이미지",
-    ]
+    # Tabulator에 넘길 행 데이터 구성
+    rows_json: list[dict] = []
+    for sr in data.get("step_results", []):
+        duration_ms = sr.get("execution_time_ms", 0) or 0
+        delay_ms = sr.get("delay_ms", 0) or 0
+        dur_str = f"{duration_ms}ms" if duration_ms < 1000 else f"{duration_ms / 1000:.1f}s"
+        delay_str = f"{delay_ms}ms" if delay_ms else "-"
+        exp_src = _html_image_src(sr.get("expected_image"), html_dir)
+        act_src = _html_image_src(
+            sr.get("actual_annotated_image") or sr.get("actual_image"), html_dir
+        )
+        rows_json.append({
+            "timestamp": _fmt_ts(sr.get("timestamp", started_at)),
+            "cycle": sr.get("repeat_index", 1),
+            "step_id": sr.get("step_id", ""),
+            "device": sr.get("device_id", ""),
+            "command": sr.get("command", sr.get("message", "")),
+            "description": sr.get("description", ""),
+            "status": sr.get("status", ""),
+            "delay": delay_str,
+            "duration": dur_str,
+            "expected_src": exp_src or "",
+            "actual_src": act_src or "",
+        })
 
-    # 필터 UI 구성에 필요한 cycle 목록 미리 수집
-    step_results = data.get("step_results", [])
-    cycle_set: set[int] = set()
-    for sr in step_results:
-        try:
-            cycle_set.add(int(sr.get("repeat_index", 1)))
-        except (TypeError, ValueError):
-            pass
-    cycles_sorted = sorted(cycle_set)
+    report_payload = {
+        "scenario_name": scenario_name,
+        "status": status,
+        "total_repeat": total_repeat,
+        "rows": rows_json,
+    }
+    # </script> 이스케이프 — 임베드 JSON 안에 script 종료 태그가 포함되면 파싱이 깨진다
+    payload_json = json.dumps(report_payload, ensure_ascii=False).replace("</", "<\\/")
 
     parts: list[str] = []
     parts.append("<!DOCTYPE html>")
     parts.append('<html lang="ko"><head><meta charset="utf-8">')
     parts.append(f"<title>{e(scenario_name)} - Test Report</title>")
+    parts.append('<link rel="stylesheet" href="./assets/tabulator_simple.min.css">')
     parts.append(f"<style>{_HTML_STYLE}</style>")
     parts.append("</head><body>")
     parts.append(f"<h1>{e(scenario_name)}</h1>")
@@ -320,76 +403,23 @@ def _build_html_report(data: dict, output_path: Path) -> str:
     parts.append(f"<span>종료: {e(_fmt_ts(finished_at))}</span>")
     parts.append("</div>")
 
-    # --- 필터 / PDF 저장 컨트롤 (인쇄 시 숨김) ---
+    # 상단 컨트롤 — 전역 검색, 필터 초기화, PDF 저장
     parts.append('<div class="controls">')
-    parts.append('<label>상태 <select id="filter-status">')
-    parts.append('<option value="all">전체</option>')
-    parts.append('<option value="pass">PASS</option>')
-    parts.append('<option value="fail">FAIL</option>')
-    parts.append('<option value="warning">WARNING</option>')
-    parts.append('<option value="error">ERROR</option>')
-    parts.append("</select></label>")
-    if len(cycles_sorted) > 1:
-        parts.append('<label>Cycle <select id="filter-cycle">')
-        parts.append('<option value="all">전체</option>')
-        for cy in cycles_sorted:
-            parts.append(f'<option value="{cy}">#{cy}</option>')
-        parts.append("</select></label>")
-    parts.append('<label>검색 <input id="filter-text" type="text" placeholder="command / remark / device"></label>')
+    parts.append('<label>전체 검색 <input id="filter-text" type="text" placeholder="모든 열 substring"></label>')
     parts.append('<button id="filter-reset" class="secondary" type="button">필터 초기화</button>')
     parts.append('<button id="pdf-btn" type="button">📄 PDF로 저장</button>')
     parts.append('<span class="count">표시 <b id="filter-visible">0</b> / <b id="filter-total">0</b></span>')
     parts.append("</div>")
 
-    parts.append("<table><thead><tr>")
-    for h, cls in headers:
-        parts.append(f'<th class="{cls}">{e(h)}</th>')
-    parts.append("</tr><tr class='desc'>")
-    for d in descs:
-        parts.append(f"<td>{e(d)}</td>")
-    parts.append("</tr></thead><tbody>")
+    # Tabulator 렌더 타겟
+    parts.append('<div id="results-table"></div>')
 
-    for sr in step_results:
-        st = sr.get("status", "")
-        ts_str = _fmt_ts(sr.get("timestamp", started_at))
-        command = sr.get("command", sr.get("message", ""))
-        description = sr.get("description", "")
-        device_id = sr.get("device_id", "")
-        delay_ms = sr.get("delay_ms", 0)
-        duration_ms = sr.get("execution_time_ms", 0)
-        dur_str = f"{duration_ms}ms" if duration_ms < 1000 else f"{duration_ms / 1000:.1f}s"
-        delay_str = f"{delay_ms}ms" if delay_ms else "-"
-        exp_src = _html_image_src(sr.get("expected_image"), html_dir)
-        act_src = _html_image_src(
-            sr.get("actual_annotated_image") or sr.get("actual_image"), html_dir
-        )
-        status_cls = f"status-{st}" if st in ("pass", "fail", "warning", "error") else ""
-        # 행 단위 data-* 속성 — 필터 JS가 참조
-        search_text = f"{command} {description} {device_id}"
-        parts.append(
-            f'<tr class="step-row" data-status="{e(st)}" data-cycle="{e(sr.get("repeat_index", 1))}" data-text="{e(search_text)}">'
-        )
-        parts.append(f"<td>{e(ts_str)}</td>")
-        parts.append(f"<td>{e(total_repeat)}</td>")
-        parts.append(f"<td>{e(sr.get('repeat_index', 1))}</td>")
-        parts.append(f"<td>{e(sr.get('step_id', ''))}</td>")
-        parts.append(f"<td>{e(device_id)}</td>")
-        parts.append(f'<td class="text">{e(command)}</td>')
-        parts.append(f'<td class="text">{e(description)}</td>')
-        parts.append(f'<td class="{status_cls}">{e(st.upper())}</td>')
-        parts.append(f"<td>{e(delay_str)}</td>")
-        parts.append(f"<td>{e(dur_str)}</td>")
-        if exp_src:
-            parts.append(f'<td><img loading="lazy" src="{e(exp_src)}" alt=""></td>')
-        else:
-            parts.append("<td>-</td>")
-        if act_src:
-            parts.append(f'<td><img loading="lazy" src="{e(act_src)}" alt=""></td>')
-        else:
-            parts.append("<td>-</td>")
-        parts.append("</tr>")
+    # 이미지 프리뷰 오버레이
+    parts.append('<div id="preview-overlay" class="preview-overlay"><img id="preview-img" src="" alt=""></div>')
 
-    parts.append("</tbody></table>")
+    # 데이터 임베드 + 라이브러리 로드 + 초기화
+    parts.append(f'<script>window.__REPORT_DATA__ = {payload_json};</script>')
+    parts.append('<script src="./assets/tabulator.min.js"></script>')
     parts.append(f"<script>{_HTML_SCRIPT}</script>")
     parts.append("</body></html>")
     return "".join(parts)

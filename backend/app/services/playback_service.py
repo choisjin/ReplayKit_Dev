@@ -39,6 +39,9 @@ from ..utils.cv_io import safe_imread, safe_imwrite
 logger = logging.getLogger(__name__)
 
 SCREENSHOTS_DIR = Path(__file__).resolve().parent.parent.parent / "screenshots"
+# Tabulator 라이브러리 캐시 (리포트 HTML이 참조할 JS/CSS)
+_TABULATOR_SRC_DIR = Path(__file__).resolve().parent.parent / "static" / "tabulator"
+_TABULATOR_FILES = ("tabulator.min.js", "tabulator_simple.min.css")
 
 
 # ================================================================
@@ -1494,6 +1497,7 @@ class PlaybackService:
 
         JSON 직렬화/파일 쓰기/HTML 빌드를 thread로 이전해 event loop 블록을 막는다.
         Excel은 무거우므로 자동 생성하지 않고 /api/results/export에서 on-demand 생성한다.
+        HTML이 참조할 Tabulator 라이브러리는 런 폴더의 assets/에 한 번 복사해둔다.
         """
         timestamp = self._result_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -1514,6 +1518,7 @@ class PlaybackService:
                 html_path = filepath.with_suffix(".html")
                 html_str = _build_html_report(data, html_path)
                 html_path.write_text(html_str, encoding="utf-8")
+                _ensure_tabulator_assets(html_path.parent)
             except Exception as e:
                 logger.warning("HTML report generation failed: %s", e)
 
@@ -1523,3 +1528,28 @@ class PlaybackService:
         if not interim:
             self._run_output_dir = None
         return str(filepath)
+
+
+def _ensure_tabulator_assets(target_dir: Path) -> None:
+    """런 폴더의 assets/ 하위에 Tabulator 라이브러리 파일을 복사 (없을 때만).
+
+    각 런 폴더는 독립적으로 동작해야 하므로(ZIP 공유/오프라인 뷰잉) 매 런마다
+    약 460KB의 JS+CSS가 복사된다. 파일이 이미 존재하면 건너뛴다.
+    """
+    import shutil
+    assets_dir = target_dir / "assets"
+    if not _TABULATOR_SRC_DIR.is_dir():
+        logger.debug("Tabulator source dir not found: %s", _TABULATOR_SRC_DIR)
+        return
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    for name in _TABULATOR_FILES:
+        src = _TABULATOR_SRC_DIR / name
+        dst = assets_dir / name
+        if not src.is_file():
+            continue
+        if dst.exists() and dst.stat().st_size == src.stat().st_size:
+            continue  # 이미 최신
+        try:
+            shutil.copyfile(str(src), str(dst))
+        except Exception as e:
+            logger.warning("Failed to copy Tabulator asset %s: %s", name, e)
