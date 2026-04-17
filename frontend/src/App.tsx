@@ -336,7 +336,18 @@ function AppContent() {
               <Button
                 block
                 icon={<MessageOutlined />}
-                onClick={() => setChatOpen(true)}
+                onClick={() => {
+                  Modal.info({
+                    title: '문의 안내',
+                    content: (
+                      <div style={{ fontSize: 14, lineHeight: 1.8 }}>
+                        요청사항 및 문의사항은 제목에<br />
+                        <b style={{ color: '#1677ff' }}>[ReplayKit]</b> 붙여 이슈 등록 해주세요!
+                      </div>
+                    ),
+                    okText: '확인',
+                  });
+                }}
               >
                 {!siderCollapsed && t('chat.title')}
               </Button>
