@@ -155,9 +155,14 @@ class SaveExpectedImageRequest(BaseModel):
 
 
 async def _resolve_scenario(scenario_name: str):
-    """Get scenario from in-memory recording or disk."""
-    if recording_svc.is_recording and recording_svc._current_scenario:
-        return recording_svc._current_scenario
+    """Get scenario from in-memory recording or disk.
+
+    녹화 중이고 이름이 일치하면 메모리 버전을 반환한다 — 미저장 스텝 포함.
+    이름이 다르면 (다른 시나리오 참조) 디스크에서 로드.
+    """
+    cur = recording_svc._current_scenario
+    if cur and cur.name == scenario_name:
+        return cur
     try:
         return await recording_svc.load_scenario(scenario_name)
     except FileNotFoundError:
@@ -417,7 +422,8 @@ async def import_steps(req: ImportStepsRequest):
     동일 시나리오(source == target)에서 move는 허용되지 않음 (드래그앤드롭 사용).
     """
     import shutil, time as _time
-    source = await recording_svc.load_scenario(req.source_name)
+    # 녹화 중 미저장 상태에서도 메모리 스텝을 참조하도록 _resolve_scenario 사용
+    source = await _resolve_scenario(req.source_name)
     tgt_ss_dir = SCREENSHOTS_DIR / req.target_name
     tgt_ss_dir.mkdir(parents=True, exist_ok=True)
     src_ss_dir = SCREENSHOTS_DIR / req.source_name
