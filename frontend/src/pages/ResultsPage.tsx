@@ -191,6 +191,9 @@ export default function ResultsPage() {
   const [activeRecUrl, setActiveRecUrl] = useState('');
   const [activeRecRepeat, setActiveRecRepeat] = useState(1);
   const detailVideoRef = useRef<HTMLVideoElement>(null);
+  // URL 변경 시 비디오 로드 완료 전에 React re-render로 0초 리셋되는 race 방지용.
+  // seekToStep이 여기에 값을 쓰고, <video onCanPlay>에서 읽어 적용한다.
+  const pendingSeekRef = useRef<{ offset: number; applied: boolean } | null>(null);
   const [currentPlayingStepId, setCurrentPlayingStepId] = useState<number | null>(null);
   const [trimFile, setTrimFile] = useState<string | null>(null);
   const [trimStart, setTrimStart] = useState(0);
@@ -227,43 +230,45 @@ export default function ResultsPage() {
   }, [detail, groupDetail]);
 
   const seekToStep = (step: StepResultDetail) => {
-    if ((!detail && !groupDetail) || recordings.length === 0) return;
-    // 패널 열기
+    if ((!detail && !groupDetail) || recordings.length === 0) {
+      message.info('녹화 영상이 없습니다');
+      return;
+    }
     if (!webcamPanelOpen) setWebcamPanelOpen(true);
-    // 해당 회차 녹화 선택
+
     const targetRepeat = step.repeat_index || 1;
-    const rec = recordings.find(r => (r.filename.includes(`webcam_r${targetRepeat}.webm`) || r.filename.includes(`webcam_r${targetRepeat}.mp4`)));
-    if (!rec) return;
+    let rec = recordings.find(r => (r.filename.includes(`webcam_r${targetRepeat}.webm`) || r.filename.includes(`webcam_r${targetRepeat}.mp4`)));
+    if (!rec) {
+      const fallback = recordings[0];
+      if (!fallback) { message.info(`Cycle ${targetRepeat} 녹화가 없습니다`); return; }
+      message.info(`Cycle ${targetRepeat} 녹화가 없어 ${fallback.filename}을(를) 사용합니다`);
+      rec = fallback;
+    }
 
     // 같은 회차의 첫/마지막 스텝 타임스탬프 기준으로 오프셋 계산
     const sameRepeatSteps = getAllStepsForRepeat(targetRepeat);
     const firstStep = sameRepeatSteps[0];
-    const lastStep = sameRepeatSteps[sameRepeatSteps.length - 1];
+    const lastStep = sameRepeatSteps.length > 1 ? sameRepeatSteps[sameRepeatSteps.length - 1] : firstStep;
     if (!firstStep?.timestamp || !step.timestamp) return;
     const firstTime = new Date(firstStep.timestamp).getTime();
     const stepTime = new Date(step.timestamp).getTime();
     const rawOffsetSec = (stepTime - firstTime) / 1000;
 
-    const doSeek = () => {
-      const video = detailVideoRef.current;
-      if (!video) return;
-      const applySeek = () => {
-        // 비디오 duration과 스텝 시간 범위의 비율로 보정 (Infinity면 스케일링 생략)
-        const videoDuration = video.duration;
-        const hasDuration = Number.isFinite(videoDuration) && videoDuration > 0;
-        const lastTime = lastStep?.timestamp ? new Date(lastStep.timestamp).getTime() : stepTime;
-        const lastExec = lastStep?.execution_time_ms || 0;
-        const totalStepSpanSec = (lastTime - firstTime) / 1000 + lastExec / 1000;
-        const scale = (hasDuration && totalStepSpanSec > 0) ? videoDuration / totalStepSpanSec : 1;
-        const correctedOffset = Math.max(0, rawOffsetSec * scale - 1);
-        const seekTime = hasDuration ? Math.min(correctedOffset, videoDuration) : correctedOffset;
-        if (Number.isFinite(seekTime)) video.currentTime = seekTime;
-      };
-      if (video.readyState >= 2) {
-        applySeek();
-      } else {
-        video.addEventListener('loadeddata', applySeek, { once: true });
+    // 스케일 보정에 필요한 값을 클로저에 캡처
+    const lastTime = lastStep?.timestamp ? new Date(lastStep.timestamp).getTime() : stepTime;
+    const lastExec = lastStep?.execution_time_ms || 0;
+    const totalStepSpanSec = (lastTime - firstTime) / 1000 + lastExec / 1000;
+
+    // 실제 seek 적용 — video.duration을 읽어 스케일 보정 후 currentTime 설정
+    const applySeek = (video: HTMLVideoElement) => {
+      const videoDuration = video.duration;
+      const hasDuration = Number.isFinite(videoDuration) && videoDuration > 0;
+      const scale = (hasDuration && totalStepSpanSec > 0) ? videoDuration / totalStepSpanSec : 1;
+      const seekTime = Math.max(0, rawOffsetSec * scale);
+      if (Number.isFinite(seekTime)) {
+        video.currentTime = hasDuration ? Math.min(seekTime, videoDuration) : seekTime;
       }
+      pendingSeekRef.current = null;
     };
 
     const urlChanged = rec.url !== activeRecUrl;
@@ -271,11 +276,48 @@ export default function ResultsPage() {
     setActiveRecRepeat(targetRepeat);
 
     if (urlChanged) {
-      requestAnimationFrame(() => requestAnimationFrame(doSeek));
+      // URL 변경 → React re-render로 <video src> 교체 → 0초 리셋 발생.
+      // rAF 타이밍으로는 React flush를 보장할 수 없으므로,
+      // pendingSeekRef에 오프셋을 저장하고 <video onCanPlay>에서 적용한다.
+      pendingSeekRef.current = { offset: rawOffsetSec, applied: false };
     } else {
-      doSeek();
+      // 같은 URL → 비디오 이미 로드됨 → 즉시 seek
+      const video = detailVideoRef.current;
+      if (video && video.readyState >= 3) {
+        applySeek(video);
+      } else if (video) {
+        pendingSeekRef.current = { offset: rawOffsetSec, applied: false };
+        video.addEventListener('canplay', () => applySeek(video), { once: true });
+      }
     }
   };
+
+  // <video onCanPlay> 콜백 — URL 변경 후 비디오 로드 완료 시 pending seek 적용
+  const handleVideoCanPlay = useCallback(() => {
+    const pending = pendingSeekRef.current;
+    if (!pending || pending.applied) return;
+    pending.applied = true;
+    const video = detailVideoRef.current;
+    if (!video) return;
+
+    // 현재 활성 스텝 정보로 스케일 보정
+    const sameRepeatSteps = getAllStepsForRepeat(activeRecRepeat);
+    const firstStep = sameRepeatSteps[0];
+    const lastStep = sameRepeatSteps.length > 1 ? sameRepeatSteps[sameRepeatSteps.length - 1] : firstStep;
+    if (!firstStep?.timestamp) { pendingSeekRef.current = null; return; }
+    const firstTime = new Date(firstStep.timestamp).getTime();
+    const lastTime = lastStep?.timestamp ? new Date(lastStep.timestamp).getTime() : firstTime;
+    const lastExec = lastStep?.execution_time_ms || 0;
+    const totalStepSpanSec = (lastTime - firstTime) / 1000 + lastExec / 1000;
+    const videoDuration = video.duration;
+    const hasDuration = Number.isFinite(videoDuration) && videoDuration > 0;
+    const scale = (hasDuration && totalStepSpanSec > 0) ? videoDuration / totalStepSpanSec : 1;
+    const seekTime = Math.max(0, pending.offset * scale);
+    if (Number.isFinite(seekTime)) {
+      video.currentTime = hasDuration ? Math.min(seekTime, videoDuration) : seekTime;
+    }
+    pendingSeekRef.current = null;
+  }, [activeRecRepeat, getAllStepsForRepeat]);
 
   // 비디오 재생 시 현재 스텝 실시간 하이라이트
   const handleVideoTimeUpdate = useCallback(() => {
@@ -1012,7 +1054,7 @@ export default function ResultsPage() {
                             );
                           })}
                         </Space>
-                        {activeRecUrl && <video ref={detailVideoRef} src={activeRecUrl} controls style={{ width: '100%', maxHeight: 400 }} />}
+                        {activeRecUrl && <video ref={detailVideoRef} src={activeRecUrl} controls onCanPlay={handleVideoCanPlay} onTimeUpdate={handleVideoTimeUpdate} onPause={handleVideoPauseOrEnd} onEnded={handleVideoPauseOrEnd} style={{ width: '100%', maxHeight: 400 }} />}
                       </div>
                     ),
                   }]}
@@ -1087,6 +1129,7 @@ export default function ResultsPage() {
                         ref={detailVideoRef}
                         src={activeRecUrl}
                         controls
+                        onCanPlay={handleVideoCanPlay}
                         onTimeUpdate={handleVideoTimeUpdate}
                         onPause={handleVideoPauseOrEnd}
                         onEnded={handleVideoPauseOrEnd}
