@@ -2329,7 +2329,7 @@ export default function RecordPage() {
               value={to}
               onChange={(v) => setDeviceSwapMap(prev => ({ ...prev, [from]: v }))}
               style={{ flex: 1 }}
-              options={allDevices.map(d => ({ label: `${d.id} ${d.name ? '(' + d.name + ')' : ''}`, value: d.id }))}
+              options={allDevices.filter(d => d.status === 'device' || d.status === 'connected').map(d => ({ label: `${d.id} ${d.name ? '(' + d.name + ')' : ''}`, value: d.id }))}
             />
           </div>
         ))}
