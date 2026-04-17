@@ -119,6 +119,10 @@ ISAP_KEYS: dict[str, dict] = {
     "MKBD_TRACK_DOWN":  {"cmd": CMD_HKEY, "key": 0x17},
     "MKBD_POWER":       {"cmd": CMD_HKEY, "key": 0x1D},
     "MKBD_TUNE_PUSH":   {"cmd": CMD_HKEY, "key": 0x1E},
+    "MKBD_CLIMATE":     {"cmd": CMD_HKEY, "key": 0x1F},
+    "MKBD_APP":         {"cmd": CMD_HKEY, "key": 0x20},
+    "MKBD_POPUP":       {"cmd": CMD_HKEY, "key": 0x21},
+    "MKBD_PHONE":       {"cmd": CMD_HKEY, "key": 0x29},   # Non-Navi
     "MKBD_VOLUME":      {"cmd": CMD_HKEY, "key": 0x01, "dial": True},
     "MKBD_TUNE":        {"cmd": CMD_HKEY, "key": 0x04, "dial": True},
 
@@ -131,7 +135,7 @@ ISAP_KEYS: dict[str, dict] = {
     "CCP_BACK":         {"cmd": CMD_CCP, "key": 0x09},
     "CCP_MENU":         {"cmd": CMD_CCP, "key": 0x0A},
     "CCP_HOME":         {"cmd": CMD_CCP, "key": 0x14},
-    "CCP_POWER":        {"cmd": CMD_CCP, "key": 0x19},
+    "CCP_POWER":        {"cmd": CMD_CCP, "key": 0x1D},  # ISAP spec: 0x1D (HKMC는 0x19)
     "CCP_TUNE_PUSH":    {"cmd": CMD_CCP, "key": 0x1E},
     "CCP_JOGDIAL":      {"cmd": CMD_CCP, "key": 0x00, "dial": True},
     "CCP_VOLUME":       {"cmd": CMD_CCP, "key": 0x01, "dial": True},
@@ -145,7 +149,7 @@ ISAP_KEYS: dict[str, dict] = {
     "RRC_ENTER":        {"cmd": CMD_RRC, "key": 0x08},
     "RRC_BACK":         {"cmd": CMD_RRC, "key": 0x09},
     "RRC_MENU":         {"cmd": CMD_RRC, "key": 0x0A},
-    "RRC_HOME":         {"cmd": CMD_RRC, "key": 0x14},
+    "RRC_HOME":         {"cmd": CMD_RRC, "key": 0x16},  # ISAP spec: 0x16 (HKMC는 0x14)
     "RRC_POWER_LEFT":   {"cmd": CMD_RRC, "key": 0x1A},
     "RRC_POWER_RIGHT":  {"cmd": CMD_RRC, "key": 0x1B},
     "RRC_VOLUME_LEFT":  {"cmd": CMD_RRC, "key": 0x17},
@@ -153,6 +157,16 @@ ISAP_KEYS: dict[str, dict] = {
     "RRC_JOGDIAL":          {"cmd": CMD_RRC, "key": 0x00, "dial": True},
     "RRC_VOLUME_LEFT_DIAL":  {"cmd": CMD_RRC, "key": 0x02, "dial": True},
     "RRC_VOLUME_RIGHT_DIAL": {"cmd": CMD_RRC, "key": 0x03, "dial": True},
+    # ---------- RRC Non-Navi 전용 ----------
+    "RRC_RADIO":        {"cmd": CMD_RRC, "key": 0x0D},
+    "RRC_MEDIA":        {"cmd": CMD_RRC, "key": 0x0E},
+    "RRC_MUTE":         {"cmd": CMD_RRC, "key": 0x24},
+    "RRC_SEEK_UP":      {"cmd": CMD_RRC, "key": 0x0F},
+    "RRC_SEEK_DOWN":    {"cmd": CMD_RRC, "key": 0x10},
+    "RRC_PRESET_UP":    {"cmd": CMD_RRC, "key": 0x20},
+    "RRC_PRESET_DOWN":  {"cmd": CMD_RRC, "key": 0x21},
+    "RRC_POWER":        {"cmd": CMD_RRC, "key": 0x19},
+    "RRC_VOLUME":       {"cmd": CMD_RRC, "key": 0x01, "dial": True},
 
     # SWRC (CMD_SWRC=0x70) — 표 121, 스티어링 휠 리모콘
     "SWRC_PTT":         {"cmd": CMD_SWRC, "key": 0x22},
@@ -163,7 +177,11 @@ ISAP_KEYS: dict[str, dict] = {
     "SWRC_CUSTOM":      {"cmd": CMD_SWRC, "key": 0x11},
     "SWRC_SEND":        {"cmd": CMD_SWRC, "key": 0x25},
     "SWRC_END":         {"cmd": CMD_SWRC, "key": 0x26},
-    "SWRC_VOLUME":      {"cmd": CMD_SWRC, "key": 0x01, "dial": True},
+    "SWRC_VOLUME_DOWN":         {"cmd": CMD_SWRC, "key": 0x04},
+    "SWRC_VOLUME_UP":           {"cmd": CMD_SWRC, "key": 0x05},
+    "SWRC_VOLUME_SCROLL_DOWN":  {"cmd": CMD_SWRC, "key": 0x10},
+    "SWRC_VOLUME_SCROLL_UP":    {"cmd": CMD_SWRC, "key": 0x11},
+    "SWRC_VOLUME":              {"cmd": CMD_SWRC, "key": 0x01, "dial": True},
 
     # MIRROR (CMD_MIRROR=0x92) — 표 123
     "MIRROR_SOS":                   {"cmd": CMD_MIRROR, "key": 0x27},
