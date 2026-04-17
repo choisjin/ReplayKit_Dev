@@ -93,13 +93,12 @@ HKMC_KEYS = {
     "CCP_HOME":         {"cmd": CMD_CCP, "key": 0x14},
     "CCP_POWER":        {"cmd": CMD_CCP, "key": 0x19},
     "CCP_TUNE_PUSH":    {"cmd": CMD_CCP, "key": 0x1E},
-    "CCP_JOGDIAL":      {"cmd": CMD_CCP, "key": 0x00, "dial": True},
     "CCP_JOGDIAL_CLOCK_Right": {"cmd": CMD_CCP, "key": 0x00, "dial": True, "direction": 0x00},
     "CCP_JOGDIAL_CLOCK_Left":  {"cmd": CMD_CCP, "key": 0x00, "dial": True, "direction": 0x01},
-    "CCP_VOLUME":       {"cmd": CMD_CCP, "key": 0x01, "dial": True},
     "CCP_VOLUME_UP":    {"cmd": CMD_CCP, "key": 0x01, "dial": True, "direction": 0x00},
     "CCP_VOLUME_DOWN":  {"cmd": CMD_CCP, "key": 0x01, "dial": True, "direction": 0x01},
-    "CCP_TUNE":         {"cmd": CMD_CCP, "key": 0x04, "dial": True},
+    "CCP_TUNE_UP":      {"cmd": CMD_CCP, "key": 0x04, "dial": True, "direction": 0x00},
+    "CCP_TUNE_DOWN":    {"cmd": CMD_CCP, "key": 0x04, "dial": True, "direction": 0x01},
 
     # ---------- RRC (CMD_RRC=0x90) — Navi ----------
     "RRC_ENTER":        {"cmd": CMD_RRC, "key": 0x08},
@@ -137,7 +136,6 @@ HKMC_KEYS = {
     "SWRC_SEND":        {"cmd": CMD_SWC, "key": 0x25},
     "SWRC_END":         {"cmd": CMD_SWC, "key": 0x26},
     "SWRC_CUSTOM":      {"cmd": CMD_SWC, "key": 0x11},
-    "SWRC_VOLUME":      {"cmd": CMD_SWC, "key": 0x01, "dial": True},
     "SWRC_VOLUME_UP":   {"cmd": CMD_SWC, "key": 0x01, "dial": True, "direction": 0x00},
     "SWRC_VOLUME_DOWN": {"cmd": CMD_SWC, "key": 0x01, "dial": True, "direction": 0x01},
 
