@@ -97,6 +97,8 @@ HKMC_KEYS = {
     "CCP_JOGDIAL_CLOCK_Right": {"cmd": CMD_CCP, "key": 0x00, "dial": True, "direction": 0x00},
     "CCP_JOGDIAL_CLOCK_Left":  {"cmd": CMD_CCP, "key": 0x00, "dial": True, "direction": 0x01},
     "CCP_VOLUME":       {"cmd": CMD_CCP, "key": 0x01, "dial": True},
+    "CCP_VOLUME_UP":    {"cmd": CMD_CCP, "key": 0x01, "dial": True, "direction": 0x00},
+    "CCP_VOLUME_DOWN":  {"cmd": CMD_CCP, "key": 0x01, "dial": True, "direction": 0x01},
     "CCP_TUNE":         {"cmd": CMD_CCP, "key": 0x04, "dial": True},
 
     # ---------- RRC (CMD_RRC=0x90) — Navi ----------
@@ -135,11 +137,9 @@ HKMC_KEYS = {
     "SWRC_SEND":        {"cmd": CMD_SWC, "key": 0x25},
     "SWRC_END":         {"cmd": CMD_SWC, "key": 0x26},
     "SWRC_CUSTOM":      {"cmd": CMD_SWC, "key": 0x11},
-    "SWRC_VOLUME_DOWN":         {"cmd": CMD_SWC, "key": 0x04},
-    "SWRC_VOLUME_UP":           {"cmd": CMD_SWC, "key": 0x05},
-    "SWRC_VOLUME_SCROLL_DOWN":  {"cmd": CMD_SWC, "key": 0x10},
-    "SWRC_VOLUME_SCROLL_UP":    {"cmd": CMD_SWC, "key": 0x11},
-    "SWRC_VOLUME":              {"cmd": CMD_SWC, "key": 0x01, "dial": True},
+    "SWRC_VOLUME":      {"cmd": CMD_SWC, "key": 0x01, "dial": True},
+    "SWRC_VOLUME_UP":   {"cmd": CMD_SWC, "key": 0x01, "dial": True, "direction": 0x00},
+    "SWRC_VOLUME_DOWN": {"cmd": CMD_SWC, "key": 0x01, "dial": True, "direction": 0x01},
 
     # ---------- MIRROR (CMD_MIRROR=0x92) ----------
     "MIRROR_SOS":                   {"cmd": CMD_MIRROR, "key": 0x27},
