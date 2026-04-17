@@ -16,6 +16,9 @@ if "%~1"=="--home" (
     )
 )
 
+:: 정식 remote URL — 이 주소가 아니면 자동 교정
+set "CANONICAL_REMOTE=http://mod.lge.com/hub/dqa_replay_kit/replay_kit.git"
+
 :: Git 초기화 또는 업데이트
 if not exist ".git" (
     if exist "%GIT_REMOTE_FILE%" (
@@ -29,6 +32,7 @@ if not exist ".git" (
 ) else (
     where git.exe >nul 2>nul
     if not errorlevel 1 (
+        call :fix_remote
         call :git_pull
     )
 )
@@ -50,6 +54,16 @@ git branch --set-upstream-to=origin/main main
 git reset origin/main
 git checkout origin/main -- .gitignore
 echo [GIT] Initialized: %GIT_REMOTE%
+goto :eof
+
+:fix_remote
+:: 현재 origin URL이 정식 주소가 아니면 교정
+set "SAFE_DIR=%CD:\=/%"
+for /f "delims=" %%u in ('git -c safe.directory="%SAFE_DIR%" remote get-url origin 2^>nul') do set "CUR_REMOTE=%%u"
+if not "!CUR_REMOTE!"=="!CANONICAL_REMOTE!" (
+    git -c safe.directory="%SAFE_DIR%" remote set-url origin "!CANONICAL_REMOTE!"
+    echo [GIT] Remote corrected: !CUR_REMOTE! -^> !CANONICAL_REMOTE!
+)
 goto :eof
 
 :git_pull
