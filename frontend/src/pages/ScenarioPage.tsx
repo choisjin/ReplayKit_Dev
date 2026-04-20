@@ -17,6 +17,8 @@ import { useWebcamContext } from '../context/WebcamContext';
 import { VideoCameraOutlined } from '@ant-design/icons';
 import { Resizable } from 'react-resizable';
 import 'react-resizable/css/styles.css';
+import DLTViewer from '../components/DLTViewer';
+import { useDLTSessions } from '../hooks/useDLTSessions';
 
 const ResizableTitle = (props: any) => {
   const { onResize, width, ...restProps } = props;
@@ -166,6 +168,7 @@ const formatTime = (iso: string, _lang: string = 'ko', inline = false) => {
 export default function ScenarioPage() {
   const { t, lang } = useTranslation();
   const { settings, saveExportZipToDir } = useSettings();
+  const dltSessionHook = useDLTSessions();
   const { webcam, ensureWebcamOpen } = useWebcamContext();
   const { pauseScreenStream, resumeScreenStream, primaryDevices, auxiliaryDevices } = useDevice();
   const [scenarios, setScenarios] = useState<string[]>([]);
@@ -1398,6 +1401,15 @@ export default function ScenarioPage() {
       </div>
       <Splitter style={{ flex: 1, minHeight: 0 }}>
       <Splitter.Panel defaultSize="40%" min="20%" max="60%" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {playing && dltSessionHook.sessions.length > 0 ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <DLTViewer
+            sessions={dltSessionHook.sessions}
+            mode="card"
+            theme={settings.theme}
+          />
+        </div>
+      ) : (
       <Card
         style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         styles={{ body: { flex: 1, overflow: 'auto', padding: '8px 12px' } }}
@@ -1651,6 +1663,7 @@ export default function ScenarioPage() {
         )}
 
       </Card>
+      )}
       </Splitter.Panel>
 
       <Splitter.Panel style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

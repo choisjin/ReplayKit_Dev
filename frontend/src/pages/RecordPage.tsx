@@ -9,6 +9,8 @@ import { useDevice } from '../context/DeviceContext';
 import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from '../i18n';
 import type { TranslationKey } from '../i18n/translations';
+import DLTViewer from '../components/DLTViewer';
+import { useDLTSessions } from '../hooks/useDLTSessions';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -269,6 +271,15 @@ export default function RecordPage() {
   const isDark = settings.theme === 'dark';
   const subTextColor = isDark ? '#aaa' : '#888';
   const mutedTextColor = isDark ? '#999' : '#666';
+
+  // DLT 뷰어 (스텝 테스트 시 모달) — 세션 시작 시 자동 오픈
+  const dltSessionHook = useDLTSessions();
+  const [dltModalOpen, setDltModalOpen] = useState(false);
+  useEffect(() => {
+    if (dltSessionHook.lastEvent?.type === 'session_started') {
+      setDltModalOpen(true);
+    }
+  }, [dltSessionHook.lastEvent]);
 
   // Wait step insertion
   const [waitDurationMs, setWaitDurationMs] = useState(1000);
@@ -4421,6 +4432,24 @@ export default function RecordPage() {
           onVisibleChange: (v) => setAnnotatedPreviewVisible(v),
         }}
       />
+
+      {/* DLT 로그 뷰어 모달 — StartLogging 시 자동 오픈 */}
+      <Modal
+        title={t('dltViewer.title') || 'DLT 로그 뷰어'}
+        open={dltModalOpen}
+        onCancel={() => setDltModalOpen(false)}
+        footer={null}
+        width={1000}
+        styles={{ body: { height: '70vh', padding: 0, overflow: 'hidden' } }}
+        destroyOnClose={false}
+      >
+        <DLTViewer
+          sessions={dltSessionHook.sessions}
+          mode="modal"
+          theme={settings.theme}
+          onClose={() => setDltModalOpen(false)}
+        />
+      </Modal>
     </div>
   );
 }
