@@ -137,6 +137,26 @@ def _get_run_output_dir() -> Optional[Path]:
         return None
 
 
+def _auto_save_path(prefix: str = "dlt") -> str:
+    """컨텍스트별 자동 저장 경로 생성.
+
+    - 시나리오 재생 중: {run_output_dir}/logs/{prefix}_{timestamp}.log
+    - 스텝 테스트 (재생 중 아님): backend/results/Temp_logs/{prefix}_{timestamp}.log
+    """
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    run_dir = _get_run_output_dir()
+    if run_dir:
+        log_dir = run_dir / "logs"
+    else:
+        try:
+            from backend.app.services.playback_service import RESULTS_DIR
+            log_dir = Path(RESULTS_DIR) / "Temp_logs"
+        except Exception:
+            log_dir = Path(__file__).resolve().parent.parent.parent / "results" / "Temp_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return str(log_dir / f"{prefix}_{ts}.log")
+
+
 # DLT 프로토콜 상수
 _MSG_TYPE = {0: "LOG", 1: "TRACE", 2: "NW", 3: "CTRL"}
 _LOG_LEVEL = {0: "", 1: "FATAL", 2: "ERROR", 3: "WARN", 4: "INFO", 5: "DEBUG", 6: "VERBOSE"}
@@ -237,15 +257,8 @@ class DLTLogging:
             return err
 
         if not save_path:
-            # 재생 중이면 런 폴더의 logs/ 하위에 저장
-            run_dir = _get_run_output_dir()
-            if run_dir:
-                log_dir = run_dir / "logs"
-            else:
-                log_dir = Path(__file__).resolve().parent.parent.parent / "logs"
-            log_dir.mkdir(exist_ok=True)
-            ts = time.strftime("%Y%m%d_%H%M%S")
-            save_path = str(log_dir / f"dlt_{ts}.log")
+            # 재생 중: run_dir/logs, 스텝 테스트: backend/results/Temp_logs
+            save_path = _auto_save_path("dlt")
         else:
             os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
 
@@ -304,14 +317,15 @@ class DLTLogging:
         return f"Logging started: {self._host}:{self._port}"
 
     def StopLogging(self, save_path: str = "") -> str:
-        """뷰어 연동용: DLT 연결 종료 + (선택) 메모리 버퍼를 파일로 일괄 저장.
+        """뷰어 연동용: DLT 연결 종료 + 메모리 버퍼를 파일로 일괄 저장.
 
         Args:
-            save_path: 저장할 파일 경로. 빈 값이면 저장 없이 종료.
-                (빈 값이고 재생 중이면 런 폴더의 logs/ 하위에 자동 저장)
+            save_path: 저장할 파일 경로. 빈 값이면 컨텍스트별 자동 저장:
+                - 시나리오 재생 중: {run_dir}/logs/dlt_{timestamp}.log
+                - 스텝 테스트:     backend/results/Temp_logs/dlt_{timestamp}.log
 
         Returns:
-            결과 메시지 (저장 경로 또는 종료 메시지)
+            결과 메시지 (저장 경로 포함)
         """
         sid = self._session_id()
 
@@ -319,26 +333,28 @@ class DLTLogging:
         with self._lock:
             logs_snapshot = list(self._logs)
 
+        if not save_path:
+            save_path = _auto_save_path("dlt")
+
         saved_path = ""
-        if save_path:
-            try:
-                os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
-                with open(save_path, "w", encoding="utf-8") as f:
-                    f.write("\n".join(logs_snapshot))
-                    if logs_snapshot:
-                        f.write("\n")
-                saved_path = save_path
-                logger.info("[DLTLogging] Saved %d lines to %s", len(logs_snapshot), save_path)
-            except Exception as e:
-                logger.error("[DLTLogging] Save failed: %s", e)
-                self._disconnect()
-                DLT_HUB.emit_lifecycle({
-                    "type": "session_stopped",
-                    "session_id": sid,
-                    "save_path": "",
-                    "stopped_at": time.time(),
-                })
-                return f"ERROR: 저장 실패 — {e}"
+        try:
+            os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+            with open(save_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(logs_snapshot))
+                if logs_snapshot:
+                    f.write("\n")
+            saved_path = save_path
+            logger.info("[DLTLogging] Saved %d lines to %s", len(logs_snapshot), save_path)
+        except Exception as e:
+            logger.error("[DLTLogging] Save failed: %s", e)
+            self._disconnect()
+            DLT_HUB.emit_lifecycle({
+                "type": "session_stopped",
+                "session_id": sid,
+                "save_path": "",
+                "stopped_at": time.time(),
+            })
+            return f"ERROR: 저장 실패 — {e}"
 
         self._disconnect()
         DLT_HUB.emit_lifecycle({
@@ -347,9 +363,7 @@ class DLTLogging:
             "save_path": saved_path,
             "stopped_at": time.time(),
         })
-        if saved_path:
-            return f"Logging stopped. Saved {len(logs_snapshot)} lines to: {saved_path}"
-        return f"Logging stopped ({len(logs_snapshot)} lines in memory, not saved)"
+        return f"Logging stopped. Saved {len(logs_snapshot)} lines to: {saved_path}"
 
     def SearchSection(self, keyword: str, from_step: int, to_step: int, count: int = 5) -> str:
         """뷰어 연동용: MarkStep 구간 검색. SearchRange의 alias."""
@@ -443,19 +457,22 @@ class DLTLogging:
 
     def _watch_save_and_stop(self, logs_slice: list, save_path: str, keyword: str,
                              check_count: int, matched: bool, reason: str = "") -> str:
-        """WatchAndStop 종료 처리 — 저장 + 연결 해제 + lifecycle emit."""
+        """WatchAndStop 종료 처리 — 저장 + 연결 해제 + lifecycle emit.
+        save_path가 비어있으면 컨텍스트별 자동 경로 사용.
+        """
         sid = self._session_id()
+        if not save_path:
+            save_path = _auto_save_path("dlt_watch")
         saved = ""
-        if save_path:
-            try:
-                os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
-                with open(save_path, "w", encoding="utf-8") as f:
-                    f.write("\n".join(logs_slice))
-                    if logs_slice:
-                        f.write("\n")
-                saved = save_path
-            except Exception as e:
-                logger.error("[DLTLogging] WatchAndStop save failed: %s", e)
+        try:
+            os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+            with open(save_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(logs_slice))
+                if logs_slice:
+                    f.write("\n")
+            saved = save_path
+        except Exception as e:
+            logger.error("[DLTLogging] WatchAndStop save failed: %s", e)
 
         self._disconnect()
         DLT_HUB.emit_lifecycle({

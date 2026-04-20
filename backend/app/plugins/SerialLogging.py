@@ -35,6 +35,26 @@ def _get_run_output_dir() -> Optional[Path]:
         return None
 
 
+def _auto_save_path(prefix: str = "serial") -> str:
+    """컨텍스트별 자동 저장 경로.
+
+    - 재생 중: {run_dir}/logs/{prefix}_{ts}.log
+    - 스텝 테스트: backend/results/Temp_logs/{prefix}_{ts}.log
+    """
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    run_dir = _get_run_output_dir()
+    if run_dir:
+        log_dir = run_dir / "logs"
+    else:
+        try:
+            from backend.app.services.playback_service import RESULTS_DIR
+            log_dir = Path(RESULTS_DIR) / "Temp_logs"
+        except Exception:
+            log_dir = Path(__file__).resolve().parent.parent.parent / "results" / "Temp_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return str(log_dir / f"{prefix}_{ts}.log")
+
+
 class SerialLogging:
     """시리얼 로그 캡처·저장·키워드 판정 모듈.
 
@@ -124,15 +144,8 @@ class SerialLogging:
             return err
 
         if not save_path:
-            # 재생 중이면 런 폴더의 logs/ 하위에 저장
-            run_dir = _get_run_output_dir()
-            if run_dir:
-                log_dir = run_dir / "logs"
-            else:
-                log_dir = Path(__file__).resolve().parent.parent.parent / "logs"
-            log_dir.mkdir(exist_ok=True)
-            ts = time.strftime("%Y%m%d_%H%M%S")
-            save_path = str(log_dir / f"serial_{ts}.log")
+            # 재생 중: run_dir/logs, 스텝 테스트: backend/results/Temp_logs
+            save_path = _auto_save_path("serial")
         else:
             os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
 
