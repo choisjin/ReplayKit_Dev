@@ -1326,7 +1326,7 @@ class PlaybackService:
                                 await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, direction)
                             else:
                                 monitor = params.get("monitor", 0x00)
-                                await svc.async_send_key_by_name(key_name, sub_cmd, monitor, direction)
+                                await svc.async_send_key_by_name(key_name, sub_cmd, monitor, direction, screen_type)
                         else:
                             if is_isap:
                                 await svc.async_send_key(

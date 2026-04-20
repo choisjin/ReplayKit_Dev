@@ -617,7 +617,8 @@ async def device_input(req: InputRequest):
                 key_name = p.get("key_name")
                 if key_name:
                     await hkmc.async_send_key_by_name(
-                        key_name, p.get("sub_cmd", 0x43), p.get("monitor", 0x00), p.get("direction")
+                        key_name, p.get("sub_cmd", 0x43), p.get("monitor", 0x00),
+                        p.get("direction"), screen_type,
                     )
                     logger.info("[HKMC INPUT] key sent: %s", key_name)
                 else:

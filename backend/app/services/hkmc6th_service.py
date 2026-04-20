@@ -45,6 +45,7 @@ CMD_MKBD2 = 0x72     # hkccic MKBD2 (CCIC 전용)
 CMD_CCP = 0x80
 CMD_RRC = 0x90
 CMD_MIRROR = 0x92
+CMD_CCRC = 0x93      # CCRC (Rear seat remote + rear monitor direct, 2 monitor 전용)
 
 # Sub commands
 RELEASE_KEY = 0x41
@@ -53,6 +54,23 @@ SHORT_KEY = 0x43
 LONG_KEY = 0x44
 MOVE_KEY = 0x45
 DIAL_ACTION = 0x80
+
+# CCRC key action codes (CMD_CCRC=0x93 전용, 일반 KEY와 별도 값 사용)
+CCRC_RELEASE = 0x00
+CCRC_PRESS = 0x01
+CCRC_SHORT = 0x02
+CCRC_LONG = 0x03
+
+# CCRC key_source (data[0]) — 어떤 입력 장치에서 온 키인지
+CCRC_SRC_RRC = 0x02             # 유선 RRC
+CCRC_SRC_BRRC = 0x07            # Bluetooth Rear Remote Control (기본)
+CCRC_SRC_REAR_LEFT_MONITOR = 0x0B
+CCRC_SRC_REAR_RIGHT_MONITOR = 0x0C
+
+# CCRC monitor 필드 (data[3]) — 대상 모니터
+# 주의: Touch 좌표용 screen_type(rear_right=1, rear_left=2)과 값이 반대!
+CCRC_MONITOR_LEFT = 0x01
+CCRC_MONITOR_RIGHT = 0x02
 
 # Screen type mapping for touch
 SCREEN_TOUCH_MAP = {
@@ -149,6 +167,23 @@ HKMC_KEYS = {
     # ---------- hkccic MKBD2 (CMD_MKBD2=0x72) ----------
     "MKBD2_TURN_LEFT":  {"cmd": CMD_MKBD2, "key": 0x01},
     "MKBD2_TURN_RIGHT": {"cmd": CMD_MKBD2, "key": 0x02},
+
+    # ---------- CCRC (CMD_CCRC=0x93) — 레거시 CCRC 프로토콜 (BRRC + rear monitor)
+    # data format: [key_source, key_type, key_status, monitor]
+    # ccrc=True: send_key_by_name에서 PRESS/SHORT/LONG/RELEASE 값이 CCRC_* 로 치환된다.
+    "CCRC_UP":           {"cmd": CMD_CCRC, "key": 0x00, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_DOWN":         {"cmd": CMD_CCRC, "key": 0x01, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_LEFT":         {"cmd": CMD_CCRC, "key": 0x03, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_RIGHT":        {"cmd": CMD_CCRC, "key": 0x06, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_ENTER":        {"cmd": CMD_CCRC, "key": 0x08, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_BACK":         {"cmd": CMD_CCRC, "key": 0x09, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_HOME":         {"cmd": CMD_CCRC, "key": 0x14, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_VOLUME_UP":    {"cmd": CMD_CCRC, "key": 0x15, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_VOLUME_DOWN":  {"cmd": CMD_CCRC, "key": 0x16, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_VOLUME_LEFT":  {"cmd": CMD_CCRC, "key": 0x17, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_VOLUME_RIGHT": {"cmd": CMD_CCRC, "key": 0x18, "ccrc": True, "source": CCRC_SRC_BRRC},  # MUTE
+    "CCRC_POWER_LEFT":   {"cmd": CMD_CCRC, "key": 0x1A, "ccrc": True, "source": CCRC_SRC_BRRC},
+    "CCRC_POWER_RIGHT":  {"cmd": CMD_CCRC, "key": 0x1B, "ccrc": True, "source": CCRC_SRC_BRRC},
 
     # ---------- hkccic SWRC2 (CMD_SWRC2=0x71) ----------
     "SWRC2_BACK":       {"cmd": CMD_SWRC2, "key": 0x01},
@@ -675,14 +710,23 @@ class HKMC6thService:
     # Touch input
     # ------------------------------------------------------------------
 
+    def _touch_screen_bits(self, screen_type: str) -> Optional[int]:
+        """rear_left/rear_right일 때만 LCD 패킷에 monitor 바이트 포함.
+        front_center는 None 반환 → 레거시 agent와의 호환성 유지.
+        """
+        if screen_type in ("rear_left", "rear_right"):
+            return SCREEN_TOUCH_MAP.get(screen_type)
+        return None
+
     def tap(self, x: int, y: int, screen_type: str = "front_center") -> None:
         """Tap at (x, y) using lcdTouch."""
         x, y = int(x), int(y)
+        st = self._touch_screen_bits(screen_type)
         # _capture_lock: 탭 동안 스크린샷 CMD_GETIMG 차단
         with self._capture_lock:
             time.sleep(0.3)
             with self._send_lock:
-                self._lcd_touch(x, y)
+                self._lcd_touch(x, y, st)
                 logger.info("[TAP] (%d,%d) screen=%s", x, y, screen_type)
             time.sleep(0.05)
 
@@ -690,11 +734,12 @@ class HKMC6thService:
                    screen_type: str = "front_center") -> None:
         """연속 터치 — lock/sleep 오버헤드를 최소화하여 빠르게 실행."""
         x, y = int(x), int(y)
+        st = self._touch_screen_bits(screen_type)
         interval_sec = interval_ms / 1000.0
         with self._capture_lock:
             with self._send_lock:
                 for i in range(count):
-                    self._lcd_touch(x, y)
+                    self._lcd_touch(x, y, st)
                     if i < count - 1 and interval_sec > 0:
                         time.sleep(interval_sec)
                 logger.info("[REPEAT_TAP] (%d,%d) ×%d @%dms screen=%s", x, y, count, interval_ms, screen_type)
@@ -704,23 +749,25 @@ class HKMC6thService:
                    screen_type: str = "front_center") -> None:
         """Long press at (x, y) — press, hold, release."""
         x, y = int(x), int(y)
+        st = self._touch_screen_bits(screen_type)
         with self._capture_lock:
             time.sleep(0.3)
             with self._send_lock:
-                self._lcd_touch(x, y)
+                self._lcd_touch(x, y, st)
                 logger.info("[LONG_PRESS] (%d,%d) %dms", x, y, duration_ms)
                 time.sleep(duration_ms / 1000.0)
-                self._lcd_touch(x, y)
+                self._lcd_touch(x, y, st)
             time.sleep(0.05)
 
     def swipe(self, x1: int, y1: int, x2: int, y2: int,
               screen_type: str = "front_center") -> None:
         """Swipe (drag) from (x1, y1) to (x2, y2) using lcdDrag."""
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        st = self._touch_screen_bits(screen_type)
         with self._capture_lock:
             time.sleep(0.3)
             with self._send_lock:
-                self._lcd_drag(x1, y1, x2, y2)
+                self._lcd_drag(x1, y1, x2, y2, st)
                 logger.info("[SWIPE] (%d,%d)->(%d,%d) screen=%s", x1, y1, x2, y2, screen_type)
             time.sleep(0.05)
 
@@ -773,6 +820,14 @@ class HKMC6thService:
     # Hardware keys
     # ------------------------------------------------------------------
 
+    def _send_ccrc_key(self, source: int, key_type: int, status: int, monitor: int) -> None:
+        """CCRC 전용 패킷 송신. data = [source, key_type, status, monitor], cmd=0x93 sub=0x00 resp=0x00."""
+        data = [source & 0xFF, key_type & 0xFF, status & 0xFF, monitor & 0xFF]
+        logger.debug("[HKMC CCRC] src=0x%02X key=0x%02X status=0x%02X mon=0x%02X",
+                     source, key_type, status, monitor)
+        with self._send_lock:
+            self._make_send_packet(CMD_CCRC, 0, 0, data)
+
     def send_key(self, cmd: int, sub_cmd: int, key_data: int,
                  monitor: int = 0x00, direction: Optional[int] = None) -> None:
         """Send a hardware key event (6th gen keyExt6th).
@@ -808,7 +863,7 @@ class HKMC6thService:
         base = HKMC_KEYS.get(key_name, {})
         ov = self._key_overrides.get(key_name, {})
         merged = dict(base)
-        for k in ("cmd", "key", "dial", "direction"):
+        for k in ("cmd", "key", "dial", "direction", "ccrc", "source"):
             if k in ov:
                 merged[k] = ov[k]
         if "cmd" not in merged or "key" not in merged:
@@ -823,14 +878,17 @@ class HKMC6thService:
         return dict(self._key_overrides)
 
     def send_key_by_name(self, key_name: str, sub_cmd: int = SHORT_KEY,
-                         monitor: int = 0x00, direction: Optional[int] = None) -> None:
+                         monitor: int = 0x00, direction: Optional[int] = None,
+                         screen_type: Optional[str] = None) -> None:
         """Send a hardware key by its name (e.g. 'CCP_ENTER', 'MKBD_MAP').
 
         Args:
             key_name: Key name from HKMC_KEYS
             sub_cmd: SHORT_KEY, LONG_KEY, PRESS_KEY, RELEASE_KEY, DIAL_ACTION
-            monitor: Target monitor
+            monitor: Target monitor (LEFT=0x01, RIGHT=0x02)
             direction: Direction for dial events
+            screen_type: CCRC 전용 — monitor 미지정 시 'rear_left'/'rear_right'에서
+                CCRC monitor 값 자동 유도.
         """
         key_info = self.resolve_key(key_name)
         if not key_info:
@@ -838,11 +896,40 @@ class HKMC6thService:
 
         cmd = key_info["cmd"]
         key_data = key_info["key"]
+        is_ccrc = bool(key_info.get("ccrc"))
+
+        # CCRC: monitor 미지정 시 screen_type으로부터 유도
+        if is_ccrc and monitor not in (CCRC_MONITOR_LEFT, CCRC_MONITOR_RIGHT):
+            if screen_type == "rear_left":
+                monitor = CCRC_MONITOR_LEFT
+            elif screen_type == "rear_right":
+                monitor = CCRC_MONITOR_RIGHT
 
         # _capture_lock: 키 시퀀스 중 스크린샷 CMD_GETIMG 차단
         with self._capture_lock:
             # Agent가 이전 이미지 응답 전송을 마칠 시간 확보
             time.sleep(0.3)
+            if is_ccrc:
+                # CCRC: cmd=0x93, data=[source, key, status, monitor]
+                # PRESS/SHORT/LONG/RELEASE 값이 일반 KEY와 다름 (0x01~0x03, 0x00).
+                source = key_info.get("source", CCRC_SRC_BRRC)
+                # monitor 0x00(NONE)이면 Right 모니터 기본값으로 보정 (레거시 CCRC_HK 기본).
+                mon = monitor if monitor in (CCRC_MONITOR_LEFT, CCRC_MONITOR_RIGHT) else CCRC_MONITOR_RIGHT
+                if sub_cmd == LONG_KEY:
+                    self._send_ccrc_key(source, key_data, CCRC_PRESS, mon)
+                    time.sleep(0.1)
+                    self._send_ccrc_key(source, key_data, CCRC_LONG, mon)
+                    time.sleep(0.1)
+                    self._send_ccrc_key(source, key_data, CCRC_RELEASE, mon)
+                else:
+                    # SHORT (기본) — PRESS → SHORT → RELEASE
+                    self._send_ccrc_key(source, key_data, CCRC_PRESS, mon)
+                    time.sleep(0.1)
+                    self._send_ccrc_key(source, key_data, CCRC_SHORT, mon)
+                    time.sleep(0.1)
+                    self._send_ccrc_key(source, key_data, CCRC_RELEASE, mon)
+                time.sleep(0.05)
+                return
             if key_info.get("dial"):
                 dir_val = direction if direction is not None else key_info.get("direction")
                 self.send_key(cmd, DIAL_ACTION, key_data, monitor, dir_val)
@@ -914,9 +1001,12 @@ class HKMC6thService:
         await loop.run_in_executor(None, self.send_key, cmd, sub_cmd, key_data, monitor, direction)
 
     async def async_send_key_by_name(self, key_name: str, sub_cmd: int = SHORT_KEY,
-                                     monitor: int = 0x00, direction: Optional[int] = None) -> None:
+                                     monitor: int = 0x00, direction: Optional[int] = None,
+                                     screen_type: Optional[str] = None) -> None:
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, self.send_key_by_name, key_name, sub_cmd, monitor, direction)
+        await loop.run_in_executor(
+            None, self.send_key_by_name, key_name, sub_cmd, monitor, direction, screen_type
+        )
 
     # ------------------------------------------------------------------
     # Utility

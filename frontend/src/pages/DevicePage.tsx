@@ -248,6 +248,7 @@ export default function DevicePage() {
     'HKMC': [
       { label: 'Connected Wide', value: 'Connected_Wide' },
       { label: 'CCIC', value: 'HKMC' },
+      { label: 'CCRC', value: 'CCRC' },
     ],
     'GM': [
       { label: 'GVM', value: 'GVM' },
