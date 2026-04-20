@@ -546,6 +546,14 @@ export default function RecordPage() {
   // Get current screen device info
   const screenDevice = primaryDevices.find(d => d.id === screenshotDeviceId);
   const isScreenHkmc = screenDevice?.type === 'hkmc6th' || screenDevice?.type === 'isap_agent';
+  const isScreenCCRC = isScreenHkmc && screenDevice?.info?.device_model === 'CCRC';
+
+  // CCRC: front_center/cluster 비허용 → 자동으로 rear_right로 교정
+  useEffect(() => {
+    if (isScreenCCRC && (screenType === 'front_center' || screenType === 'cluster' || !screenType)) {
+      setScreenType('rear_right');
+    }
+  }, [isScreenCCRC, screenType, setScreenType]);
   const isScreenAdb = screenDevice?.type === 'adb';
   // 카메라류(vision_camera/webcam)는 관찰 전용 — 조작(탭/스와이프/키) 금지
   const isScreenReadonly = screenDevice?.type === 'vision_camera' || screenDevice?.type === 'webcam';
@@ -2938,10 +2946,10 @@ export default function RecordPage() {
                       onChange={setScreenType}
                       style={{ minWidth: 120, maxWidth: 240 }}
                     >
-                      <Option value="front_center">{t('record.hkmcFront')}</Option>
+                      {!isScreenCCRC && <Option value="front_center">{t('record.hkmcFront')}</Option>}
                       <Option value="rear_left">{t('record.hkmcRearL')}</Option>
                       <Option value="rear_right">{t('record.hkmcRearR')}</Option>
-                      <Option value="cluster">{t('record.hkmcCluster')}</Option>
+                      {!isScreenCCRC && <Option value="cluster">{t('record.hkmcCluster')}</Option>}
                       {screenDevice?.type === 'isap_agent' && <Option value="hud">HUD</Option>}
                     </Select>
                     <Select
