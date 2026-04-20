@@ -375,16 +375,16 @@ async def root():
     }
 
 
+@app.websocket("/ws/dlt-lifecycle")
+async def websocket_dlt_lifecycle(websocket: WebSocket):
+    """DLT 세션 시작/종료 이벤트 스트림. (/ws/dlt/{...}보다 먼저 등록해야 path 파라미터가 삼키지 않음)"""
+    await dlt_router.ws_dlt_lifecycle(websocket)
+
+
 @app.websocket("/ws/dlt/{session_id:path}")
 async def websocket_dlt_stream(websocket: WebSocket, session_id: str):
     """DLT 로그 실시간 스트리밍 (세션별)."""
     await dlt_router.ws_dlt_stream(websocket, session_id)
-
-
-@app.websocket("/ws/dlt-lifecycle")
-async def websocket_dlt_lifecycle(websocket: WebSocket):
-    """DLT 세션 시작/종료 이벤트 스트림."""
-    await dlt_router.ws_dlt_lifecycle(websocket)
 
 
 @app.websocket("/ws/screen")

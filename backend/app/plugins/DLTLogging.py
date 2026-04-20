@@ -59,6 +59,8 @@ class _DLTHub:
             elif etype == "session_stopped" and sid:
                 self._sessions.pop(sid, None)
             subs = list(self._lifecycle_subs)
+        logger.info("[DLT_HUB] emit_lifecycle type=%s sid=%s subscribers=%d",
+                    etype, sid, len(subs))
         for q in subs:
             try:
                 q.put_nowait(event)

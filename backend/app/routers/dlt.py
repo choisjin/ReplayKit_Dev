@@ -170,6 +170,7 @@ async def ws_dlt_lifecycle(websocket: WebSocket):
     """세션 시작/종료 이벤트 스트림. 접속 시 현재 활성 세션들을 즉시 전달."""
     await websocket.accept()
     q: queue.Queue = DLT_HUB.register_lifecycle()
+    logger.info("[DLT WS] lifecycle subscriber connected (total queues)")
     loop = asyncio.get_event_loop()
     try:
         while True:
