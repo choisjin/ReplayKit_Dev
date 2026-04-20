@@ -335,8 +335,12 @@ class DLTLogging:
         with self._lock:
             logs_snapshot = list(self._logs)
 
+        # save_path 해석: 빈 값 → 자동 경로+파일명, 파일명만 → 자동 디렉토리 하위
         if not save_path:
             save_path = _auto_save_path("dlt")
+        elif not os.path.dirname(save_path):
+            base_dir = Path(_auto_save_path("dlt")).parent
+            save_path = str(base_dir / save_path)
 
         saved_path = ""
         try:
@@ -460,11 +464,20 @@ class DLTLogging:
     def _watch_save_and_stop(self, logs_slice: list, save_path: str, keyword: str,
                              check_count: int, matched: bool, reason: str = "") -> str:
         """WatchAndStop 종료 처리 — 저장 + 연결 해제 + lifecycle emit.
-        save_path가 비어있으면 컨텍스트별 자동 경로 사용.
+
+        save_path 해석:
+          - 빈 값:           컨텍스트별 자동 경로 + 자동 파일명
+            (재생: {run_dir}/logs/dlt_watch_{ts}.log, 스텝 테스트: backend/results/Temp_logs/...)
+          - 파일명만 지정:   자동 디렉토리 하위에 해당 파일명으로 저장
+          - 절대/상대 경로:  지정 경로 그대로 사용
         """
         sid = self._session_id()
         if not save_path:
             save_path = _auto_save_path("dlt_watch")
+        elif not os.path.dirname(save_path):
+            # 파일명만 주어진 경우 → 컨텍스트별 자동 디렉토리 하위로 라우팅
+            base_dir = Path(_auto_save_path("dlt_watch")).parent
+            save_path = str(base_dir / save_path)
         saved = ""
         try:
             os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
