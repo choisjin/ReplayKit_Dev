@@ -226,7 +226,8 @@ export default function RecordPage() {
   const savedStepsRef = useRef<string>('[]');
   const saveScenarioRef = useRef<() => Promise<void>>(async () => {});
   const isDirty = useCallback(() => {
-    if (steps.length === 0) return false;
+    // steps.length === 0 인 경우에도 저장된 스냅샷이 비어있지 않으면 dirty
+    // (전체 삭제 후 저장 버튼이 사라져 이어녹화 시 서버에서 복원되는 버그 방지)
     const current = JSON.stringify(steps.map(({ _imageVer, ...rest }) => rest));
     return current !== savedStepsRef.current;
   }, [steps]);
@@ -3471,7 +3472,7 @@ export default function RecordPage() {
                   <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={startRecording}>
                     {editingExisting ? t('record.resumeRecording') : t('record.startRecording')}
                   </Button>
-                  {steps.length > 0 && (
+                  {(steps.length > 0 || isDirty()) && (
                     <Button size="small" icon={<SaveOutlined />} onClick={saveScenario} type={isDirty() ? 'primary' : 'default'} danger={isDirty()}>
                       {t('record.save')}{isDirty() ? ' *' : ''}
                     </Button>
