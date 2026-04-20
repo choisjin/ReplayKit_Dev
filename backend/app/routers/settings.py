@@ -435,8 +435,8 @@ async def git_log(limit: int = 100, fetch: bool = False):
 
 @router.post("/open-results-folder")
 async def open_results_folder():
-    """Results 폴더를 파일 탐색기로 열기."""
-    results_dir = _PROJECT_ROOT / "Results"
+    """Results 폴더를 파일 탐색기로 열기 (backend/results)."""
+    results_dir = _PROJECT_ROOT / "backend" / "results"
     results_dir.mkdir(parents=True, exist_ok=True)
     if sys.platform == "win32":
         os.startfile(str(results_dir))
