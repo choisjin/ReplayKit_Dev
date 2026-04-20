@@ -355,6 +355,124 @@ class DLTLogging:
         """뷰어 연동용: MarkStep 구간 검색. SearchRange의 alias."""
         return self.SearchRange(keyword, from_step, to_step, count)
 
+    def WatchAndStop(self, keyword: str, save_path: str = "",
+                     interval_ms: int = 500,
+                     max_checks: int = 0,
+                     timeout_sec: int = 0) -> str:
+        """StartLogging 중에 키워드를 주기적으로 감시하다 발견 시:
+        - 해당 키워드가 나타난 라인까지의 로그를 save_path에 저장
+        - DLT 연결 종료 + 뷰어에 session_stopped emit
+        블로킹 함수. 시나리오 스텝에서 호출하면 발견 또는 한도 도달까지 대기.
+
+        Args:
+            keyword: 감시할 키워드 (공백=AND)
+            save_path: 저장 파일 경로. 빈 값이면 매칭 시에도 저장 없이 종료만.
+            interval_ms: 체크 주기 (ms). 기본 500ms.
+            max_checks: 최대 체크 횟수. 0이면 제한 없음.
+            timeout_sec: 총 대기 시간 (초). 0이면 제한 없음.
+                (둘 다 0이면 기본 300초 타임아웃 적용 — 무한 블록 방지)
+
+        Returns:
+            "PASS: ..." 발견 시
+            "FAIL: ..." 한도 도달 시 (현재까지의 로그는 저장)
+        """
+        if not self._capturing:
+            return "ERROR: StartLogging이 실행 중이 아닙니다."
+
+        keywords = keyword.split() if keyword else []
+        if not keywords:
+            return "ERROR: keyword가 비어있습니다."
+
+        if max_checks <= 0 and timeout_sec <= 0:
+            timeout_sec = 300  # 안전장치: 최대 5분
+
+        interval = max(0.05, float(interval_ms) / 1000.0)
+        start_time = time.time()
+        check_count = 0
+        scan_pos = 0  # 다음 검사 시 시작할 인덱스 (이전 검사까지 본 위치)
+
+        while True:
+            check_count += 1
+
+            # 새로 추가된 라인만 복사 — O(delta). 전체 버퍼 복사 비용 제거.
+            with self._lock:
+                total_len = len(self._logs)
+                new_slice = self._logs[scan_pos:total_len] if total_len > scan_pos else []
+
+            matched_idx = -1
+            base = scan_pos
+            for i, line in enumerate(new_slice):
+                if all(k in line for k in keywords):
+                    matched_idx = base + i
+                    break
+
+            # 이 회차에서 본 범위 업데이트
+            scan_pos = total_len
+
+            if matched_idx >= 0:
+                # 매칭 — 전체 버퍼에서 해당 라인까지 한 번만 스냅샷
+                with self._lock:
+                    to_save = list(self._logs[:matched_idx + 1])
+                logger.info("[DLTLogging] WatchAndStop MATCH '%s' at idx=%d (check %d)",
+                            keyword, matched_idx, check_count)
+                return self._watch_save_and_stop(
+                    to_save, save_path, keyword, check_count, matched=True,
+                )
+
+            elapsed = time.time() - start_time
+            if timeout_sec > 0 and elapsed >= timeout_sec:
+                with self._lock:
+                    to_save = list(self._logs)
+                logger.info("[DLTLogging] WatchAndStop TIMEOUT '%s' after %.1fs (check %d)",
+                            keyword, elapsed, check_count)
+                return self._watch_save_and_stop(
+                    to_save, save_path, keyword, check_count,
+                    matched=False, reason="timeout",
+                )
+            if max_checks > 0 and check_count >= max_checks:
+                with self._lock:
+                    to_save = list(self._logs)
+                logger.info("[DLTLogging] WatchAndStop EXHAUSTED '%s' after %d checks",
+                            keyword, check_count)
+                return self._watch_save_and_stop(
+                    to_save, save_path, keyword, check_count,
+                    matched=False, reason="max_checks",
+                )
+
+            time.sleep(interval)
+
+    def _watch_save_and_stop(self, logs_slice: list, save_path: str, keyword: str,
+                             check_count: int, matched: bool, reason: str = "") -> str:
+        """WatchAndStop 종료 처리 — 저장 + 연결 해제 + lifecycle emit."""
+        sid = self._session_id()
+        saved = ""
+        if save_path:
+            try:
+                os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+                with open(save_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(logs_slice))
+                    if logs_slice:
+                        f.write("\n")
+                saved = save_path
+            except Exception as e:
+                logger.error("[DLTLogging] WatchAndStop save failed: %s", e)
+
+        self._disconnect()
+        DLT_HUB.emit_lifecycle({
+            "type": "session_stopped",
+            "session_id": sid,
+            "save_path": saved,
+            "stopped_at": time.time(),
+        })
+
+        lines = len(logs_slice)
+        tail = f"saved {lines} lines to {saved}" if saved else f"{lines} lines in memory (not saved)"
+        if matched:
+            return f"PASS: '{keyword}' found after {check_count} checks — {tail}"
+        if reason == "timeout":
+            return f"FAIL: '{keyword}' not found within timeout ({check_count} checks) — {tail}"
+        return f"FAIL: '{keyword}' not found after {check_count} checks — {tail}"
+
     def GetRecentLogs(self, limit: int = 1000) -> list[str]:
         """뷰어 backfill용 — 현재까지 캡처된 로그의 마지막 N줄."""
         with self._lock:
