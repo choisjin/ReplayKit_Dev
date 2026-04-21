@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button, Card, Checkbox, Input, InputNumber, List, Modal, Select, Space, Table, Tabs, Tag, message } from 'antd';
 import { ReloadOutlined, PlusOutlined, DisconnectOutlined, DeleteOutlined, WifiOutlined, SearchOutlined, EditOutlined, ApiOutlined, LinkOutlined, SettingOutlined, HolderOutlined } from '@ant-design/icons';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -243,36 +243,49 @@ export default function DevicePage() {
   const [deviceProject, setDeviceProject] = useState('');
   const [deviceModel, setDeviceModel] = useState('');
 
-  // 프로젝트별 디바이스 모델 목록 (value가 Device ID prefix가 됨)
-  const DEVICE_PROJECT_MODELS: Record<string, { label: string; value: string }[]> = {
-    'HKMC': [
-      { label: 'Connected Wide', value: 'Connected_Wide' },
-      { label: 'CCIC', value: 'HKMC' },
-      { label: 'CCRC', value: 'CCRC' },
-    ],
-    'GM': [
-      { label: 'GVM', value: 'GVM' },
-    ],
-    'General': [
-      { label: 'Android', value: 'Android' },
-      { label: 'Phone', value: 'Phone' },
-      { label: 'SSH', value: 'SSH' },
-    ],
-  };
+  // 프로젝트/모델 콤보는 backend/device_catalog.json 에서 로드 (AdminPage에서 편집)
+  interface CatalogModel { label: string; value: string; enabled: boolean }
+  interface CatalogProject { name: string; enabled: boolean; models: CatalogModel[] }
+  const [catalogProjects, setCatalogProjects] = useState<CatalogProject[]>([]);
+  const [moduleVisibility, setModuleVisibility] = useState<Record<string, boolean>>({});
 
-  const PROJECT_OPTIONS = [
+  useEffect(() => {
+    deviceApi.getCatalog().then(res => {
+      const data = res.data || {};
+      setCatalogProjects(Array.isArray(data.projects) ? data.projects : []);
+      setModuleVisibility(data.module_visibility || {});
+    }).catch(() => {
+      setCatalogProjects([]);
+      setModuleVisibility({});
+    });
+  }, []);
+
+  const PROJECT_OPTIONS = useMemo(() => [
     { label: '전체', value: '' },
-    ...Object.keys(DEVICE_PROJECT_MODELS)
-      .sort((a, b) => a.localeCompare(b))
-      .map(k => ({ label: k, value: k })),
-  ];
+    ...catalogProjects
+      .filter(p => p.enabled !== false)
+      .map(p => ({ label: p.name, value: p.name }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  ], [catalogProjects]);
 
   const DEVICE_MODELS = useMemo(() => {
-    const models = deviceProject
-      ? (DEVICE_PROJECT_MODELS[deviceProject] || [])
-      : Object.values(DEVICE_PROJECT_MODELS).flat();
-    return [...models].sort((a, b) => a.label.localeCompare(b.label));
-  }, [deviceProject]);
+    const enabledProjects = catalogProjects.filter(p => p.enabled !== false);
+    const src = deviceProject
+      ? enabledProjects.filter(p => p.name === deviceProject)
+      : enabledProjects;
+    const flat: { label: string; value: string }[] = [];
+    for (const p of src) {
+      for (const m of p.models) {
+        if (m.enabled !== false) flat.push({ label: m.label, value: m.value });
+      }
+    }
+    return flat.sort((a, b) => a.label.localeCompare(b.label));
+  }, [deviceProject, catalogProjects]);
+
+  const isModuleVisible = useCallback((name?: string) => {
+    if (!name) return true;
+    return moduleVisibility[name] !== false;
+  }, [moduleVisibility]);
 
   // VisionCamera
   const [vcMac, setVcMac] = useState('');
@@ -287,6 +300,8 @@ export default function DevicePage() {
 
   // Module
   const [modules, setModules] = useState<ModuleInfo[]>([]);
+  // 표시 가능한 모듈 목록 (사용자 선택 UI에서 참조 — AdminPage에서 체크 해제 시 숨김)
+  const visibleModules = useMemo(() => modules.filter(m => isModuleVisible(m.name)), [modules, isModuleVisible]);
   const [selectedModule, setSelectedModule] = useState<string | undefined>(undefined);
   const [scanSelectedModule, setScanSelectedModule] = useState<string | undefined>(undefined);
   const [extraFieldValues, setExtraFieldValues] = useState<Record<string, any>>({});
@@ -1043,7 +1058,7 @@ export default function DevicePage() {
                                       value={scanSelectedModule}
                                       onChange={setScanSelectedModule}
                                       style={{ width: 280 }}
-                                      options={modules.map(m => ({ label: m.label, value: m.name }))}
+                                      options={visibleModules.map(m => ({ label: m.label, value: m.name }))}
                                     />
                                   </div>
                                 )}
@@ -1127,7 +1142,7 @@ export default function DevicePage() {
                                   onChange={setScanSelectedModule}
                                   style={{ width: 280 }}
                                   defaultValue="CCIC_BENCH"
-                                  options={modules.filter(m => m.connect_type === 'socket').map(m => ({ label: m.label, value: m.name }))}
+                                  options={visibleModules.filter(m => m.connect_type === 'socket').map(m => ({ label: m.label, value: m.name }))}
                                 />
                               </div>
                             )}
@@ -1483,7 +1498,7 @@ export default function DevicePage() {
                           else setConnectType('serial');
                         }}
                         style={{ width: '100%' }}
-                        options={modules.map(m => ({ label: `${m.label} [${m.connect_type}]`, value: m.name }))}
+                        options={visibleModules.map(m => ({ label: `${m.label} [${m.connect_type}]`, value: m.name }))}
                       />
                     )}
 
@@ -1766,9 +1781,9 @@ export default function DevicePage() {
                     if (editDevice.category === 'primary') {
                       // 주 디바이스: 프로젝트별 모델 목록 + 기존 primary prefix
                       const opts = new Map<string, string>(); // value → label
-                      Object.entries(DEVICE_PROJECT_MODELS).forEach(([proj, models]) => {
-                        models.forEach(m => {
-                          if (m.value) opts.set(m.value, `${m.label} [${proj}]`);
+                      catalogProjects.filter(p => p.enabled !== false).forEach(proj => {
+                        proj.models.filter(m => m.enabled !== false).forEach(m => {
+                          if (m.value) opts.set(m.value, `${m.label} [${proj.name}]`);
                         });
                       });
                       // 기존 primary prefix 추가 (모델 목록에 없고, 모듈명이 아닌 것만)
@@ -1838,7 +1853,9 @@ export default function DevicePage() {
                   value={editModule}
                   onChange={setEditModule}
                   style={{ width: '100%' }}
-                  options={modules.map(m => ({ label: m.label, value: m.name }))}
+                  options={modules
+                    .filter(m => isModuleVisible(m.name) || m.name === editModule)
+                    .map(m => ({ label: m.label, value: m.name }))}
                 />
               </div>
             )}
@@ -1975,7 +1992,7 @@ export default function DevicePage() {
                   <td style={{ padding: '4px' }}>
                     <Select size="small" allowClear placeholder="-" value={v.module || undefined}
                       onChange={val => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, module: val || '' } })}
-                      style={{ width: '100%' }} options={modules.map(m => ({ label: m.label, value: m.name }))} />
+                      style={{ width: '100%' }} options={visibleModules.map(m => ({ label: m.label, value: m.name }))} />
                   </td>
                   <td></td>
                 </tr>
@@ -1994,7 +2011,7 @@ export default function DevicePage() {
                 <td style={{ padding: '4px' }}>
                   <Select size="small" allowClear placeholder="-" value={entry.module || undefined}
                     onChange={val => { const n = [...scanCustom]; n[idx] = { ...entry, module: val || '' }; setScanCustom(n); }}
-                    style={{ width: '100%' }} options={modules.map(m => ({ label: m.label, value: m.name }))} />
+                    style={{ width: '100%' }} options={visibleModules.map(m => ({ label: m.label, value: m.name }))} />
                 </td>
                 <td style={{ padding: '4px' }}>
                   <Button size="small" type="text" danger icon={<DeleteOutlined />}
@@ -2020,7 +2037,7 @@ export default function DevicePage() {
               <td style={{ padding: '4px' }}>
                 <Select size="small" allowClear placeholder="Module" value={newCustomModule || undefined}
                   onChange={v => setNewCustomModule(v || '')} style={{ width: '100%' }}
-                  options={modules.map(m => ({ label: m.label, value: m.name }))} />
+                  options={visibleModules.map(m => ({ label: m.label, value: m.name }))} />
               </td>
               <td style={{ padding: '4px' }}>
                 <Button size="small" type="primary" icon={<PlusOutlined />}

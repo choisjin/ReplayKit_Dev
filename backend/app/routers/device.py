@@ -60,6 +60,55 @@ def _save_scan_settings(settings: dict) -> None:
     _SCAN_SETTINGS_FILE.write_text(_json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+# ── 디바이스 카탈로그 (프로젝트/모델 콤보 + 모듈 표시여부) ──
+_DEVICE_CATALOG_FILE = Path(__file__).resolve().parent.parent.parent / "device_catalog.json"
+
+_DEFAULT_DEVICE_CATALOG: dict = {
+    "projects": [
+        {
+            "name": "HKMC",
+            "enabled": True,
+            "models": [
+                {"label": "Connected Wide", "value": "Connected_Wide", "enabled": True},
+                {"label": "CCIC",           "value": "HKMC",            "enabled": True},
+                {"label": "CCRC",           "value": "CCRC",            "enabled": True},
+            ],
+        },
+        {
+            "name": "GM",
+            "enabled": True,
+            "models": [
+                {"label": "GVM", "value": "GVM", "enabled": True},
+            ],
+        },
+        {
+            "name": "General",
+            "enabled": True,
+            "models": [
+                {"label": "Android", "value": "Android", "enabled": True},
+                {"label": "Phone",   "value": "Phone",   "enabled": True},
+                {"label": "SSH",     "value": "SSH",     "enabled": True},
+            ],
+        },
+    ],
+    # 모듈 표시 여부 (false = 아직 미구현/숨김). 리스트에 없으면 기본 표시.
+    "module_visibility": {},
+}
+
+
+def _load_device_catalog() -> dict:
+    if _DEVICE_CATALOG_FILE.exists():
+        try:
+            return _json.loads(_DEVICE_CATALOG_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return _json.loads(_json.dumps(_DEFAULT_DEVICE_CATALOG))  # deep copy
+
+
+def _save_device_catalog(cat: dict) -> None:
+    _DEVICE_CATALOG_FILE.write_text(_json.dumps(cat, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _parse_adb_display_id(screen_type: str | None) -> int | None:
     """screen_type 문자열에서 ADB display_id 추출. '0', '2' 등 숫자 또는 None."""
     if screen_type is None:
@@ -150,6 +199,22 @@ async def save_scan_settings(request: Request):
     """스캔 설정 저장."""
     body = await request.json()
     _save_scan_settings(body)
+    return {"status": "ok"}
+
+
+@router.get("/catalog")
+async def get_device_catalog():
+    """프로젝트/모델 콤보 + 모듈 표시여부 카탈로그 조회."""
+    return _load_device_catalog()
+
+
+@router.post("/catalog")
+async def save_device_catalog(request: Request):
+    """관리용 — 프로젝트/모델/모듈 표시여부 카탈로그 저장."""
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be an object")
+    _save_device_catalog(body)
     return {"status": "ok"}
 
 

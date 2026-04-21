@@ -28,6 +28,7 @@ import ScenarioPage from './pages/ScenarioPage';
 import ResultsPage from './pages/ResultsPage';
 import SettingsPage from './pages/SettingsPage';
 import ChangelogPage from './pages/ChangelogPage';
+import AdminPage from './pages/AdminPage';
 import WebcamPip from './components/WebcamPip';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import PlaybackStatusBanner from './components/PlaybackStatusBanner';
@@ -45,8 +46,24 @@ const pageKeys = [
   { key: '/changelog', icon: <HistoryOutlined />, labelKey: 'nav.changelog' as const, component: <ChangelogPage /> },
 ];
 
+// 메뉴에 노출되지 않는 숨김 페이지 (URL hash로 접근)
+const HIDDEN_ADMIN_KEY = '/admin';
+
 function AppContent() {
-  const [activeKey, setActiveKey] = useState('/');
+  // URL hash가 #admin이면 AdminPage로 초기화 (새로고침 시에도 유지)
+  const initialKey = (typeof window !== 'undefined' && window.location.hash === '#admin') ? HIDDEN_ADMIN_KEY : '/';
+  const [activeKey, setActiveKey] = useState(initialKey);
+
+  // hash 변경 감지 — 사용자가 주소창에서 #admin / #admin 해제 시 즉시 전환
+  useEffect(() => {
+    const onHashChange = () => {
+      if (window.location.hash === '#admin') setActiveKey(HIDDEN_ADMIN_KEY);
+      else if (activeKey === HIDDEN_ADMIN_KEY) setActiveKey('/');
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [siderCollapsed, setSiderCollapsed] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [diskInfoList, setDiskInfoList] = useState<{ drive: string; free_gb: number; total_gb: number; used_percent: number }[]>([]);
@@ -378,11 +395,17 @@ function AppContent() {
             <AnnouncementBanner />
             <PlaybackStatusBanner />
             {backendReady ? (
-              pages.map(({ key, component }) => (
-                <div key={key} style={{ display: activeKey === key ? 'block' : 'none' }}>
-                  {component}
+              <>
+                {pages.map(({ key, component }) => (
+                  <div key={key} style={{ display: activeKey === key ? 'block' : 'none' }}>
+                    {component}
+                  </div>
+                ))}
+                {/* 숨김 admin 페이지 — URL hash #admin 으로 접근 */}
+                <div style={{ display: activeKey === HIDDEN_ADMIN_KEY ? 'block' : 'none' }}>
+                  <AdminPage />
                 </div>
-              ))
+              </>
             ) : (
               <div style={{
                 display: 'flex', flexDirection: 'column',

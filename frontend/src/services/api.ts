@@ -12,6 +12,8 @@ export const deviceApi = {
   scan: () => api.get('/device/scan'),
   getScanSettings: () => api.get('/device/scan-settings'),
   saveScanSettings: (settings: any) => api.post('/device/scan-settings', settings),
+  getCatalog: () => api.get('/device/catalog'),
+  saveCatalog: (catalog: any) => api.post('/device/catalog', catalog),
   connect: (type: string, address: string, baudrate?: number, name?: string, category?: string, module?: string, connect_type?: string, extra_fields?: Record<string, any>, device_id?: string, port?: number, device_model?: string) =>
     api.post('/device/connect', { type, address, baudrate, name, category, module, connect_type, extra_fields, device_id, port, device_model }),
   listHkmcKeys: (deviceId?: string) =>
