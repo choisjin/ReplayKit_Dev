@@ -2093,75 +2093,54 @@ export default function RecordPage() {
   saveScenarioRef.current = saveScenario;
 
   // 기대이미지 백엔드 API 호출 전 미저장 변경사항 동기화
-  // 프론트엔드 steps 상태를 백엔드 in-memory 시나리오로 즉시 동기화.
-  // 녹화 중 이동·복사·재정렬로 인한 step_index 불일치를 방지.
-  const syncFrontendStepsToBackend = async (): Promise<boolean> => {
-    if (!recording || !scenarioName.trim()) return true;
-    const reindexed = steps.map((s, i) => {
+  // 프론트엔드 steps 상태를 백엔드(in-memory 혹은 디스크)에 즉시 동기화.
+  //  - recording: in-memory `_current_scenario` 갱신 (sync-steps)
+  //  - !recording && editingExisting: 디스크 파일 저장 (PUT /scenario/:name)
+  //  - explicitSteps가 주어지면 현재 state 대신 그 배열을 사용 (setSteps 직후 경합 방지)
+  const syncFrontendStepsToBackend = async (explicitSteps?: Step[]): Promise<boolean> => {
+    if (!scenarioName.trim()) return true;
+    const source = explicitSteps ?? steps;
+    const reindexed = source.map((s, i) => {
       const { _imageVer, ...rest } = s;
       return { ...rest, id: i + 1 };
     });
-    try {
-      await scenarioApi.syncSteps(scenarioName.trim(), reindexed);
-      return true;
-    } catch (e: any) {
-      console.warn('sync-steps failed:', e?.response?.data?.detail || e);
-      return false;
+    if (recording) {
+      try {
+        await scenarioApi.syncSteps(scenarioName.trim(), reindexed);
+        return true;
+      } catch (e: any) {
+        console.warn('sync-steps failed:', e?.response?.data?.detail || e);
+        return false;
+      }
     }
+    // 비녹화 + 기존 편집: 디스크 저장으로 동기화
+    if (editingExisting) {
+      try {
+        const newName = scenarioName.trim();
+        await scenarioApi.update(newName, {
+          ...scenarioMetaRef.current,
+          name: newName,
+          description,
+          steps: reindexed,
+        });
+        savedStepsRef.current = JSON.stringify(reindexed);
+        return true;
+      } catch (e: any) {
+        console.warn('disk save failed:', e?.response?.data?.detail || e);
+        return false;
+      }
+    }
+    // 신규 시나리오 미녹화: 저장할 곳 없음 (no-op)
+    return true;
   };
 
-  // 백엔드의 _resolve_scenario가 recording 중이면 in-memory _current_scenario를,
-  // 아니면 디스크 파일을 사용하므로 이미지 작업 전에 양쪽을 모두 일치시킨다.
-  //  - recording (신규/이어녹화 공통): 프론트 steps → in-memory sync (필수)
-  //  - editingExisting & dirty: 디스크 save도 병행
+  // 이미지 작업 전 백엔드(in-memory or 디스크)를 프론트 steps로 동기화.
+  // syncFrontendStepsToBackend가 recording/editingExisting 분기를 일원화 처리한다.
   const ensureSavedForImageOp = async (): Promise<boolean> => {
     if (!scenarioName.trim()) return true;
-    // 녹화 중이면 언제나 in-memory 우선 동기화 (_resolve_scenario가 이를 반환하므로)
-    if (recording) {
-      const ok = await syncFrontendStepsToBackend();
-      // editingExisting인 경우 추가로 디스크에도 반영 (다른 경로/재로드 대비)
-      if (ok && editingExisting && isDirty()) {
-        try {
-          const newName = scenarioName.trim();
-          const reindexed = steps.map((s, i) => {
-            const { _imageVer, ...rest } = s;
-            return { ...rest, id: i + 1 };
-          });
-          await scenarioApi.update(newName, {
-            ...scenarioMetaRef.current,
-            name: newName,
-            description,
-            steps: reindexed,
-          });
-          const savedSteps = reindexed.map((s, i) => ({ ...s, _imageVer: steps[i]?._imageVer }));
-          setSteps(savedSteps);
-          savedStepsRef.current = JSON.stringify(reindexed);
-        } catch { /* 디스크 저장 실패는 in-memory sync 성공 시 무시 */ }
-      }
-      return ok;
-    }
-    // 녹화 아님 + 기존 편집: 디스크 save만
-    if (!editingExisting) return true;
-    if (!isDirty()) return true;
-    try {
-      const newName = scenarioName.trim();
-      const reindexed = steps.map((s, i) => {
-        const { _imageVer, ...rest } = s;
-        return { ...rest, id: i + 1 };
-      });
-      await scenarioApi.update(newName, {
-        ...scenarioMetaRef.current,
-        name: newName,
-        description,
-        steps: reindexed,
-      });
-      const savedSteps = reindexed.map((s, i) => ({ ...s, _imageVer: steps[i]?._imageVer }));
-      setSteps(savedSteps);
-      savedStepsRef.current = JSON.stringify(reindexed);
-      return true;
-    } catch {
-      return false;
-    }
+    // 변경사항 없고 녹화도 아니면 스킵 (최적화)
+    if (!recording && !isDirty()) return true;
+    return await syncFrontendStepsToBackend();
   };
 
   // Helper: remap goto references after step reorder/delete
@@ -2227,14 +2206,10 @@ export default function RecordPage() {
       }));
       return reordered;
     });
-    // 녹화 중이면 백엔드 in-memory 시나리오도 즉시 동기화
-    if (recording && scenarioName.trim() && reordered.length > 0) {
-      const payload = reordered.map((s, i) => {
-        const { _imageVer, ...rest } = s;
-        return { ...rest, id: i + 1 };
-      });
-      scenarioApi.syncSteps(scenarioName.trim(), payload).catch((e: any) => {
-        console.warn('sync-steps after move failed:', e?.response?.data?.detail || e);
+    // 녹화/편집 모드 모두에서 즉시 백엔드 동기화 (in-memory 또는 디스크)
+    if (scenarioName.trim() && reordered.length > 0) {
+      syncFrontendStepsToBackend(reordered).catch((e: any) => {
+        console.warn('sync after move failed:', e);
       });
     }
   };
@@ -2342,14 +2317,10 @@ export default function RecordPage() {
       });
       setImportStepModalOpen(false);
       message.success(t('record.stepsMoved', { count: sortedIndices.length }));
-      // 녹화 중이면 백엔드 in-memory 시나리오도 즉시 동기화
-      if (recording && scenarioName.trim() && reordered.length > 0) {
-        const payload = reordered.map((s, i) => {
-          const { _imageVer, ...rest } = s;
-          return { ...rest, id: i + 1 };
-        });
-        scenarioApi.syncSteps(scenarioName.trim(), payload).catch((e: any) => {
-          console.warn('sync-steps after bulk move failed:', e?.response?.data?.detail || e);
+      // 녹화/편집 모드 모두에서 즉시 백엔드 동기화
+      if (scenarioName.trim() && reordered.length > 0) {
+        syncFrontendStepsToBackend(reordered).catch((e: any) => {
+          console.warn('sync after bulk move failed:', e);
         });
       }
       return;
@@ -2370,14 +2341,10 @@ export default function RecordPage() {
       });
       setImportStepModalOpen(false);
       message.success(t('record.stepsImported', { count: imported.length }));
-      // 녹화 중이면 백엔드 in-memory 시나리오도 즉시 동기화 (import-steps는 target을 변경하지 않음)
-      if (recording && scenarioName.trim() && merged.length > 0) {
-        const payload = merged.map((s, i) => {
-          const { _imageVer, ...rest } = s;
-          return { ...rest, id: i + 1 };
-        });
-        scenarioApi.syncSteps(scenarioName.trim(), payload).catch((e: any) => {
-          console.warn('sync-steps after copy failed:', e?.response?.data?.detail || e);
+      // 녹화/편집 모드 모두에서 즉시 백엔드 동기화 (import-steps는 target을 변경하지 않음)
+      if (scenarioName.trim() && merged.length > 0) {
+        syncFrontendStepsToBackend(merged).catch((e: any) => {
+          console.warn('sync after copy failed:', e);
         });
       }
     } catch (e: any) {
