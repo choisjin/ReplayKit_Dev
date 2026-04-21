@@ -949,7 +949,14 @@ export default function RecordPage() {
     const targetDevice = screenshotDeviceId;
 
     if (recording && targetDevice) {
-      // 녹화 중 — 통합 스텝 기록 + 로컬 실행 (개별 스텝 억제)
+      // 녹화 중 — 개별 RAND 액션의 스텝 기록을 즉시 차단한 뒤,
+      // 통합 설정 스텝 1개 기록 + 로컬 스트레스 실행을 수행한다.
+      // (억제 플래그를 addStep 대기 이전에 설정해야 경합·오류 상황에서도 이중 기록 방지)
+      suppressStepAddRef.current = true;
+      randStopRef.current = false;
+      setRandRunning(true);
+      setRandProgress({ current: 0, total });
+
       const { w, h } = (() => {
         if (screenDevice?.type === 'isap_agent') {
           const el = canvasRef.current;
@@ -991,19 +998,23 @@ export default function RecordPage() {
       } catch (e: any) {
         const detail = e.response?.data?.detail;
         message.error(typeof detail === 'string' ? detail : t('record.stepRecordFailed'));
-      } finally {
+        // 통합 스텝 기록 실패 시에는 로컬 실행도 하지 않고 종료 (의도치 않은 개별 동작 방지)
+        suppressStepAddRef.current = false;
+        setRandRunning(false);
         pendingStepsRef.current -= 1;
         if (pendingStepsRef.current <= 0) {
           pendingStepsRef.current = 0;
           setHasPendingSteps(false);
         }
+        return;
+      }
+      pendingStepsRef.current -= 1;
+      if (pendingStepsRef.current <= 0) {
+        pendingStepsRef.current = 0;
+        setHasPendingSteps(false);
       }
 
-      // 로컬 스트레스 실행 (개별 스텝 기록 억제)
-      suppressStepAddRef.current = true;
-      randStopRef.current = false;
-      setRandRunning(true);
-      setRandProgress({ current: 0, total });
+      // 로컬 스트레스 실행 (suppressStepAddRef로 개별 스텝 이미 차단됨)
       let i = 0;
       const tick = () => {
         if (randStopRef.current || i >= total) {
