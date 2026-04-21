@@ -39,6 +39,7 @@ _DEFAULT_SCAN_SETTINGS = {
         "vision_camera":  {"enabled": False, "module": "VisionCamera"},
         "webcam":         {"enabled": True,  "module": "WebcamDevice"},
         "ssh":            {"enabled": True,  "module": "SSHManager", "port": 22},
+        "smartbench":     {"enabled": True,  "module": "SmartBench", "host": "192.167.0.5", "port": 8000},
     },
     # type: "tcp" | "udp"
     # [{"label": "MLP", "type": "tcp", "port": 5001, "module": "MLP", "enabled": true}, ...]
@@ -223,7 +224,14 @@ async def scan_ports():
     if _enabled("dlt"):
         tasks["dlt_devices"] = asyncio.ensure_future(dm.scan_dlt(ports=_ports_of("dlt")))
     if _enabled("smartbench"):
-        tasks["smartbench_devices"] = asyncio.ensure_future(dm.scan_smartbench())
+        sb_entry = builtin.get("smartbench", {}) if isinstance(builtin.get("smartbench"), dict) else {}
+        sb_host = str(sb_entry.get("host") or "").strip() or None
+        sb_port = sb_entry.get("port")
+        try:
+            sb_port = int(sb_port) if sb_port is not None else None
+        except (TypeError, ValueError):
+            sb_port = None
+        tasks["smartbench_devices"] = asyncio.ensure_future(dm.scan_smartbench(host=sb_host, port=sb_port))
     if _enabled("ssh"):
         ssh_entry = builtin.get("ssh", {}) if isinstance(builtin.get("ssh"), dict) else {}
         ssh_port = int(ssh_entry.get("port", 22))

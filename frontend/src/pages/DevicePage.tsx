@@ -303,7 +303,7 @@ export default function DevicePage() {
 
   // Scan settings modal
   const [scanSettingsOpen, setScanSettingsOpen] = useState(false);
-  const [scanBuiltin, setScanBuiltin] = useState<Record<string, { enabled: boolean; module: string; port?: number; ports?: number[] }>>({
+  const [scanBuiltin, setScanBuiltin] = useState<Record<string, { enabled: boolean; module: string; port?: number; ports?: number[]; host?: string }>>({
     adb: { enabled: true, module: '' },
     serial: { enabled: true, module: 'SerialLogging' },
     hkmc: { enabled: true, module: '', ports: [6655, 5000] },
@@ -313,6 +313,7 @@ export default function DevicePage() {
     vision_camera: { enabled: false, module: 'VisionCamera' },
     webcam: { enabled: true, module: 'WebcamDevice' },
     ssh: { enabled: true, module: 'SSHManager', port: 22 },
+    smartbench: { enabled: true, module: 'SmartBench', host: '192.167.0.5', port: 8000 },
   });
   const [scanCustom, setScanCustom] = useState<{ label: string; type: string; port: number; module: string; enabled: boolean }[]>([]);
   const [newCustomLabel, setNewCustomLabel] = useState('');
@@ -1925,6 +1926,7 @@ export default function DevicePage() {
               { key: 'vision_camera', label: 'Vision Camera', proto: 'GigE', editablePorts: false },
               { key: 'webcam', label: 'Webcam', proto: 'USB', editablePorts: false },
               { key: 'ssh', label: 'SSH', proto: 'TCP', editablePorts: false },
+              { key: 'smartbench', label: 'SmartBench', proto: 'TCP', editablePorts: false },
             ].map(item => {
               const v = scanBuiltin[item.key] || { enabled: true, module: '' };
               const portsStr = v.ports && v.ports.length > 0 ? v.ports.join(',') : '';
@@ -1953,6 +1955,24 @@ export default function DevicePage() {
                           setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, ports } });
                         }}
                       />
+                    ) : item.key === 'smartbench' ? (
+                      <Space.Compact size="small" style={{ width: '100%' }}>
+                        <Input
+                          size="small"
+                          value={v.host ?? '192.167.0.5'}
+                          placeholder="host"
+                          style={{ flex: 1 }}
+                          onChange={e => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, host: e.target.value } })}
+                        />
+                        <InputNumber
+                          size="small"
+                          min={1} max={65535}
+                          value={v.port ?? 8000}
+                          placeholder="port"
+                          style={{ width: 80 }}
+                          onChange={p => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, port: p ?? 8000 } })}
+                        />
+                      </Space.Compact>
                     ) : portLabel}
                   </td>
                   <td style={{ padding: '4px' }}>
