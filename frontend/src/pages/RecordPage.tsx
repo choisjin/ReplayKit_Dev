@@ -3100,7 +3100,7 @@ export default function RecordPage() {
                     style={{ minWidth: 140, maxWidth: 280 }}
                   >
                     {connectedPrimaryDevices.map(d => (
-                      <Option key={d.id} value={d.id}>{d.name || d.id}</Option>
+                      <Option key={d.id} value={d.id}>{d.id}</Option>
                     ))}
                   </Select>
                   {screenDevice && (
