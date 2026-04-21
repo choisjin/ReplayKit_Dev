@@ -318,6 +318,8 @@ export default function RecordPage() {
   const [randRunning, setRandRunning] = useState<boolean>(false);
   const [randProgress, setRandProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
   const randStopRef = useRef<boolean>(false);
+  // ALL RAND 실행 중에는 개별 HK/SK/DRAG 액션이 별도 스텝으로 기록되지 않도록 억제
+  const suppressStepAddRef = useRef<boolean>(false);
   // 하드키 롱프레스 타이머 — 리렌더에도 유지 (키이름 → {downTs, timer})
   const hkTimerRef = useRef<Map<string, { downTs: number; timer: number }>>(new Map());
   // Region 모달용 canvas/drag ref
@@ -764,7 +766,7 @@ export default function RecordPage() {
 
     const alreadyExecuted = false;
 
-    if (recording) {
+    if (recording && !suppressStepAddRef.current) {
       // Optimistic UI: show step immediately
       const tempId = steps.length + 1;
       const optimisticStep: Step = {
@@ -932,7 +934,99 @@ export default function RecordPage() {
 
   const stopRandRepeat = useCallback(() => {
     randStopRef.current = true;
+    // ALL RAND 중단 시 스텝 기록 억제 플래그도 해제
+    suppressStepAddRef.current = false;
   }, []);
+
+  // ALL RAND 전용 핸들러:
+  //  - 녹화 중: 통합 설정을 담은 all_random 스텝 1개를 추가하고, 로컬 스트레스 실행은
+  //    suppressStepAddRef로 개별 HK/SK/DRAG 스텝 기록을 억제하여 이중 기록을 방지
+  //  - 비녹화: 기존 동작과 동일 (즉시 스트레스 실행만)
+  const allRandHandler = useCallback(async () => {
+    if (randRunning) return;
+    const total = Math.max(1, Math.floor(randRepeatCount || 1));
+    const interval = Math.max(0, Math.floor(randIntervalMs || 0));
+    const targetDevice = screenshotDeviceId;
+
+    if (recording && targetDevice) {
+      // 녹화 중 — 통합 스텝 기록 + 로컬 실행 (개별 스텝 억제)
+      const { w, h } = (() => {
+        if (screenDevice?.type === 'isap_agent') {
+          const el = canvasRef.current;
+          if (el && el.width > 0 && el.height > 0) return { w: el.width, h: el.height };
+        }
+        return { w: deviceRes.width || 1920, h: deviceRes.height || 720 };
+      })();
+
+      const hkPool = (randHkKeysConfig && randHkKeysConfig.length > 0)
+        ? randHkKeysConfig
+        : hkmcKeys.filter(k => k.visible !== false && !k.is_dial).map(k => k.name);
+
+      const params: Record<string, any> = {
+        repeat_count: total,
+        interval_ms: interval,
+        weights: { hk: 0.20, sk: 0.70, drag: 0.10 },
+        hk_keys: hkPool,
+        sk_region: randSkRegion,
+        drag_region: randDragRegion,
+        screen_type: screenType,
+        x_offset: (isScreenHkmc && hkmcDisplayMode === 'integrated') ? 1920 : 0,
+        res_width: w,
+        res_height: h,
+      };
+      const desc = `ALL RAND ×${total} @${interval}ms (HK:${hkPool.length}${randSkRegion ? ' SK▣' : ''}${randDragRegion ? ' DRAG▣' : ''})`;
+
+      pendingStepsRef.current += 1;
+      setHasPendingSteps(true);
+      try {
+        const res = await scenarioApi.addStep({
+          type: 'all_random',
+          device_id: targetDevice,
+          params,
+          description: desc,
+          delay_after_ms: delayMs,
+          skip_execute: true,
+        });
+        setSteps((prev) => [...prev, res.data.step]);
+      } catch (e: any) {
+        const detail = e.response?.data?.detail;
+        message.error(typeof detail === 'string' ? detail : t('record.stepRecordFailed'));
+      } finally {
+        pendingStepsRef.current -= 1;
+        if (pendingStepsRef.current <= 0) {
+          pendingStepsRef.current = 0;
+          setHasPendingSteps(false);
+        }
+      }
+
+      // 로컬 스트레스 실행 (개별 스텝 기록 억제)
+      suppressStepAddRef.current = true;
+      randStopRef.current = false;
+      setRandRunning(true);
+      setRandProgress({ current: 0, total });
+      let i = 0;
+      const tick = () => {
+        if (randStopRef.current || i >= total) {
+          suppressStepAddRef.current = false;
+          setRandRunning(false);
+          return;
+        }
+        try { allRand(); } catch (e) { console.error('ALL RAND error:', e); }
+        i += 1;
+        setRandProgress({ current: i, total });
+        if (i < total && !randStopRef.current) {
+          setTimeout(tick, interval);
+        } else {
+          suppressStepAddRef.current = false;
+          setRandRunning(false);
+        }
+      };
+      tick();
+    } else {
+      // 비녹화 — 기존 동작
+      runRandomRepeat(allRand);
+    }
+  }, [randRunning, randRepeatCount, randIntervalMs, recording, screenshotDeviceId, screenDevice, deviceRes, randHkKeysConfig, hkmcKeys, randSkRegion, randDragRegion, screenType, isScreenHkmc, hkmcDisplayMode, delayMs, t, allRand, runRandomRepeat]);
 
   // Region 모달 canvas 그리기 (screenshot + 기존/현재 드래그 사각형)
   const drawRandRegionCanvas = useCallback((dragRect?: { x: number; y: number; w: number; h: number }) => {
@@ -2712,6 +2806,8 @@ export default function RecordPage() {
                     ? `swipe (${s.params.x1},${s.params.y1})→(${s.params.x2},${s.params.y2})`
                     : s.type === 'hkmc_key'
                     ? <><Tag color="volcano" style={{ margin: 0 }}>KEY</Tag> {s.params.key_name || `cmd:${s.params.cmd}`}</>
+                    : s.type === 'all_random'
+                    ? <><Tag color="magenta" style={{ margin: 0 }}>RAND</Tag> ×{s.params.repeat_count ?? 1} @{s.params.interval_ms ?? 0}ms (HK:{(s.params.hk_keys || []).length}{s.params.sk_region ? ' SK▣' : ''}{s.params.drag_region ? ' DRAG▣' : ''})</>
                     : JSON.stringify(s.params)}
                 </span>
               )}
@@ -3249,7 +3345,7 @@ export default function RecordPage() {
                               onClick={() => openRandRegionModal('drag')} title="DRAG 영역 설정" />
                           </Button.Group>
                           <Button size="small" type="primary" danger disabled={randRunning} style={{ fontSize: 10, padding: '0 8px', height: 22, marginLeft: 4 }}
-                            onClick={() => runRandomRepeat(allRand)}>ALL RAND</Button>
+                            onClick={() => allRandHandler()}>ALL RAND</Button>
                           {/* 진행 상태 / 중지 */}
                           {randRunning && (
                             <>

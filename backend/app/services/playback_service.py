@@ -987,6 +987,10 @@ class PlaybackService:
         elif step.type == StepType.HKMC_KEY:
             key = p.get("key_name", f"0x{p.get('key_data', 0):02X}")
             return f"hkmc_key {key}"
+        elif step.type == StepType.ALL_RANDOM:
+            rc = int(p.get("repeat_count", 1))
+            iv = int(p.get("interval_ms", 0))
+            return f"all_random ×{rc} @{iv}ms"
         return step.type.value
 
     async def _ensure_device_connected(self, device_id: str, max_retries: int = 24, retry_interval: float = 5.0) -> None:
@@ -1173,6 +1177,9 @@ class PlaybackService:
             return None
         if step.type == StepType.WAIT and not step.expected_image:
             return None
+        # all_random은 스트레스성 스텝이라 기대이미지 없으면 비교 스킵 (화면이 예측 불가)
+        if step.type == StepType.ALL_RANDOM and not step.expected_image:
+            return None
 
         # screenshot_device_id가 저장되어 있으면 해당 디바이스 우선 사용
         # device_map을 통해 실제 디바이스 ID로 매핑
@@ -1345,6 +1352,71 @@ class PlaybackService:
                         await self._ensure_device_connected(real_id, max_retries=2, retry_interval=2.0)
                     else:
                         raise  # 재시도 후에도 실패 → 상위 except에서 "error" 처리
+        elif step.type == StepType.ALL_RANDOM:
+            # 녹화 시 저장된 설정으로 랜덤 스트레스 재현
+            # 가중치: HK 20% / SK 70% / DRAG 10% (참조 스크립트 CCIC RAND_ALL 기반)
+            import random as _rnd
+            if not real_id:
+                raise ValueError("all_random step requires device_id")
+            svc, is_isap = self._get_agent_service(real_id)
+            if not svc or not svc.is_connected:
+                raise ValueError(f"HKMC/iSAP device {real_id} not connected")
+
+            repeat_count = max(1, int(params.get("repeat_count", 1)))
+            interval_ms = max(0, int(params.get("interval_ms", 0)))
+            screen_type = step.screen_type or params.get("screen_type", "front_center")
+            hk_keys = params.get("hk_keys") or []
+            sk_region = params.get("sk_region") or None  # {x,y,width,height} or None
+            drag_region = params.get("drag_region") or None
+            weights = params.get("weights") or {}
+            w_hk = float(weights.get("hk", 0.20))
+            w_sk = float(weights.get("sk", 0.70))
+            # HKMC 일체형 표시에서 AVN 영역 오프셋 (녹화 측에서 이미 적용된 경우 0)
+            x_offset = int(params.get("x_offset", 0))
+            # 대상 해상도 — 녹화 시점 값 사용 (디바이스 해상도와 맞지 않으면 범위 전체에서 추출)
+            res_w = int(params.get("res_width", 1920))
+            res_h = int(params.get("res_height", 720))
+
+            def _pick_xy(region):
+                if region:
+                    x0 = max(0, int(region.get("x", 0)))
+                    y0 = max(0, int(region.get("y", 0)))
+                    x_max = min(res_w, x0 + int(region.get("width", res_w)))
+                    y_max = min(res_h, y0 + int(region.get("height", res_h)))
+                else:
+                    x0, y0, x_max, y_max = 0, 0, res_w, res_h
+                rw = max(1, x_max - x0)
+                rh = max(1, y_max - y0)
+                return _rnd.randrange(x0, x0 + rw), _rnd.randrange(y0, y0 + rh)
+
+            for _i in range(repeat_count):
+                if self._should_stop:
+                    break
+                roll = _rnd.random()
+                try:
+                    if roll < w_hk and hk_keys:
+                        key_name = _rnd.choice(hk_keys)
+                        sub_cmd = 0x44 if _rnd.random() < 0.2 else 0x43
+                        if is_isap:
+                            await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, None)
+                        else:
+                            await svc.async_send_key_by_name(key_name, sub_cmd, 0x00, None, screen_type)
+                    elif roll < (w_hk + w_sk):
+                        x, y = _pick_xy(sk_region)
+                        x += x_offset
+                        await svc.async_tap(x, y, screen_type)
+                    else:
+                        x1, y1 = _pick_xy(drag_region)
+                        x2, y2 = _pick_xy(drag_region)
+                        x1 += x_offset; x2 += x_offset
+                        if is_isap:
+                            await svc.async_swipe(x1, y1, x2, y2, screen_type, 300)
+                        else:
+                            await svc.async_swipe(x1, y1, x2, y2, screen_type)
+                except (ConnectionError, OSError) as ce:
+                    logger.warning("all_random iteration %d failed: %s", _i + 1, ce)
+                if interval_ms > 0 and _i + 1 < repeat_count:
+                    await self._interruptible_sleep(interval_ms / 1000.0)
         elif step.type == StepType.WAIT:
             wait_mode = params.get("wait_mode", "basic")
             if wait_mode == "cycle":
