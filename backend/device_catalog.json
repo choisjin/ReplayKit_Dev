@@ -1,0 +1,98 @@
+{
+  "projects": [
+    {
+      "name": "HKMC",
+      "enabled": true,
+      "models": [
+        {
+          "label": "Connected Wide",
+          "value": "Connected_Wide",
+          "enabled": true
+        },
+        {
+          "label": "CCIC",
+          "value": "HKMC",
+          "enabled": true
+        },
+        {
+          "label": "CCRC",
+          "value": "CCRC",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "name": "GM",
+      "enabled": true,
+      "models": [
+        {
+          "label": "GVM",
+          "value": "GVM",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "name": "General",
+      "enabled": true,
+      "models": [
+        {
+          "label": "Android",
+          "value": "Android",
+          "enabled": true
+        },
+        {
+          "label": "Phone",
+          "value": "Phone",
+          "enabled": true
+        },
+        {
+          "label": "SSH",
+          "value": "SSH",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "name": "Nissan",
+      "enabled": true,
+      "models": []
+    },
+    {
+      "name": "Renault",
+      "enabled": true,
+      "models": []
+    },
+    {
+      "name": "VW",
+      "enabled": true,
+      "models": [
+        {
+          "label": "ICAS",
+          "value": "ICAS",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "module_visibility": {
+    "Android": false,
+    "ImageProcessing": false,
+    "RIDEN": false,
+    "TigrisCheck": false,
+    "Trace": false,
+    "AudioLibrary": false,
+    "BENCH": false,
+    "COMMON_WINDOWS": false,
+    "KeysightPower": false,
+    "Uart": false,
+    "CAN": false,
+    "Ignition": false,
+    "POWER": false,
+    "WebcamDevice": false,
+    "VisionCameraClient": false,
+    "SP25Bench": false,
+    "PCANClient": false,
+    "MLP": false
+  }
+}
