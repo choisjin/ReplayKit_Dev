@@ -4,8 +4,7 @@ import { DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant
 import { deviceApi } from '../services/api';
 
 interface Model {
-  label: string;
-  value: string;
+  value: string;   // 표시 텍스트이자 Device ID prefix로 사용
   enabled: boolean;
 }
 
@@ -125,20 +124,19 @@ export default function AdminPage() {
     markDirty();
   };
   const addModel = (projIdx: number) => {
-    const label = prompt('모델 라벨 (예: Connected Wide)');
-    if (!label || !label.trim()) return;
-    const value = prompt('모델 value (Device ID prefix로 사용, 예: Connected_Wide)', label.trim().replace(/\s+/g, '_'));
+    const value = prompt('모델 이름 (Device ID prefix, 예: Connected_Wide / CCRC / GVM)');
     if (!value || !value.trim()) return;
+    const trimmed = value.trim();
     const p = catalog.projects[projIdx];
-    if (p.models.some(m => m.value === value.trim())) {
-      message.warning('이미 존재하는 value');
+    if (p.models.some(m => m.value === trimmed)) {
+      message.warning('이미 존재하는 이름');
       return;
     }
     setCatalog(c => ({
       ...c,
       projects: c.projects.map((pp, i) => i === projIdx ? {
         ...pp,
-        models: [...pp.models, { label: label.trim(), value: value.trim(), enabled: true }],
+        models: [...pp.models, { value: trimmed, enabled: true }],
       } : pp),
     }));
     markDirty();
@@ -211,18 +209,11 @@ export default function AdminPage() {
                         checked={m.enabled}
                         onChange={(e) => updateModel(idx, mi, { enabled: e.target.checked })}
                       />
-                      <Typography.Text type="secondary" style={{ minWidth: 42, fontSize: 12 }}>라벨</Typography.Text>
-                      <Input
-                        size="small"
-                        value={m.label}
-                        style={{ width: 200 }}
-                        onChange={(e) => updateModel(idx, mi, { label: e.target.value })}
-                      />
-                      <Typography.Text type="secondary" style={{ minWidth: 42, fontSize: 12 }}>value</Typography.Text>
                       <Input
                         size="small"
                         value={m.value}
-                        style={{ width: 200 }}
+                        placeholder="모델 이름 (Device ID prefix)"
+                        style={{ width: 260 }}
                         onChange={(e) => updateModel(idx, mi, { value: e.target.value })}
                       />
                       <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeModel(idx, mi)} />

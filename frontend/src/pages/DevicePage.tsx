@@ -244,7 +244,7 @@ export default function DevicePage() {
   const [deviceModel, setDeviceModel] = useState('');
 
   // 프로젝트/모델 콤보는 backend/device_catalog.json 에서 로드 (AdminPage에서 편집)
-  interface CatalogModel { label: string; value: string; enabled: boolean }
+  interface CatalogModel { value: string; enabled: boolean }   // label 없음 — value가 표시·ID prefix 겸용
   interface CatalogProject { name: string; enabled: boolean; models: CatalogModel[] }
   const [catalogProjects, setCatalogProjects] = useState<CatalogProject[]>([]);
   const [moduleVisibility, setModuleVisibility] = useState<Record<string, boolean>>({});
@@ -276,7 +276,7 @@ export default function DevicePage() {
     const flat: { label: string; value: string }[] = [];
     for (const p of src) {
       for (const m of p.models) {
-        if (m.enabled !== false) flat.push({ label: m.label, value: m.value });
+        if (m.enabled !== false) flat.push({ label: m.value, value: m.value });
       }
     }
     return flat.sort((a, b) => a.label.localeCompare(b.label));
@@ -1783,7 +1783,7 @@ export default function DevicePage() {
                       const opts = new Map<string, string>(); // value → label
                       catalogProjects.filter(p => p.enabled !== false).forEach(proj => {
                         proj.models.filter(m => m.enabled !== false).forEach(m => {
-                          if (m.value) opts.set(m.value, `${m.label} [${proj.name}]`);
+                          if (m.value) opts.set(m.value, `${m.value} [${proj.name}]`);
                         });
                       });
                       // 기존 primary prefix 추가 (모델 목록에 없고, 모듈명이 아닌 것만)

@@ -69,25 +69,25 @@ _DEFAULT_DEVICE_CATALOG: dict = {
             "name": "HKMC",
             "enabled": True,
             "models": [
-                {"label": "Connected Wide", "value": "Connected_Wide", "enabled": True},
-                {"label": "CCIC",           "value": "HKMC",            "enabled": True},
-                {"label": "CCRC",           "value": "CCRC",            "enabled": True},
+                {"value": "Connected_Wide", "enabled": True},
+                {"value": "HKMC",           "enabled": True},
+                {"value": "CCRC",           "enabled": True},
             ],
         },
         {
             "name": "GM",
             "enabled": True,
             "models": [
-                {"label": "GVM", "value": "GVM", "enabled": True},
+                {"value": "GVM", "enabled": True},
             ],
         },
         {
             "name": "General",
             "enabled": True,
             "models": [
-                {"label": "Android", "value": "Android", "enabled": True},
-                {"label": "Phone",   "value": "Phone",   "enabled": True},
-                {"label": "SSH",     "value": "SSH",     "enabled": True},
+                {"value": "Android", "enabled": True},
+                {"value": "Phone",   "enabled": True},
+                {"value": "SSH",     "enabled": True},
             ],
         },
     ],
@@ -97,9 +97,16 @@ _DEFAULT_DEVICE_CATALOG: dict = {
 
 
 def _load_device_catalog() -> dict:
+    """카탈로그 로드. 레거시 label 필드가 남아 있어도 관대하게 처리한다."""
     if _DEVICE_CATALOG_FILE.exists():
         try:
-            return _json.loads(_DEVICE_CATALOG_FILE.read_text(encoding="utf-8"))
+            data = _json.loads(_DEVICE_CATALOG_FILE.read_text(encoding="utf-8"))
+            # 레거시 마이그레이션: {label, value} → {value} (label 버림)
+            for proj in data.get("projects", []) or []:
+                for m in proj.get("models", []) or []:
+                    if "label" in m:
+                        m.pop("label", None)
+            return data
         except Exception:
             pass
     return _json.loads(_json.dumps(_DEFAULT_DEVICE_CATALOG))  # deep copy
