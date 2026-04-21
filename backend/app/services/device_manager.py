@@ -316,37 +316,21 @@ async def _scan_dlt_tcp(
 
 
 # ── SmartBench 자동 탐지 ──
-# 조건: 로컬 PC에 SMARTBENCH_LOCAL_IP 가 있으면 → SMARTBENCH_HOST:PORT TCP 연결 시도
-SMARTBENCH_LOCAL_IP = "192.167.0.4"
+# 설정(scan_settings.builtin.smartbench)의 host/port를 기반으로 TCP 프로브.
 SMARTBENCH_HOST = "192.167.0.5"
 SMARTBENCH_PORT = 8000
 
 
 async def _scan_smartbench(host: str | None = None, port: int | None = None) -> list[dict]:
-    """SmartBench 장비 탐지: (기본 호스트일 때) 로컬 인터페이스 확인 → TCP 프로브.
+    """SmartBench 장비 탐지 — 설정된 host/port로 TCP 연결 프로브.
 
-    host/port가 기본값과 다르면 로컬 인터페이스 검사는 건너뛰고 즉시 TCP 프로브를 시도한다.
+    과거에는 로컬 PC에 특정 IP(192.167.0.4)가 붙어 있을 때만 동작했으나,
+    이제 호스트/포트가 스캔 설정으로 구성되므로 해당 프리체크는 제거됨.
+    연결 실패 시 2초 timeout 후 빈 리스트 반환.
     """
     target_host = (host or SMARTBENCH_HOST).strip()
     target_port = int(port) if port else SMARTBENCH_PORT
 
-    # 1) 기본 호스트/포트 조합일 때만 로컬 IP 인터페이스 프리체크
-    #    (네트워크 미연결 시 2초 timeout 대기 회피)
-    if target_host == SMARTBENCH_HOST and target_port == SMARTBENCH_PORT:
-        import ifaddr
-        has_local_ip = False
-        for adapter in ifaddr.get_adapters():
-            for ip_info in adapter.ips:
-                if isinstance(ip_info.ip, str) and ip_info.ip == SMARTBENCH_LOCAL_IP:
-                    has_local_ip = True
-                    break
-            if has_local_ip:
-                break
-        if not has_local_ip:
-            logger.debug("SmartBench scan: local IP %s not found, skipping", SMARTBENCH_LOCAL_IP)
-            return []
-
-    # 2) SmartBench TCP 연결 시도
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
         None, _probe_smartbench_sync, target_host, target_port, 2.0,
