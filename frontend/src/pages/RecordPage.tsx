@@ -2110,17 +2110,37 @@ export default function RecordPage() {
     }
   };
 
-  // 백엔드의 _resolve_scenario가 디스크에서 시나리오를 로드하거나 in-memory
-  // _current_scenario 를 사용하므로, 프론트엔드에서 스텝을 삭제/이동한 후
-  // 저장/동기화하지 않으면 인덱스가 불일치함.
-  //  - editingExisting: 디스크 save
-  //  - recording (신규): in-memory sync
+  // 백엔드의 _resolve_scenario가 recording 중이면 in-memory _current_scenario를,
+  // 아니면 디스크 파일을 사용하므로 이미지 작업 전에 양쪽을 모두 일치시킨다.
+  //  - recording (신규/이어녹화 공통): 프론트 steps → in-memory sync (필수)
+  //  - editingExisting & dirty: 디스크 save도 병행
   const ensureSavedForImageOp = async (): Promise<boolean> => {
     if (!scenarioName.trim()) return true;
-    // 녹화 중 신규 시나리오: 디스크 저장이 아닌 in-memory sync
-    if (recording && !editingExisting) {
-      return await syncFrontendStepsToBackend();
+    // 녹화 중이면 언제나 in-memory 우선 동기화 (_resolve_scenario가 이를 반환하므로)
+    if (recording) {
+      const ok = await syncFrontendStepsToBackend();
+      // editingExisting인 경우 추가로 디스크에도 반영 (다른 경로/재로드 대비)
+      if (ok && editingExisting && isDirty()) {
+        try {
+          const newName = scenarioName.trim();
+          const reindexed = steps.map((s, i) => {
+            const { _imageVer, ...rest } = s;
+            return { ...rest, id: i + 1 };
+          });
+          await scenarioApi.update(newName, {
+            ...scenarioMetaRef.current,
+            name: newName,
+            description,
+            steps: reindexed,
+          });
+          const savedSteps = reindexed.map((s, i) => ({ ...s, _imageVer: steps[i]?._imageVer }));
+          setSteps(savedSteps);
+          savedStepsRef.current = JSON.stringify(reindexed);
+        } catch { /* 디스크 저장 실패는 in-memory sync 성공 시 무시 */ }
+      }
+      return ok;
     }
+    // 녹화 아님 + 기존 편집: 디스크 save만
     if (!editingExisting) return true;
     if (!isDirty()) return true;
     try {
