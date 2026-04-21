@@ -3,8 +3,8 @@ import { Button, Card, Checkbox, Col, Collapse, Descriptions, Divider, Dropdown,
 import type { TreeProps } from 'antd';
 import {
   PlayCircleOutlined, PauseOutlined, DeleteOutlined, EyeOutlined,
-  StopOutlined, CopyOutlined, MergeCellsOutlined,
-  FolderOutlined, FolderAddOutlined, FileOutlined, MinusOutlined,
+  StopOutlined, CopyOutlined,
+  FolderOutlined, FolderAddOutlined, FileOutlined,
   ArrowUpOutlined, ArrowDownOutlined, EditOutlined, BranchesOutlined,
   DownOutlined, RightOutlined, ClearOutlined, UploadOutlined,
   ExportOutlined, ImportOutlined, CheckCircleOutlined, WarningOutlined,
@@ -322,12 +322,9 @@ export default function ScenarioPage() {
   const [scenarioStepsCache, setScenarioStepsCache] = useState<Record<string, any[]>>({});
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
 
-  // Copy / Merge
+  // Copy
   const [copyName, setCopyName] = useState('');
   const [copyModalVisible, setCopyModalVisible] = useState(false);
-  const [mergeModalVisible, setMergeModalVisible] = useState(false);
-  const [mergeTargets, setMergeTargets] = useState<string[]>([]);
-  const [mergeName, setMergeName] = useState('');
 
   // Rename modal
   const [renameModalVisible, setRenameModalVisible] = useState(false);
@@ -517,42 +514,6 @@ export default function ScenarioPage() {
     } catch { message.error(t('scenario.copyFailed')); }
   };
 
-  // --- Merge ---
-  const openMergeModal = () => {
-    setMergeTargets([]);
-    setMergeName('merged_scenario');
-    setMergeModalVisible(true);
-  };
-
-  const doMerge = async () => {
-    if (mergeTargets.length < 2 || !mergeName.trim()) {
-      message.warning(t('scenario.mergeMinWarning'));
-      return;
-    }
-    const trimmed = mergeName.trim();
-    if (scenarios.includes(trimmed)) {
-      Modal.confirm({
-        title: t('scenario.mergeOverwriteTitle'),
-        content: t('scenario.mergeOverwriteContent', { name: trimmed }),
-        onOk: async () => {
-          try {
-            await scenarioApi.merge(mergeTargets, trimmed);
-            message.success(t('scenario.mergeSuccess'));
-            setMergeModalVisible(false);
-            fetchScenarios();
-          } catch { message.error(t('scenario.mergeFailed')); }
-        },
-      });
-      return;
-    }
-    try {
-      await scenarioApi.merge(mergeTargets, trimmed);
-      message.success(t('scenario.mergeSuccess'));
-      setMergeModalVisible(false);
-      fetchScenarios();
-    } catch { message.error(t('scenario.mergeFailed')); }
-  };
-
   // --- Export / Import ---
   const doExport = async () => {
     setExportLoading(true);
@@ -681,16 +642,16 @@ export default function ScenarioPage() {
     } catch { message.error(t('scenario.groupAddFailed')); }
   };
 
-  const removeFromGroup = async (gName: string, sName: string) => {
+  const removeFromGroup = async (gName: string, index: number) => {
     try {
-      const res = await scenarioApi.removeFromGroup(gName, sName);
+      const res = await scenarioApi.removeFromGroup(gName, index);
       setGroups(res.data.groups);
     } catch { message.error(t('scenario.groupRemoveFailed')); }
   };
 
-  const reorderGroup = async (gName: string, ordered: string[]) => {
+  const reorderGroup = async (gName: string, orderedIndices: number[]) => {
     try {
-      const res = await scenarioApi.reorderGroup(gName, ordered);
+      const res = await scenarioApi.reorderGroup(gName, orderedIndices);
       setGroups(res.data.groups);
     } catch { message.error(t('scenario.reorderFailed')); }
   };
@@ -698,9 +659,9 @@ export default function ScenarioPage() {
   const moveInGroup = (gName: string, members: GroupEntry[], idx: number, dir: -1 | 1) => {
     const newIdx = idx + dir;
     if (newIdx < 0 || newIdx >= members.length) return;
-    const arr = [...members];
-    [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
-    reorderGroup(gName, arr.map((m) => m.name));
+    const perm = members.map((_, i) => i);
+    [perm[idx], perm[newIdx]] = [perm[newIdx], perm[idx]];
+    reorderGroup(gName, perm);
   };
 
   const updateGroupStepJumps = async (gName: string, entryIdx: number, stepId: number, on_pass_goto: JumpTarget | null, on_fail_goto: JumpTarget | null) => {
@@ -1394,7 +1355,6 @@ export default function ScenarioPage() {
           const allNames = Object.values(groups).flatMap((ms) => ms.map((m) => m.name));
           if (allNames.length > 0) fetchScenarioStepsCache(allNames);
         }}>{t('scenario.groupManage')}</Button>
-        <Button icon={<MergeCellsOutlined />} size="small" onClick={openMergeModal}>{t('scenario.mergeTitle')}</Button>
         <Button icon={<ExportOutlined />} size="small" onClick={() => { setExportSelectedScenarios([]); setExportSelectedGroups([]); setExportAll(false); setExportModalVisible(true); }}>{t('scenario.exportTitle')}</Button>
         <Button icon={<ImportOutlined />} size="small" onClick={() => { setImportFile(null); setImportPreviewData(null); setImportModalVisible(true); }}>{t('scenario.importTitle')}</Button>
         <Button onClick={() => { fetchScenarios(); fetchGroups(); }} size="small">{t('common.refresh')}</Button>
@@ -1941,7 +1901,7 @@ export default function ScenarioPage() {
                             onClick={() => moveInGroup(gName, members, idx, 1)}
                           />
                           <Button size="small" type="text" danger icon={<DeleteOutlined />}
-                            onClick={() => removeFromGroup(gName, entry.name)}
+                            onClick={() => removeFromGroup(gName, idx)}
                           />
                         </div>
 
@@ -1983,13 +1943,13 @@ export default function ScenarioPage() {
                   }}
                 />
                 {(() => {
-                  const available = scenarios.filter((n) => !members.some((m) => m.name === n));
+                  // 중복 추가 허용 — 이미 그룹에 있는 시나리오도 다시 선택 가능
                   const foldered = new Set<string>();
                   for (const items of Object.values(folders)) items.forEach(n => foldered.add(n));
                   const folderKeys = Object.keys(folders);
                   const curFolder = groupAddFolder[gName] || '__all__';
-                  const filtered = curFolder === '__all__' ? available
-                    : available.filter(n => (folders[curFolder] || []).includes(n));
+                  const filtered = curFolder === '__all__' ? scenarios
+                    : scenarios.filter(n => (folders[curFolder] || []).includes(n));
                   return (
                     <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
                       <Select size="small" value={curFolder} onChange={(v) => setGroupAddFolder(prev => ({ ...prev, [gName]: v }))} style={{ width: 100 }}>
@@ -2022,32 +1982,6 @@ export default function ScenarioPage() {
 
       <Modal title={t('scenario.copyTitle', { name: selectedName || '' })} open={copyModalVisible} onCancel={() => setCopyModalVisible(false)} onOk={doCopy} okText={t('common.copy')}>
         <Input value={copyName} onChange={(e) => setCopyName(e.target.value)} placeholder={t('scenario.newScenarioName')} />
-      </Modal>
-
-      {/* ===== 합치기 모달 ===== */}
-      <Modal title={t('scenario.mergeTitle')} open={mergeModalVisible} onCancel={() => setMergeModalVisible(false)} onOk={doMerge} okText={t('scenario.mergeTitle')} width={500}>
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ marginBottom: 8, color: '#888', fontSize: 12 }}>{t('scenario.mergeInstruction')}</div>
-          {mergeTargets.map((name, idx) => (
-            <Space key={idx} style={{ display: 'flex', marginBottom: 4 }}>
-              <Tag color="blue">{idx + 1}</Tag>
-              <span>{name}</span>
-              <Button size="small" icon={<MinusOutlined />} danger onClick={() => setMergeTargets((prev) => prev.filter((_, i) => i !== idx))} />
-            </Space>
-          ))}
-          <Select
-            placeholder={t('scenario.addScenario')}
-            style={{ width: '100%', marginTop: 4 }}
-            value={undefined}
-            onChange={(v: string) => { if (v) setMergeTargets((prev) => [...prev, v]); }}
-            options={scenarios.filter((n) => !mergeTargets.includes(n)).map((n) => ({ label: n, value: n }))}
-          />
-        </div>
-        <Divider />
-        <Space>
-          <span style={{ color: '#888' }}>{t('scenario.nameLabel')}:</span>
-          <Input value={mergeName} onChange={(e) => setMergeName(e.target.value)} placeholder={t('scenario.mergedScenarioName')} style={{ width: 300 }} />
-        </Space>
       </Modal>
 
       {/* ===== 시나리오 상세 모달 ===== */}

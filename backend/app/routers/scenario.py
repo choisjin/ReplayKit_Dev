@@ -717,6 +717,10 @@ class GroupScenarioRequest(BaseModel):
     scenario_name: str
 
 
+class GroupIndexRequest(BaseModel):
+    index: int
+
+
 @router.post("/groups/{group_name}/add")
 async def add_to_group(group_name: str, req: GroupScenarioRequest):
     groups = recording_svc.add_to_group(group_name, req.scenario_name)
@@ -724,18 +728,18 @@ async def add_to_group(group_name: str, req: GroupScenarioRequest):
 
 
 @router.post("/groups/{group_name}/remove")
-async def remove_from_group(group_name: str, req: GroupScenarioRequest):
-    groups = recording_svc.remove_from_group(group_name, req.scenario_name)
+async def remove_from_group(group_name: str, req: GroupIndexRequest):
+    groups = recording_svc.remove_from_group_by_index(group_name, req.index)
     return {"groups": groups}
 
 
 class ReorderGroupRequest(BaseModel):
-    ordered: list[str]
+    ordered_indices: list[int]
 
 
 @router.post("/groups/{group_name}/reorder")
 async def reorder_group(group_name: str, req: ReorderGroupRequest):
-    groups = recording_svc.reorder_group(group_name, req.ordered)
+    groups = recording_svc.reorder_group(group_name, req.ordered_indices)
     return {"groups": groups}
 
 
@@ -791,21 +795,6 @@ async def copy_scenario(name: str, req: CopyScenarioRequest):
         return {"status": "ok", "scenario": scenario.model_dump()}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Scenario '{name}' not found")
-
-
-class MergeRequest(BaseModel):
-    names: list[str]
-    target_name: str
-
-
-@router.post("/merge")
-async def merge_scenarios(req: MergeRequest):
-    """Merge multiple scenarios into one."""
-    try:
-        scenario = await recording_svc.merge_scenarios(req.names, req.target_name)
-        return {"status": "ok", "scenario": scenario.model_dump()}
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
 
 
 # ------------------------------------------------------------------

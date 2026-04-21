@@ -477,21 +477,17 @@ class RecordingService:
         groups = self._load_groups()
         if group_name not in groups:
             groups[group_name] = []
-        names = [m["name"] for m in groups[group_name]]
-        if scenario_name not in names:
-            groups[group_name].append({"name": scenario_name, "on_pass_goto": None, "on_fail_goto": None})
+        # 동일 시나리오 중복 추가 허용
+        groups[group_name].append({"name": scenario_name, "on_pass_goto": None, "on_fail_goto": None})
         self._save_groups(groups)
         return groups
 
-    def remove_from_group(self, group_name: str, scenario_name: str) -> dict[str, list[dict]]:
+    def remove_from_group_by_index(self, group_name: str, index: int) -> dict[str, list[dict]]:
         groups = self._load_groups()
-        if group_name in groups:
-            old_members = groups[group_name]
-            removed_idx = next((i for i, m in enumerate(old_members) if m["name"] == scenario_name), None)
-            groups[group_name] = [m for m in old_members if m["name"] != scenario_name]
+        if group_name in groups and 0 <= index < len(groups[group_name]):
+            groups[group_name].pop(index)
             # 제거된 멤버 이후의 goto 참조 재매핑
-            if removed_idx is not None:
-                self._remap_group_jumps_after_remove(groups[group_name], removed_idx)
+            self._remap_group_jumps_after_remove(groups[group_name], index)
         self._save_groups(groups)
         return groups
 
@@ -520,20 +516,14 @@ class RecordingService:
                 sj["on_pass_goto"] = self._remap_jump_idx(sj.get("on_pass_goto"), removed_idx)
                 sj["on_fail_goto"] = self._remap_jump_idx(sj.get("on_fail_goto"), removed_idx)
 
-    def reorder_group(self, group_name: str, ordered: list[str]) -> dict[str, list[dict]]:
+    def reorder_group(self, group_name: str, ordered_indices: list[int]) -> dict[str, list[dict]]:
+        """기존 멤버 순서를 새 순서로 재배치. ordered_indices는 기존 인덱스의 순열."""
         groups = self._load_groups()
         if group_name in groups:
             old_members = groups[group_name]
-            old_map = {m["name"]: m for m in old_members}
-            # 이전 이름 → 이전 인덱스 매핑
-            old_idx_map = {m["name"]: i for i, m in enumerate(old_members)}
             # 이전 인덱스 → 새 인덱스 매핑
-            idx_remap = {}
-            for new_i, name in enumerate(ordered):
-                old_i = old_idx_map.get(name)
-                if old_i is not None:
-                    idx_remap[old_i] = new_i
-            new_members = [old_map.get(n, {"name": n, "on_pass_goto": None, "on_fail_goto": None}) for n in ordered]
+            idx_remap = {old_i: new_i for new_i, old_i in enumerate(ordered_indices)}
+            new_members = [old_members[i] for i in ordered_indices if 0 <= i < len(old_members)]
             # jump 참조의 scenario 인덱스를 새 인덱스로 재매핑
             for m in new_members:
                 m["on_pass_goto"] = self._remap_jump_reorder(m.get("on_pass_goto"), idx_remap)
@@ -626,62 +616,6 @@ class RecordingService:
 
         await self.save_scenario(source)
         return source
-
-    async def merge_scenarios(self, names: list[str], target_name: str) -> Scenario:
-        """Merge multiple scenarios into one new scenario."""
-        merged_steps: list[Step] = []
-        merged_device_map: dict[str, str] = {}
-        step_id = 0
-
-        tgt_ss_dir = SCREENSHOTS_DIR / target_name
-        tgt_ss_dir.mkdir(parents=True, exist_ok=True)
-
-        for name in names:
-            scen = await self.load_scenario(name)
-            src_ss_dir = SCREENSHOTS_DIR / name
-            # device_map 합치기 (뒤 시나리오가 동일 alias면 덮어씀)
-            merged_device_map.update(scen.device_map or {})
-            # 원본 step ID → 새 step ID 매핑 (goto 갱신용)
-            id_map: dict[int, int] = {}
-            scenario_steps: list[Step] = []
-            for step in scen.steps:
-                old_id = step.id
-                step_id += 1
-                step.id = step_id
-                id_map[old_id] = step_id
-                if step.expected_image:
-                    old_file = src_ss_dir / step.expected_image
-                    new_filename = f"{target_name}_step_{step_id:03d}.png"
-                    new_file = tgt_ss_dir / new_filename
-                    if old_file.exists():
-                        shutil.copy2(str(old_file), str(new_file))
-                    step.expected_image = new_filename
-                # multi_crop 이미지도 복사
-                for ci_idx, ci in enumerate(step.expected_images):
-                    if ci.image:
-                        old_ci = src_ss_dir / ci.image
-                        new_ci_name = f"{target_name}_step_{step_id:03d}_crop_{ci_idx}.png"
-                        new_ci = tgt_ss_dir / new_ci_name
-                        if old_ci.exists():
-                            shutil.copy2(str(old_ci), str(new_ci))
-                        ci.image = new_ci_name
-                scenario_steps.append(step)
-            # on_pass_goto / on_fail_goto를 새 ID로 갱신
-            for step in scenario_steps:
-                if step.on_pass_goto is not None and step.on_pass_goto in id_map:
-                    step.on_pass_goto = id_map[step.on_pass_goto]
-                if step.on_fail_goto is not None and step.on_fail_goto in id_map:
-                    step.on_fail_goto = id_map[step.on_fail_goto]
-            merged_steps.extend(scenario_steps)
-
-        merged = Scenario(
-            name=target_name,
-            steps=merged_steps,
-            device_map=merged_device_map,
-            created_at=datetime.now(timezone.utc).isoformat(),
-        )
-        await self.save_scenario(merged)
-        return merged
 
     # ------------------------------------------------------------------
     # Export / Import

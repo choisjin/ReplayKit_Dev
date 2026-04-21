@@ -105,19 +105,17 @@ export const scenarioApi = {
   deleteGroup: (groupName: string) => api.delete(`/scenario/groups/${groupName}`),
   addToGroup: (groupName: string, scenarioName: string) =>
     api.post(`/scenario/groups/${groupName}/add`, { scenario_name: scenarioName }),
-  removeFromGroup: (groupName: string, scenarioName: string) =>
-    api.post(`/scenario/groups/${groupName}/remove`, { scenario_name: scenarioName }),
-  reorderGroup: (groupName: string, ordered: string[]) =>
-    api.post(`/scenario/groups/${groupName}/reorder`, { ordered }),
+  removeFromGroup: (groupName: string, index: number) =>
+    api.post(`/scenario/groups/${groupName}/remove`, { index }),
+  reorderGroup: (groupName: string, orderedIndices: number[]) =>
+    api.post(`/scenario/groups/${groupName}/reorder`, { ordered_indices: orderedIndices }),
   updateGroupJumps: (groupName: string, index: number, on_pass_goto: { scenario: number; step: number } | null, on_fail_goto: { scenario: number; step: number } | null) =>
     api.post(`/scenario/groups/${groupName}/jumps`, { index, on_pass_goto, on_fail_goto }),
   updateGroupStepJumps: (groupName: string, index: number, stepId: number, on_pass_goto: { scenario: number; step: number } | null, on_fail_goto: { scenario: number; step: number } | null) =>
     api.post(`/scenario/groups/${groupName}/step-jumps`, { index, step_id: stepId, on_pass_goto, on_fail_goto }),
-  // Copy & Merge
+  // Copy
   copy: (name: string, targetName: string) =>
     api.post(`/scenario/copy/${name}`, { target_name: targetName }),
-  merge: (names: string[], targetName: string) =>
-    api.post('/scenario/merge', { names, target_name: targetName }),
   // Export / Import
   exportZip: (scenarios: string[], groups: string[], includeAll: boolean = false) =>
     api.post('/scenario/export', { scenarios, groups, include_all: includeAll }, { responseType: 'blob' }),
