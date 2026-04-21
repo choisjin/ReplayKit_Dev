@@ -1397,14 +1397,48 @@ class PlaybackService:
             import random as _rnd
             if not real_id:
                 raise ValueError("all_random step requires device_id")
-            # 연결 보장: 서비스가 없거나 끊겨 있으면 재연결 시도 (test-step 경로에서도 안전)
-            svc, is_isap = self._get_agent_service(real_id)
+
+            # 후보 조회 키: (1) real_id (device_map으로 resolve된 주소/ID),
+            # (2) step.device_id (원본 alias) — device_map이 address로 해석되었을 때
+            #     dm._devices / _hkmc_conns 가 alias를 키로 갖고 있어 address로 못 찾는 경우 대비
+            candidate_ids = [real_id]
+            if step.device_id and step.device_id != real_id:
+                candidate_ids.append(step.device_id)
+
+            svc = None
+            is_isap = False
+            used_id = real_id
+            for cand in candidate_ids:
+                svc, is_isap = self._get_agent_service(cand)
+                if svc and svc.is_connected:
+                    used_id = cand
+                    break
+
             if not svc or not svc.is_connected:
-                logger.info("all_random: device %s not connected, trying reconnect", real_id)
-                await self._ensure_device_connected(real_id, max_retries=2, retry_interval=2.0)
-                svc, is_isap = self._get_agent_service(real_id)
-            if not svc or not svc.is_connected:
-                raise ValueError(f"HKMC/iSAP device {real_id} not connected")
+                # 재연결 시도: 후보 중 하나라도 디바이스로 인식되면 ensure 호출
+                for cand in candidate_ids:
+                    if self.dm.get_device(cand):
+                        logger.info("all_random: device %s not connected, trying reconnect", cand)
+                        await self._ensure_device_connected(cand, max_retries=2, retry_interval=2.0)
+                        svc, is_isap = self._get_agent_service(cand)
+                        if svc and svc.is_connected:
+                            used_id = cand
+                            break
+                # 여전히 안 되면 진단성 있는 에러 메시지
+                if not svc or not svc.is_connected:
+                    dev = None
+                    for cand in candidate_ids:
+                        dev = self.dm.get_device(cand)
+                        if dev:
+                            break
+                    if dev is None:
+                        raise ValueError(
+                            f"HKMC/iSAP device '{step.device_id}' (resolved='{real_id}') not found in device manager"
+                        )
+                    raise ValueError(
+                        f"HKMC/iSAP device '{dev.id}' ({dev.address}) not connected "
+                        f"(type={dev.type}, status={dev.status})"
+                    )
 
             repeat_count = max(1, int(params.get("repeat_count", 1)))
             interval_ms = max(0, int(params.get("interval_ms", 0)))
