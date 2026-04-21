@@ -948,6 +948,13 @@ class PlaybackService:
         except Exception as e:
             logger.debug("random_log.txt write failed: %s", e)
 
+        # step_result.message 에도 한 줄 요약 prepend (UI 결과 테이블에서 즉시 확인 가능)
+        prefix = f"[RAND] {action_summary}"
+        if step_result.message and step_result.message.strip():
+            step_result.message = f"{prefix}\n{step_result.message}"
+        else:
+            step_result.message = prefix
+
     def _resolve_random_log_path(self, scenario_name: str):
         """run_dir 우선, 없으면 scenario_name 기반 results dir 하위의 random_log.txt 경로 반환."""
         run_dir = self._run_output_dir
@@ -985,13 +992,6 @@ class PlaybackService:
                 f.write(line)
         except Exception as e:
             logger.debug("random_log.txt write failed: %s", e)
-
-        # step_result.message 에도 한 줄 요약 prepend (UI 결과 테이블에서 즉시 확인 가능)
-        prefix = f"[RAND] {action_summary}"
-        if step_result.message and step_result.message.strip():
-            step_result.message = f"{prefix}\n{step_result.message}"
-        else:
-            step_result.message = prefix
 
     @staticmethod
     def _format_command(step: Step) -> str:
