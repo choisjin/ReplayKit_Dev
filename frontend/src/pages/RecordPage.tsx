@@ -605,12 +605,20 @@ export default function RecordPage() {
     }).catch(() => { setModuleFunctions([]); setModuleDescription(''); });
   }, [selectedModuleName]);
 
+  // Random stress 설정 저장 여부 추적 (디바이스 전환 중 초기 로드와 auto-save 충돌 방지)
+  const randCfgLoadedRef = useRef(false);
+
   // Random stress 설정: device + screen_type 바뀔 때마다 localStorage에서 로드
+  // 저장 대상: HK pool, SK region, DRAG region, 반복 횟수, 간격(ms)
   useEffect(() => {
+    randCfgLoadedRef.current = false;
     if (!screenshotDeviceId) {
       setRandHkKeysConfig(null);
       setRandSkRegion(null);
       setRandDragRegion(null);
+      setRandRepeatCount(1);
+      setRandIntervalMs(200);
+      randCfgLoadedRef.current = true;
       return;
     }
     const base = `rand_cfg_${screenshotDeviceId}_${screenType || 'default'}`;
@@ -626,11 +634,38 @@ export default function RecordPage() {
       const drag = localStorage.getItem(`${base}_drag`);
       setRandDragRegion(drag ? JSON.parse(drag) : null);
     } catch { setRandDragRegion(null); }
+    try {
+      const rc = localStorage.getItem(`${base}_repeat`);
+      const parsed = rc ? parseInt(rc, 10) : NaN;
+      setRandRepeatCount(isNaN(parsed) || parsed < 1 ? 1 : parsed);
+    } catch { setRandRepeatCount(1); }
+    try {
+      const iv = localStorage.getItem(`${base}_interval`);
+      const parsed = iv ? parseInt(iv, 10) : NaN;
+      setRandIntervalMs(isNaN(parsed) || parsed < 0 ? 200 : parsed);
+    } catch { setRandIntervalMs(200); }
+    // 로드 완료 후 auto-save 활성화 (같은 tick 내 set 이후)
+    randCfgLoadedRef.current = true;
   }, [screenshotDeviceId, screenType]);
 
   const _randStorageBase = useCallback(() =>
     screenshotDeviceId ? `rand_cfg_${screenshotDeviceId}_${screenType || 'default'}` : '',
     [screenshotDeviceId, screenType]);
+
+  // randRepeatCount / randIntervalMs 변경 시 자동 저장 (HK/SK/DRAG는 모달 저장 경로에서 처리됨)
+  useEffect(() => {
+    if (!randCfgLoadedRef.current) return;
+    const base = _randStorageBase();
+    if (!base) return;
+    try { localStorage.setItem(`${base}_repeat`, String(randRepeatCount)); } catch { /* ignore */ }
+  }, [randRepeatCount, _randStorageBase]);
+
+  useEffect(() => {
+    if (!randCfgLoadedRef.current) return;
+    const base = _randStorageBase();
+    if (!base) return;
+    try { localStorage.setItem(`${base}_interval`, String(randIntervalMs)); } catch { /* ignore */ }
+  }, [randIntervalMs, _randStorageBase]);
 
   // Fetch hardware keys — HKMC/iSAP 모두 선택된 디바이스별로 재조회
   // (각 디바이스의 info에 저장된 per-device override가 병합되어 반환됨)
