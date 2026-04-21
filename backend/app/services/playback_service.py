@@ -388,6 +388,9 @@ class PlaybackService:
         if not self._result_timestamp:
             self._should_stop = False
         self._current_iteration = repeat_index - 1  # 0-based for cycle wait
+        # ALL_RANDOM 등 일부 액션이 로그 기록에 scenario_name / repeat_index 를 필요로 함
+        self._current_scenario_name = scenario.name
+        self._current_repeat_index = repeat_index
         if not self._result_timestamp:
             self._result_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             self._setup_run_output_dir(scenario.name)
@@ -461,6 +464,8 @@ class PlaybackService:
         self._pause_event.set()    # 이전 재생이 pause 상태로 끝난 경우 풀어줌
         self._device_map = device_map or {}
         self._current_iteration = 0  # 단일 테스트는 항상 0번째
+        self._current_scenario_name = scenario_name
+        self._current_repeat_index = 1
         # 이전 run의 stale 상태 제거 — 프론트 이미지 URL 일관성 보장
         self._run_output_dir = None
         self._run_output_dir_owned = False
@@ -921,13 +926,9 @@ class PlaybackService:
         목적: 스트레스 테스트 시 어느 cycle/step에서 어떤 무작위 동작이
         실행됐고 결과가 무엇이었는지 추적하기 위함.
         """
-        # 출력 경로: run_dir 우선, 없으면 scenarioname 기반 results dir
-        run_dir = self._run_output_dir
-        if run_dir is None or not run_dir.exists():
-            # 단일 시나리오 fallback
-            run_dir = RESULTS_DIR / f"{scenario_name}_{self._result_timestamp or 'manual'}"
-            run_dir.mkdir(parents=True, exist_ok=True)
-        log_path = run_dir / "random_log.txt"
+        log_path = self._resolve_random_log_path(scenario_name)
+        if log_path is None:
+            return
 
         # 첫 줄에 헤더 1회 작성
         is_new = not log_path.exists()
@@ -943,6 +944,44 @@ class PlaybackService:
             with open(log_path, "a", encoding="utf-8") as f:
                 if is_new:
                     f.write("# Random action log — timestamp / cycle / step_id / status / duration / desc / action\n")
+                f.write(line)
+        except Exception as e:
+            logger.debug("random_log.txt write failed: %s", e)
+
+    def _resolve_random_log_path(self, scenario_name: str):
+        """run_dir 우선, 없으면 scenario_name 기반 results dir 하위의 random_log.txt 경로 반환."""
+        run_dir = self._run_output_dir
+        if run_dir is None or not run_dir.exists():
+            run_dir = RESULTS_DIR / f"{scenario_name}_{self._result_timestamp or 'manual'}"
+            try:
+                run_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e:
+                logger.debug("random_log run_dir create failed: %s", e)
+                return None
+        return run_dir / "random_log.txt"
+
+    def _log_random_sub_action(self, scenario_name: str, step_id: int, repeat_index: int,
+                               iteration: int, total: int,
+                               action_summary: str, status: str, duration_ms: int,
+                               error: str = "") -> None:
+        """ALL_RANDOM step의 각 iteration별 실제 실행 동작을 random_log.txt 에 append.
+
+        iteration: 1-based 인덱스, total: 총 반복 횟수.
+        """
+        log_path = self._resolve_random_log_path(scenario_name)
+        if log_path is None:
+            return
+        is_new = not log_path.exists()
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        err_part = f"\terror={error}" if error else ""
+        line = (
+            f"{ts}\tcycle={repeat_index}\tstep_id={step_id}\titer={iteration}/{total}\t"
+            f"status={status}\tduration={duration_ms}ms\taction={action_summary}{err_part}\n"
+        )
+        try:
+            with open(log_path, "a", encoding="utf-8") as f:
+                if is_new:
+                    f.write("# Random action log — timestamp / cycle / step_id / iter / status / duration / action\n")
                 f.write(line)
         except Exception as e:
             logger.debug("random_log.txt write failed: %s", e)
@@ -1389,14 +1428,23 @@ class PlaybackService:
                 rh = max(1, y_max - y0)
                 return _rnd.randrange(x0, x0 + rw), _rnd.randrange(y0, y0 + rh)
 
+            # 로그 기록용 scenario_name / repeat_index (instance 상태에서 읽음)
+            rand_scenario_name = getattr(self, "_current_scenario_name", "") or ""
+            rand_repeat_idx = int(getattr(self, "_current_repeat_index", 1) or 1)
             for _i in range(repeat_count):
                 if self._should_stop:
                     break
                 roll = _rnd.random()
+                action_summary = ""
+                sub_status = "pass"
+                sub_error = ""
+                sub_t0 = time.time()
                 try:
                     if roll < w_hk and hk_keys:
                         key_name = _rnd.choice(hk_keys)
-                        sub_cmd = 0x44 if _rnd.random() < 0.2 else 0x43
+                        is_long = _rnd.random() < 0.2
+                        sub_cmd = 0x44 if is_long else 0x43
+                        action_summary = f"HK key={key_name} {'LONG' if is_long else 'SHORT'} screen={screen_type}"
                         if is_isap:
                             await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, None)
                         else:
@@ -1404,17 +1452,48 @@ class PlaybackService:
                     elif roll < (w_hk + w_sk):
                         x, y = _pick_xy(sk_region)
                         x += x_offset
+                        action_summary = f"SK ({x},{y}) screen={screen_type}"
                         await svc.async_tap(x, y, screen_type)
                     else:
                         x1, y1 = _pick_xy(drag_region)
                         x2, y2 = _pick_xy(drag_region)
                         x1 += x_offset; x2 += x_offset
+                        action_summary = f"DRAG ({x1},{y1})→({x2},{y2}) 300ms screen={screen_type}"
                         if is_isap:
                             await svc.async_swipe(x1, y1, x2, y2, screen_type, 300)
                         else:
                             await svc.async_swipe(x1, y1, x2, y2, screen_type)
                 except (ConnectionError, OSError) as ce:
+                    sub_status = "error"
+                    sub_error = str(ce)
                     logger.warning("all_random iteration %d failed: %s", _i + 1, ce)
+                except Exception as ex:
+                    sub_status = "error"
+                    sub_error = str(ex)
+                    logger.warning("all_random iteration %d error: %s", _i + 1, ex)
+                finally:
+                    sub_duration_ms = int((time.time() - sub_t0) * 1000)
+                    try:
+                        self._log_random_sub_action(
+                            rand_scenario_name, step.id, rand_repeat_idx,
+                            _i + 1, repeat_count,
+                            action_summary or "(no-op)", sub_status, sub_duration_ms, sub_error,
+                        )
+                    except Exception as _le:
+                        logger.debug("sub-action log write failed: %s", _le)
+                    # 실시간 진행 상황을 WebSocket으로 전파 (프론트에서 진행률 표시 가능)
+                    try:
+                        publish_event({
+                            "type": "random_action",
+                            "step_id": step.id,
+                            "iteration": _i + 1,
+                            "total": repeat_count,
+                            "status": sub_status,
+                            "action": action_summary,
+                            "duration_ms": sub_duration_ms,
+                        })
+                    except Exception:
+                        pass
                 if interval_ms > 0 and _i + 1 < repeat_count:
                     await self._interruptible_sleep(interval_ms / 1000.0)
         elif step.type == StepType.WAIT:
