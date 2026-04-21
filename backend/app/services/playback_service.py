@@ -1397,7 +1397,12 @@ class PlaybackService:
             import random as _rnd
             if not real_id:
                 raise ValueError("all_random step requires device_id")
+            # 연결 보장: 서비스가 없거나 끊겨 있으면 재연결 시도 (test-step 경로에서도 안전)
             svc, is_isap = self._get_agent_service(real_id)
+            if not svc or not svc.is_connected:
+                logger.info("all_random: device %s not connected, trying reconnect", real_id)
+                await self._ensure_device_connected(real_id, max_retries=2, retry_interval=2.0)
+                svc, is_isap = self._get_agent_service(real_id)
             if not svc or not svc.is_connected:
                 raise ValueError(f"HKMC/iSAP device {real_id} not connected")
 
