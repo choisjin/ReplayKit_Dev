@@ -806,9 +806,6 @@ export default function DevicePage() {
       </Tag>
       <span style={{ fontWeight: 500, flexShrink: 0 }}>{d.id}</span>
       {d.protected && <Tag color="gold" style={{ flexShrink: 0 }}>SYSTEM</Tag>}
-      {d.name && d.name !== d.id && (
-        <span style={{ color: '#888', flexShrink: 0 }}>{d.name}</span>
-      )}
       <span style={{ color: '#aaa', fontSize: 12, flexShrink: 0 }}>{d.address}</span>
       {d.info?.module && <Tag color="cyan" style={{ flexShrink: 0 }}>{d.info.module}</Tag>}
       {d.info?.baudrate && <Tag style={{ flexShrink: 0 }}>{d.info.baudrate}</Tag>}

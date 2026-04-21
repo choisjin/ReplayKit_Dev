@@ -2155,7 +2155,7 @@ export default function ScenarioPage() {
                     <Select.Option key={d.id} value={d.id}>
                       <Space size={4}>
                         <Tag color={d.status === 'device' || d.status === 'connected' ? 'green' : d.status === 'offline' || d.status === 'disconnected' ? 'red' : 'default'} style={{ marginRight: 0 }}>{d.type}</Tag>
-                        {d.name}
+                        {d.id}
                         {d.status === 'offline' || d.status === 'disconnected' ? <span style={{ color: '#ff4d4f' }}>({t('scenario.disconnected')})</span> : null}
                       </Space>
                     </Select.Option>

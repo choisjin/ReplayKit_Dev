@@ -2532,7 +2532,7 @@ export default function RecordPage() {
               value={to}
               onChange={(v) => setDeviceSwapMap(prev => ({ ...prev, [from]: v }))}
               style={{ flex: 1 }}
-              options={allDevices.filter(d => d.status === 'device' || d.status === 'connected').map(d => ({ label: `${d.id} ${d.name ? '(' + d.name + ')' : ''}`, value: d.id }))}
+              options={allDevices.filter(d => d.status === 'device' || d.status === 'connected').map(d => ({ label: d.id, value: d.id }))}
             />
           </div>
         ))}
@@ -3305,7 +3305,7 @@ export default function RecordPage() {
                 <div style={{ marginTop: 4, color: subTextColor, fontSize: 11 }}>
                   {lastGesture
                     ? `${lastGesture} → ${recording ? t('record.gestureRecord') : t('record.directExec')}`
-                    : t('record.gestureHint', { device: screenDevice?.name || screenshotDeviceId || '' })}
+                    : t('record.gestureHint', { device: screenshotDeviceId || screenDevice?.id || '' })}
                 </div>
                 {isScreenHkmc && hkmcKeys.length > 0 && testingStepIndex == null && (() => {
                   // visible=false 키는 숨김. 그룹별로 details로 묶어 표시.
@@ -3514,7 +3514,7 @@ export default function RecordPage() {
                   notFoundContent={t('record.noMatchedDevice')}
                   options={moduleDevices.map(d => ({
                     value: d.id,
-                    label: `${d.info?.module} ${d.name || d.id}`,
+                    label: `${d.info?.module} ${d.id}`,
                     _device: d,
                   }))}
                   optionRender={(opt) => {
@@ -3524,7 +3524,7 @@ export default function RecordPage() {
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <Tag color="purple" style={{ margin: 0 }}>{moduleName}</Tag>
                         <span style={{ fontSize: 12, color: isDark ? '#8bb4e0' : '#1677ff' }}>
-                          → {dev?.name || dev?.address || dev?.id}
+                          → {dev?.id || dev?.address}
                         </span>
                       </span>
                     );
