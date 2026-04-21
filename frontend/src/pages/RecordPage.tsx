@@ -2093,10 +2093,35 @@ export default function RecordPage() {
   saveScenarioRef.current = saveScenario;
 
   // 기대이미지 백엔드 API 호출 전 미저장 변경사항 동기화
-  // 백엔드의 _resolve_scenario가 디스크에서 시나리오를 로드하므로,
-  // 프론트엔드에서 스텝을 삭제/이동한 후 저장하지 않으면 인덱스가 불일치함
+  // 프론트엔드 steps 상태를 백엔드 in-memory 시나리오로 즉시 동기화.
+  // 녹화 중 이동·복사·재정렬로 인한 step_index 불일치를 방지.
+  const syncFrontendStepsToBackend = async (): Promise<boolean> => {
+    if (!recording || !scenarioName.trim()) return true;
+    const reindexed = steps.map((s, i) => {
+      const { _imageVer, ...rest } = s;
+      return { ...rest, id: i + 1 };
+    });
+    try {
+      await scenarioApi.syncSteps(scenarioName.trim(), reindexed);
+      return true;
+    } catch (e: any) {
+      console.warn('sync-steps failed:', e?.response?.data?.detail || e);
+      return false;
+    }
+  };
+
+  // 백엔드의 _resolve_scenario가 디스크에서 시나리오를 로드하거나 in-memory
+  // _current_scenario 를 사용하므로, 프론트엔드에서 스텝을 삭제/이동한 후
+  // 저장/동기화하지 않으면 인덱스가 불일치함.
+  //  - editingExisting: 디스크 save
+  //  - recording (신규): in-memory sync
   const ensureSavedForImageOp = async (): Promise<boolean> => {
-    if (!scenarioName.trim() || !editingExisting) return true;
+    if (!scenarioName.trim()) return true;
+    // 녹화 중 신규 시나리오: 디스크 저장이 아닌 in-memory sync
+    if (recording && !editingExisting) {
+      return await syncFrontendStepsToBackend();
+    }
+    if (!editingExisting) return true;
     if (!isDirty()) return true;
     try {
       const newName = scenarioName.trim();
@@ -2160,31 +2185,38 @@ export default function RecordPage() {
 
   const moveStepDnD = (oldIndex: number, newIndex: number) => {
     if (oldIndex === newIndex) return;
+    let reordered: Step[] = [];
     setSteps((prev) => {
       const arr = [...prev];
       const [moved] = arr.splice(oldIndex, 1);
       arr.splice(newIndex, 0, moved);
-      // Build old 1-based → new 1-based mapping
-      const mapping = new Map<number, number>();
       const oldIds = prev.map((_, i) => i + 1);
       const newIds = [...oldIds];
       newIds.splice(oldIndex, 1);
       newIds.splice(newIndex, 0, oldIds[oldIndex]);
-      for (let i = 0; i < oldIds.length; i++) {
-        mapping.set(oldIds[i], i + 1);
-      }
-      // Correct mapping: old position → new position
+      // old 1-based → new 1-based mapping
       const posMapping = new Map<number, number>();
       for (let i = 0; i < prev.length; i++) {
         posMapping.set(i + 1, newIds.indexOf(i + 1) + 1);
       }
-      return arr.map((s, i) => ({
+      reordered = arr.map((s, i) => ({
         ...s,
         id: i + 1,
         on_pass_goto: remapGoto(s.on_pass_goto, posMapping),
         on_fail_goto: remapGoto(s.on_fail_goto, posMapping),
       }));
+      return reordered;
     });
+    // 녹화 중이면 백엔드 in-memory 시나리오도 즉시 동기화
+    if (recording && scenarioName.trim() && reordered.length > 0) {
+      const payload = reordered.map((s, i) => {
+        const { _imageVer, ...rest } = s;
+        return { ...rest, id: i + 1 };
+      });
+      scenarioApi.syncSteps(scenarioName.trim(), payload).catch((e: any) => {
+        console.warn('sync-steps after move failed:', e?.response?.data?.detail || e);
+      });
+    }
   };
 
   // 스텝 복사/이동 모달 상태
@@ -2230,8 +2262,9 @@ export default function RecordPage() {
     if (importChecked.size === 0) return;
     const sortedIndices = Array.from(importChecked).sort((a, b) => a - b);
 
-    // MOVE 모드: 현재 시나리오 내 벌크 재정렬 (프론트엔드 전용, 백엔드 호출 X)
+    // MOVE 모드: 현재 시나리오 내 벌크 재정렬. 프론트엔드에서 계산 후 녹화 중이면 백엔드 sync.
     if (importMode === 'move') {
+      let reordered: Step[] = [];
       setSteps(prev => {
         // 선택 안 된 스텝과 선택된 스텝을 분리
         const removedSet = new Set(sortedIndices);
@@ -2273,7 +2306,7 @@ export default function RecordPage() {
           return mapped;
         };
 
-        return finalArr.map((s, i) => {
+        reordered = finalArr.map((s, i) => {
           // 이동된 스텝은 이미 goto 초기화됨
           if (movedSet.has(s)) {
             return { ...s, id: i + 1 };
@@ -2285,9 +2318,20 @@ export default function RecordPage() {
             on_fail_goto: remapOrNull(s.on_fail_goto),
           };
         });
+        return reordered;
       });
       setImportStepModalOpen(false);
       message.success(t('record.stepsMoved', { count: sortedIndices.length }));
+      // 녹화 중이면 백엔드 in-memory 시나리오도 즉시 동기화
+      if (recording && scenarioName.trim() && reordered.length > 0) {
+        const payload = reordered.map((s, i) => {
+          const { _imageVer, ...rest } = s;
+          return { ...rest, id: i + 1 };
+        });
+        scenarioApi.syncSteps(scenarioName.trim(), payload).catch((e: any) => {
+          console.warn('sync-steps after bulk move failed:', e?.response?.data?.detail || e);
+        });
+      }
       return;
     }
 
@@ -2297,13 +2341,25 @@ export default function RecordPage() {
     try {
       const res = await scenarioApi.importSteps(scenarioName, sourceName, sortedIndices, false);
       const imported: Step[] = res.data.steps || [];
+      let merged: Step[] = [];
       setSteps(prev => {
         const arr = [...prev];
         arr.splice(importInsertIndex + 1, 0, ...imported.map(s => ({ ...s, _imageVer: Date.now() })));
-        return arr.map((s, i) => ({ ...s, id: i + 1 }));
+        merged = arr.map((s, i) => ({ ...s, id: i + 1 }));
+        return merged;
       });
       setImportStepModalOpen(false);
       message.success(t('record.stepsImported', { count: imported.length }));
+      // 녹화 중이면 백엔드 in-memory 시나리오도 즉시 동기화 (import-steps는 target을 변경하지 않음)
+      if (recording && scenarioName.trim() && merged.length > 0) {
+        const payload = merged.map((s, i) => {
+          const { _imageVer, ...rest } = s;
+          return { ...rest, id: i + 1 };
+        });
+        scenarioApi.syncSteps(scenarioName.trim(), payload).catch((e: any) => {
+          console.warn('sync-steps after copy failed:', e?.response?.data?.detail || e);
+        });
+      }
     } catch (e: any) {
       message.error(e.response?.data?.detail || t('common.saveFailed'));
     } finally {

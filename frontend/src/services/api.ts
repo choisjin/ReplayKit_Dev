@@ -61,6 +61,8 @@ export const scenarioApi = {
     api.post('/scenario/record/resume', { name }),
   addStep: (step: any) => api.post('/scenario/record/step', step),
   deleteStep: (stepIndex: number) => api.post('/scenario/record/delete-step', { step_index: stepIndex }),
+  syncSteps: (scenarioName: string, steps: any[]) =>
+    api.post('/scenario/record/sync-steps', { scenario_name: scenarioName, steps }),
   stopRecording: () => api.post('/scenario/record/stop'),
   recordingStatus: () => api.get('/scenario/record/status'),
   play: (name: string, verify = true) =>
