@@ -43,7 +43,7 @@ function getDevicePrefix(id: string): string {
 // 그룹 표시 이름
 const GROUP_LABELS: Record<string, string> = {
   Android: 'Android (ADB)',
-  HKMC: 'HKMC 6th',
+  HKMC: 'HKMC Agent',
   iSAP: 'iSAP Agent',
   Serial: 'Serial',
   VisionCam: 'Vision Camera',
@@ -244,21 +244,38 @@ export default function DevicePage() {
   const [deviceModel, setDeviceModel] = useState('');
 
   // 프로젝트/모델 콤보는 backend/device_catalog.json 에서 로드 (AdminPage에서 편집)
-  interface CatalogModel { value: string; enabled: boolean }   // label 없음 — value가 표시·ID prefix 겸용
+  interface CatalogModel { value: string; enabled: boolean; agent?: string }
   interface CatalogProject { name: string; enabled: boolean; models: CatalogModel[] }
+  interface CatalogAgent { name: string; type: string; enabled: boolean }
   const [catalogProjects, setCatalogProjects] = useState<CatalogProject[]>([]);
   const [moduleVisibility, setModuleVisibility] = useState<Record<string, boolean>>({});
+  const [catalogAgents, setCatalogAgents] = useState<CatalogAgent[]>([]);
 
   useEffect(() => {
     deviceApi.getCatalog().then(res => {
       const data = res.data || {};
       setCatalogProjects(Array.isArray(data.projects) ? data.projects : []);
       setModuleVisibility(data.module_visibility || {});
+      setCatalogAgents(Array.isArray(data.agents) ? data.agents : []);
     }).catch(() => {
       setCatalogProjects([]);
       setModuleVisibility({});
+      setCatalogAgents([]);
     });
   }, []);
+
+  // 모델 value → agent type 매핑 (수동 연결 탭에서 자동 connect type 설정에 활용)
+  const modelAgentType = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of catalogProjects) {
+      for (const m of (p.models || [])) {
+        if (!m.value || !m.agent) continue;
+        const agent = catalogAgents.find(a => a.name === m.agent);
+        if (agent?.type) map.set(m.value, agent.type);
+      }
+    }
+    return map;
+  }, [catalogProjects, catalogAgents]);
 
   const PROJECT_OPTIONS = useMemo(() => [
     { label: '전체', value: '' },
@@ -1040,8 +1057,11 @@ export default function DevicePage() {
                           onChange={(v) => {
                             const nextModel = v || '';
                             setDeviceModel(nextModel);
-                            // SSH는 스캔 대상이 아니므로 수동 연결 탭으로 자동 전환
-                            if (nextModel === 'SSH') {
+                            // 모델에 에이전트가 할당돼 있으면 connect type 동기화 (수동 연결 탭 호환)
+                            const agentType = modelAgentType.get(nextModel);
+                            if (agentType) {
+                              setConnectType(agentType as any);
+                            } else if (nextModel === 'SSH') {
                               setConnectType('ssh');
                               setModalTabKey('manual');
                             }
@@ -1514,11 +1534,13 @@ export default function DevicePage() {
                           onChange={(v) => {
                             const nextModel = v || '';
                             setDeviceModel(nextModel);
-                            // SSH 모델 선택 시 연결 타입도 자동으로 SSH로 전환
-                            if (nextModel === 'SSH') {
+                            // 모델에 에이전트가 할당돼 있으면 해당 type으로 connect type 자동 전환
+                            const agentType = modelAgentType.get(nextModel);
+                            if (agentType) {
+                              setConnectType(agentType as any);
+                            } else if (nextModel === 'SSH') {
                               setConnectType('ssh');
                             } else if (connectType === 'ssh') {
-                              // SSH 아닌 모델로 바꾸면 ADB로 되돌림
                               setConnectType('adb');
                             }
                           }}
@@ -1549,7 +1571,7 @@ export default function DevicePage() {
                     {(!selectedModule || moduleConnType === undefined) && (
                       <Select value={connectType} onChange={setConnectType} style={{ width: '100%' }}>
                         <Option value="adb">ADB (WiFi / TCP)</Option>
-                        {modalCategory === 'primary' && <Option value="hkmc6th">HKMC 6th (TCP)</Option>}
+                        {modalCategory === 'primary' && <Option value="hkmc6th">HKMC Agent (TCP)</Option>}
                         {modalCategory === 'primary' && <Option value="isap_agent">iSAP Agent (TCP)</Option>}
                         {modalCategory === 'primary' && <Option value="vision_camera">Vision Camera</Option>}
                         {modalCategory === 'primary' && <Option value="webcam">{t('device.webcam')}</Option>}

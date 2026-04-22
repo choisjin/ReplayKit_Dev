@@ -124,5 +124,12 @@
     "SP25Bench": false,
     "PCANClient": false,
     "MLP": false
-  }
+  },
+  "agents": [
+    { "name": "ADB",          "type": "adb",           "enabled": true },
+    { "name": "HKMC Agent",   "type": "hkmc6th",       "enabled": true },
+    { "name": "iSAP Agent",   "type": "isap_agent",    "enabled": true },
+    { "name": "VisionCamera", "type": "vision_camera", "enabled": true },
+    { "name": "Webcam",       "type": "webcam",        "enabled": true }
+  ]
 }

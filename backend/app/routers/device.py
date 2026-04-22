@@ -99,6 +99,15 @@ _DEFAULT_DEVICE_CATALOG: dict = {
     ],
     # 모듈 표시 여부 (false = 아직 미구현/숨김). 리스트에 없으면 기본 표시.
     "module_visibility": {},
+    # 주 디바이스 조작 에이전트 정의. type은 내부 device type과 매핑 (변경 불가).
+    # name은 UI 표시용 + 모델에서 참조하는 식별자.
+    "agents": [
+        {"name": "ADB",          "type": "adb",           "enabled": True},
+        {"name": "HKMC Agent",   "type": "hkmc6th",       "enabled": True},
+        {"name": "iSAP Agent",   "type": "isap_agent",    "enabled": True},
+        {"name": "VisionCamera", "type": "vision_camera", "enabled": True},
+        {"name": "Webcam",       "type": "webcam",        "enabled": True},
+    ],
 }
 
 

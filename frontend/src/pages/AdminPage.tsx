@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Checkbox, Collapse, Divider, Empty, Input, message, Modal, Space, Tag, Typography } from 'antd';
+import { Button, Card, Checkbox, Collapse, Divider, Empty, Input, message, Modal, Select, Space, Tag, Typography } from 'antd';
 import { DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons';
 import { deviceApi } from '../services/api';
 
 interface Model {
   value: string;   // 표시 텍스트이자 Device ID prefix로 사용
   enabled: boolean;
+  agent?: string;  // 할당된 에이전트 name (조작 방식 결정)
 }
 
 interface Project {
@@ -14,9 +15,16 @@ interface Project {
   models: Model[];
 }
 
+interface Agent {
+  name: string;
+  type: string;   // 내부 device type (adb/hkmc6th/isap_agent/vision_camera/webcam) — 읽기 전용
+  enabled: boolean;
+}
+
 interface Catalog {
   projects: Project[];
   module_visibility: Record<string, boolean>;
+  agents: Agent[];
 }
 
 interface ModuleInfo {
@@ -32,7 +40,7 @@ interface ModuleInfo {
  * 접근 경로: URL hash `#admin` (메뉴에 노출되지 않음).
  */
 export default function AdminPage() {
-  const [catalog, setCatalog] = useState<Catalog>({ projects: [], module_visibility: {} });
+  const [catalog, setCatalog] = useState<Catalog>({ projects: [], module_visibility: {}, agents: [] });
   const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -49,6 +57,7 @@ export default function AdminPage() {
       setCatalog({
         projects: Array.isArray(cat.projects) ? cat.projects : [],
         module_visibility: cat.module_visibility || {},
+        agents: Array.isArray(cat.agents) ? cat.agents : [],
       });
       setModules((modRes.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => (a.label || a.name || '').localeCompare(b.label || b.name || '')));
       setDirty(false);
@@ -149,6 +158,15 @@ export default function AdminPage() {
   };
   const isModuleVisible = (name: string) => catalog.module_visibility[name] !== false; // 기본값 true
 
+  // --- Agent ---
+  const updateAgent = (idx: number, patch: Partial<Agent>) => {
+    setCatalog(c => ({ ...c, agents: c.agents.map((a, i) => i === idx ? { ...a, ...patch } : a) }));
+    markDirty();
+  };
+  const enabledAgentOptions = catalog.agents
+    .filter(a => a.enabled !== false)
+    .map(a => ({ label: `${a.name} (${a.type})`, value: a.name }));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <Card
@@ -213,8 +231,18 @@ export default function AdminPage() {
                         size="small"
                         value={m.value}
                         placeholder="모델 이름 (Device ID prefix)"
-                        style={{ width: 260 }}
+                        style={{ width: 220 }}
                         onChange={(e) => updateModel(idx, mi, { value: e.target.value })}
+                      />
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>에이전트</Typography.Text>
+                      <Select
+                        size="small"
+                        allowClear
+                        placeholder="선택"
+                        value={m.agent}
+                        style={{ width: 200 }}
+                        options={enabledAgentOptions}
+                        onChange={(v) => updateModel(idx, mi, { agent: v })}
                       />
                       <Button size="small" danger icon={<DeleteOutlined />} onClick={() => removeModel(idx, mi)} />
                     </div>
@@ -223,6 +251,43 @@ export default function AdminPage() {
               ),
             }))}
           />
+        )}
+      </Card>
+
+      {/* 에이전트 관리 */}
+      <Card size="small" title="에이전트 (주 디바이스 조작 방식)"
+        extra={<Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          체크 해제하면 모델의 에이전트 선택지에서 제외됩니다. type(내부 매핑)은 고정.
+        </Typography.Text>}>
+        {catalog.agents.length === 0 ? (
+          <Empty description="에이전트 없음" />
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {catalog.agents.map((a, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Checkbox
+                  checked={a.enabled !== false}
+                  onChange={(e) => updateAgent(i, { enabled: e.target.checked })}
+                />
+                <Typography.Text type="secondary" style={{ fontSize: 12, minWidth: 42 }}>이름</Typography.Text>
+                <Input
+                  size="small"
+                  value={a.name}
+                  style={{ width: 200 }}
+                  onChange={(e) => updateAgent(i, { name: e.target.value })}
+                />
+                <Typography.Text type="secondary" style={{ fontSize: 12, minWidth: 42 }}>type</Typography.Text>
+                <Tag color="blue" style={{ fontFamily: 'monospace' }}>{a.type}</Tag>
+                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                  {a.type === 'adb' && '— Android/IVI tap·swipe·key·screencap'}
+                  {a.type === 'hkmc6th' && '— HKMC 차량 IVI TCP 프로토콜'}
+                  {a.type === 'isap_agent' && '— iSAP Agent TCP 프로토콜'}
+                  {a.type === 'vision_camera' && '— GigE 비전 카메라 (스크린샷 전용)'}
+                  {a.type === 'webcam' && '— USB 웹캠 (관찰 전용)'}
+                </Typography.Text>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
 
