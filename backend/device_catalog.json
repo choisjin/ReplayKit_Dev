@@ -33,21 +33,6 @@
           "value": "Gen6 Premium",
           "enabled": true,
           "agent": "HKMC Agent"
-        },
-        {
-          "value": "Gen5 Standard (Wide)",
-          "enabled": true,
-          "agent": "HKMC Agent"
-        },
-        {
-          "value": "Gen5 Standard",
-          "enabled": true,
-          "agent": "HKMC Agent"
-        },
-        {
-          "value": "Gen5 Premium",
-          "enabled": true,
-          "agent": "HKMC Agent"
         }
       ]
     },
