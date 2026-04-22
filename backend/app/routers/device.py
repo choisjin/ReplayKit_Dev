@@ -35,7 +35,7 @@ _DEFAULT_SCAN_SETTINGS = {
         "hkmc":           {"enabled": True,  "module": "",             "category": "primary",   "ports": [6655, 5000]},
         "isap":           {"enabled": False, "module": "",             "category": "primary",   "ports": [20000]},
         "dlt":            {"enabled": True,  "module": "DLTLogging",   "category": "auxiliary", "ports": [3490]},
-        "bench":          {"enabled": True,  "module": "CCIC_BENCH",   "category": "auxiliary", "ports": [25000]},
+        "bench":          {"enabled": True,  "module": "WoohyunBench", "category": "auxiliary", "ports": [25000]},
         "vision_camera":  {"enabled": False, "module": "VisionCamera", "category": "primary"},
         "webcam":         {"enabled": True,  "module": "WebcamDevice", "category": "primary"},
         "ssh":            {"enabled": True,  "module": "SSHManager",   "category": "auxiliary", "port": 22},
@@ -50,7 +50,16 @@ _DEFAULT_SCAN_SETTINGS = {
 def _load_scan_settings() -> dict:
     if _SCAN_SETTINGS_FILE.exists():
         try:
-            return _json.loads(_SCAN_SETTINGS_FILE.read_text(encoding="utf-8"))
+            data = _json.loads(_SCAN_SETTINGS_FILE.read_text(encoding="utf-8"))
+            # 레거시 모듈 이름 마이그레이션: CCIC_BENCH → WoohyunBench
+            builtin = data.get("builtin", {})
+            for key, entry in builtin.items():
+                if isinstance(entry, dict) and entry.get("module") == "CCIC_BENCH":
+                    entry["module"] = "WoohyunBench"
+            for entry in data.get("custom", []) or []:
+                if isinstance(entry, dict) and entry.get("module") == "CCIC_BENCH":
+                    entry["module"] = "WoohyunBench"
+            return data
         except Exception:
             pass
     return dict(_DEFAULT_SCAN_SETTINGS)

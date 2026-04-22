@@ -1940,8 +1940,8 @@
     }
   },
 
-  "CCIC_BENCH": {
-    "_description": "CCIC Bench — Test bench equipment that controls vehicle power (IGN/ACC/Battery) via UDP communication",
+  "WoohyunBench": {
+    "_description": "Woohyun Bench — Test bench equipment that controls vehicle power (IGN/ACC/Battery) via UDP communication",
     "functions": {
       "Connect": {
         "description": "Establishes a UDP network connection to the bench equipment. Automatically called when adding the device, so manual invocation is usually unnecessary.",

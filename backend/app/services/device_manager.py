@@ -643,7 +643,9 @@ class DeviceManager:
     def _load_auxiliary_devices(self) -> None:
         """Load saved auxiliary devices from disk.
 
-        레거시 type 문자열 자동 마이그레이션: "hkmc6th" → "hkmc_agent".
+        레거시 자동 마이그레이션:
+          - type "hkmc6th" → "hkmc_agent"
+          - info.module "CCIC_BENCH" → "WoohyunBench"
         """
         if not _AUX_DEVICES_FILE.exists():
             return
@@ -655,6 +657,11 @@ class DeviceManager:
                 if dev_type == "hkmc6th":
                     dev_type = "hkmc_agent"
                     d["type"] = dev_type
+                    migrated = True
+                info = d.get("info") or {}
+                if isinstance(info, dict) and info.get("module") == "CCIC_BENCH":
+                    info["module"] = "WoohyunBench"
+                    d["info"] = info
                     migrated = True
                 dev = ManagedDevice(
                     id=d["id"],

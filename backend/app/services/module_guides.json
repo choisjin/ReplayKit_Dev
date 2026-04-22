@@ -1940,8 +1940,8 @@
     }
   },
 
-  "CCIC_BENCH": {
-    "_description": "CCIC 우현벤치 — UDP 통신으로 차량 전원(IGN/ACC/배터리)을 제어하는 테스트 벤치 장비",
+  "WoohyunBench": {
+    "_description": "우현벤치 — UDP 통신으로 차량 전원(IGN/ACC/배터리)을 제어하는 테스트 벤치 장비",
     "functions": {
       "Connect": {
         "description": "벤치 장비에 UDP 네트워크 연결을 수행합니다. 장비 추가 시 자동으로 호출되므로 보통 수동 호출이 필요 없습니다.",

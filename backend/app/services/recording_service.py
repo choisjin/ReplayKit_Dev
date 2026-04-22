@@ -64,6 +64,14 @@ def _migrate_legacy_step_types(data: dict) -> bool:
             s["description"] = f"CMD::{func}()"
         changed = True
         logger.info("Migrated legacy step %s → module_command CMD.%s", st, func)
+
+    # 레거시 모듈 이름 마이그레이션: CCIC_BENCH → WoohyunBench
+    for s in steps:
+        params = s.get("params") or {}
+        if isinstance(params, dict) and params.get("module") == "CCIC_BENCH":
+            params["module"] = "WoohyunBench"
+            s["params"] = params
+            changed = True
     return changed
 
 

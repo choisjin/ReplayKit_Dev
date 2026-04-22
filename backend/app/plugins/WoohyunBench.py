@@ -2,7 +2,7 @@
 """CCIC 우현벤치 UDP control plugin.
 
 UDP 패킷 형식: [0x55, 0xAA, sender(100), seq(0), cmd1, cmd2, len_hi, len_lo, ...data]
-Reference: CCIC_BENCH_LIBRARY.py, CCIC_DEFINITION_LIBRARY.py (legacy)
+Reference: WoohyunBench_LIBRARY.py, CCIC_DEFINITION_LIBRARY.py (legacy)
 
 벤치 기본값: BENCH_IP = 192.168.1.101, BENCH_PORT = 25000
 """
@@ -19,7 +19,7 @@ SENDER_ID = 100
 DEFAULT_UDP_PORT = 25000
 
 
-class CCIC_BENCH:
+class WoohyunBench:
     """CCIC 우현벤치 UDP 제어 플러그인."""
 
     def __init__(self, host: str = "", udp_port: int = DEFAULT_UDP_PORT):
@@ -44,7 +44,7 @@ class CCIC_BENCH:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # 레거시 코드와 동일: connect()로 기본 목적지 설정 (타임아웃 미설정)
         self._sock.connect((self._host, self._udp_port))
-        logger.info("CCIC_BENCH connected to %s:%d", self._host, self._udp_port)
+        logger.info("WoohyunBench connected to %s:%d", self._host, self._udp_port)
         return f"Connected to {self._host}:{self._udp_port}"
 
     def Disconnect(self) -> str:
@@ -83,10 +83,10 @@ class CCIC_BENCH:
         try:
             self._sock.sendto(encoded, (self._host, self._udp_port))
         except Exception as e:
-            logger.error("CCIC_BENCH send failed: %s", e)
+            logger.error("WoohyunBench send failed: %s", e)
             return False
 
-        logger.info("CCIC_BENCH TX: %s", hex_str)
+        logger.info("WoohyunBench TX: %s", hex_str)
 
         if not recv:
             return True
@@ -100,7 +100,7 @@ class CCIC_BENCH:
             except socket.timeout:
                 continue
             except Exception as e:
-                logger.error("CCIC_BENCH recv error: %s", e)
+                logger.error("WoohyunBench recv error: %s", e)
                 return False
             finally:
                 self._sock.settimeout(None)  # 레거시와 동일: recv 후 blocking 복원
@@ -121,10 +121,10 @@ class CCIC_BENCH:
 
             if res:
                 recv_hex = " ".join(f"0x{b:02X}" for b in recv_list)
-                logger.info("CCIC_BENCH RX: %s", recv_hex)
+                logger.info("WoohyunBench RX: %s", recv_hex)
                 return recv_list
 
-        logger.warning("CCIC_BENCH: no matching response within %ds", recv_timeout)
+        logger.warning("WoohyunBench: no matching response within %ds", recv_timeout)
         return True
 
     # ------------------------------------------------------------------

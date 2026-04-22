@@ -147,7 +147,7 @@ def list_available_modules() -> list[dict]:
          ]},
         {"name": "BENCH", "label": "BENCH", "connect_type": "socket",
          "connect_fields": []},
-        {"name": "CCIC_BENCH", "label": "CCIC_BENCH", "connect_type": "socket",
+        {"name": "WoohyunBench", "label": "WoohyunBench", "connect_type": "socket",
          "connect_fields": [
              {"name": "udp_port", "label": "UDP Port", "type": "number", "default": "25000"},
          ]},

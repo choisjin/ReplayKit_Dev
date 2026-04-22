@@ -345,7 +345,7 @@ export default function DevicePage() {
     hkmc: { enabled: true, module: '', ports: [6655, 5000], category: 'primary' },
     isap: { enabled: false, module: '', ports: [20000], category: 'primary' },
     dlt: { enabled: true, module: 'DLTLogging', ports: [3490], category: 'auxiliary' },
-    bench: { enabled: true, module: 'CCIC_BENCH', ports: [25000], category: 'auxiliary' },
+    bench: { enabled: true, module: 'WoohyunBench', ports: [25000], category: 'auxiliary' },
     vision_camera: { enabled: false, module: 'VisionCamera', category: 'primary' },
     webcam: { enabled: true, module: 'WebcamDevice', category: 'primary' },
     ssh: { enabled: true, module: 'SSHManager', port: 22, category: 'auxiliary' },
@@ -686,7 +686,7 @@ export default function DevicePage() {
   };
 
   const handleAddBench = async (ip: string, port: number) => {
-    const moduleName = scanSelectedModule || 'CCIC_BENCH';
+    const moduleName = scanSelectedModule || 'WoohyunBench';
     setConnecting(true);
     try {
       const extra = { udp_port: port };
@@ -1200,7 +1200,7 @@ export default function DevicePage() {
                                   value={scanSelectedModule}
                                   onChange={setScanSelectedModule}
                                   style={{ width: 280 }}
-                                  defaultValue="CCIC_BENCH"
+                                  defaultValue="WoohyunBench"
                                   options={visibleModules.filter(m => m.connect_type === 'socket').map(m => ({ label: m.label, value: m.name }))}
                                 />
                               </div>
@@ -2005,7 +2005,7 @@ export default function DevicePage() {
               { key: 'hkmc', label: 'HKMC', proto: 'TCP', editablePorts: true },
               { key: 'isap', label: 'iSAP Agent', proto: 'TCP', editablePorts: true },
               { key: 'dlt', label: 'DLT', proto: 'TCP', editablePorts: true },
-              { key: 'bench', label: 'Bench', proto: 'UDP', editablePorts: true },
+              { key: 'bench', label: 'WoohyunBench', proto: 'UDP', editablePorts: true },
               { key: 'vision_camera', label: 'Vision Camera', proto: 'GigE', editablePorts: false },
               { key: 'webcam', label: 'Webcam', proto: 'USB', editablePorts: false },
               { key: 'ssh', label: 'SSH', proto: 'TCP', editablePorts: false },
