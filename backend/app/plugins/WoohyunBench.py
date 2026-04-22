@@ -62,13 +62,49 @@ class WoohyunBench:
     # Internal — 레거시 UDP_SEND()와 동일한 로직
     # ------------------------------------------------------------------
 
+    def _drain_rx(self) -> int:
+        """수신 버퍼에 남아있는 이전 응답들을 모두 비워 현재 요청 응답과 섞이지 않게 한다.
+
+        Returns: drop된 패킷 수 (디버깅용).
+        """
+        if not self._sock:
+            return 0
+        dropped = 0
+        orig_timeout = self._sock.gettimeout()
+        try:
+            self._sock.setblocking(False)
+            while True:
+                try:
+                    data = self._sock.recv(64)
+                    if not data:
+                        break
+                    dropped += 1
+                    if dropped > 32:
+                        break  # 안전장치
+                except BlockingIOError:
+                    break
+                except Exception:
+                    break
+        finally:
+            try:
+                self._sock.settimeout(orig_timeout)
+            except Exception:
+                pass
+        if dropped:
+            logger.debug("WoohyunBench drained %d stale packet(s) from rx buffer", dropped)
+        return dropped
+
     def _send(self, data: list, recv: bool = True, recv_timeout: float = 60.0) -> list | bool:
         """UDP 패킷 전송 및 응답 수신.
 
         레거시 UDP_SEND() 함수와 동일한 패킷 구조 및 응답 검증 로직.
+        단, 요청 전에 수신 버퍼를 비워 이전 응답이 섞이지 않도록 한다.
         """
         if not self._sock:
             raise RuntimeError("Not connected — call Connect() first")
+
+        # 이전 명령 응답이 버퍼에 남아있으면 매칭 루프에서 오래 소모됨 → 보내기 전 비움
+        self._drain_rx()
 
         data_len = len(data) - 2
         packet = [START_1, START_2, SENDER_ID, 0,
@@ -139,9 +175,12 @@ class WoohyunBench:
         return f"IGN1 {status}: {'OK' if res else 'FAIL'}"
 
     def IGN1_Read(self) -> int:
-        """IGN1 상태 읽기."""
-        res = self._send([0x24, 0x32])
-        return res[-1] if isinstance(res, list) else -1
+        """IGN1 상태 읽기. 응답이 3초 내 오지 않으면 -1."""
+        res = self._send([0x24, 0x32], recv_timeout=3.0)
+        # 응답 packet은 헤더 8바이트 + 1바이트 상태 = 9바이트 이상이어야 유효
+        if isinstance(res, list) and len(res) >= 9:
+            return res[-1]
+        return -1
 
     def IGN2(self, on_off: int = 1) -> str:
         """IGN2 제어 (0=OFF, 1=ON). 레거시 WOOHYUN_IGN2()."""
@@ -151,9 +190,11 @@ class WoohyunBench:
         return f"IGN2 {status}: {'OK' if res else 'FAIL'}"
 
     def IGN2_Read(self) -> int:
-        """IGN2 상태 읽기."""
-        res = self._send([0x24, 0x38])
-        return res[-1] if isinstance(res, list) else -1
+        """IGN2 상태 읽기. 응답이 3초 내 오지 않으면 -1."""
+        res = self._send([0x24, 0x38], recv_timeout=3.0)
+        if isinstance(res, list) and len(res) >= 9:
+            return res[-1]
+        return -1
 
     def ACC(self, on_off: int = 1) -> str:
         """ACC 제어 (0=OFF, 1=ON). 레거시 WOOHYUN_ACC()."""
@@ -163,9 +204,11 @@ class WoohyunBench:
         return f"ACC {status}: {'OK' if res else 'FAIL'}"
 
     def ACC_Read(self) -> int:
-        """ACC 상태 읽기."""
-        res = self._send([0x24, 0x31])
-        return res[-1] if isinstance(res, list) else -1
+        """ACC 상태 읽기. 응답이 3초 내 오지 않으면 -1."""
+        res = self._send([0x24, 0x31], recv_timeout=3.0)
+        if isinstance(res, list) and len(res) >= 9:
+            return res[-1]
+        return -1
 
     def BATTERY(self, on_off: int = 1) -> str:
         """Battery relay 제어 (0=OFF, 1=ON). 레거시 WOOHYUN_BATTERY()."""
@@ -175,9 +218,15 @@ class WoohyunBench:
         return f"BATTERY {status}: {'OK' if res else 'FAIL'}"
 
     def BATTERY_Read(self) -> int:
-        """Battery relay 상태 읽기."""
-        res = self._send([0x24, 0x33])
-        return res[-1] if isinstance(res, list) else -1
+        """Battery relay 상태 읽기. 응답이 3초 내 오지 않으면 -1.
+
+        장비가 echo만 반환(상태 payload 없음)하면 len(res)==8이어서 -1로 처리.
+        정상 응답은 헤더 8 + 상태 1 = 최소 9바이트.
+        """
+        res = self._send([0x24, 0x33], recv_timeout=3.0)
+        if isinstance(res, list) and len(res) >= 9:
+            return res[-1]
+        return -1
 
     def BatterySet(self, voltage: float = 14.4) -> str:
         """배터리 전압 설정 (V). 레거시 BATTERY_SET()."""
@@ -187,15 +236,15 @@ class WoohyunBench:
 
     def BatteryCheck(self) -> float:
         """배터리 전압 읽기 (V). 레거시 BATTERY_CHECK()."""
-        res = self._send([0x20, 0x02])
-        if isinstance(res, list):
+        res = self._send([0x20, 0x02], recv_timeout=3.0)
+        if isinstance(res, list) and len(res) >= 9:
             return float(res[-1]) / 10
         return -1.0
 
     def AmpereCheck(self) -> float:
         """전류 읽기 (A). 레거시 AMPERE_CHECK()."""
-        res = self._send([0x20, 0x03])
-        if isinstance(res, list) and len(res) >= 2:
+        res = self._send([0x20, 0x03], recv_timeout=3.0)
+        if isinstance(res, list) and len(res) >= 10:
             raw = (res[-1] << 8) | res[-2]
             return float(raw) / 1000
         return -1.0

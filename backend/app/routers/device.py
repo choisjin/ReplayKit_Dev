@@ -489,8 +489,16 @@ async def connect_device(req: ConnectRequest):
             extra_fields=req.extra_fields,
             device_id=custom_id,
         )
+        # 등록 직후 실제 연결 수행 — Connect() 호출 및 인스턴스 생성.
+        # 기존에는 등록만 하고 status="disconnected" 로 남아, UI에서 연결됨으로 보이지
+        # 않거나 이후 호출이 실패하는 문제가 있었음.
+        try:
+            connect_msg = await dm.connect_device_by_id(dev.id)
+        except Exception as e:
+            logger.warning("Module auto-connect after register failed: %s", e)
+            connect_msg = f"registered but connect failed: {e}"
         return {
-            "result": f"Module device {req.module} added (ID: {dev.id})",
+            "result": f"Module device {req.module} added (ID: {dev.id}) — {connect_msg}",
             "primary": _with_protected_flag(dm.list_primary()),
             "auxiliary": _with_protected_flag(dm.list_auxiliary()),
         }
