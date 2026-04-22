@@ -57,7 +57,8 @@
       "models": [
         {
           "value": "GVM",
-          "enabled": true
+          "enabled": true,
+          "agent": "ADB"
         }
       ]
     },
@@ -80,7 +81,13 @@
     {
       "name": "Nissan",
       "enabled": true,
-      "models": []
+      "models": [
+        {
+          "value": "CDC_High",
+          "enabled": true,
+          "agent": "ADB"
+        }
+      ]
     },
     {
       "name": "Renault",
@@ -132,7 +139,8 @@
     "VisionCameraClient": false,
     "SP25Bench": false,
     "PCANClient": false,
-    "MLP": false
+    "MLP": false,
+    "CANOE": true
   },
   "agents": [
     {
