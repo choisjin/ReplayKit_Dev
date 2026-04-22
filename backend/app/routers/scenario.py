@@ -189,6 +189,7 @@ class SaveExpectedImageRequest(BaseModel):
     compare_mode: Optional[str] = None  # "multi_crop" to append to expected_images
     crop_label: str = ""  # label for multi_crop item
     preserve_crops: bool = False  # True: multi_crop items 유지 (multi_crop base 이미지 갱신 시 사용)
+    screen_type: Optional[str] = None  # 캡처 시점의 화면 선택값 (rear_left 등) — 스텝에 저장
 
 
 async def _resolve_scenario(scenario_name: str):
@@ -280,6 +281,11 @@ async def save_expected_image(req: SaveExpectedImageRequest):
                            width=int(req.crop["width"]), height=int(req.crop["height"]))
         else:
             step.roi = None
+
+    # 캡처 시점의 화면 값 저장 — rear_left/rear_right에서 저장한 기대이미지가
+    # 재생 시 front_center 로 잘못 비교되는 문제 방지.
+    if req.screen_type:
+        step.screen_type = req.screen_type
 
     await recording_svc.save_scenario(scenario)
     return {"status": "ok", "filename": filename, "step_id": step.id}
@@ -401,8 +407,12 @@ async def capture_expected_image(req: CaptureExpectedImageRequest):
         else:
             step.roi = None
 
-    # 스크린샷 디바이스 기록 (재생/테스트 시 동일 디바이스로 캡처)
+    # 스크린샷 디바이스/화면 기록 (재생/테스트 시 동일 디바이스·동일 화면으로 캡처).
+    # screen_type을 저장하지 않으면 rear_left/rear_right에서 캡처한 기대이미지와
+    # 재생 시 front_center로 캡처한 actual이 비교되어 항상 FAIL이 된다.
     step.screenshot_device_id = req.device_id
+    if req.screen_type:
+        step.screen_type = req.screen_type
 
     await recording_svc.save_scenario(scenario)
     return {"status": "ok", "filename": filename, "step_id": step.id}

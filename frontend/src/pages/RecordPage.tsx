@@ -1445,8 +1445,10 @@ export default function RecordPage() {
       try {
         const res = await scenarioApi.saveExpectedImage(
           scenarioName, captureStepIndex, modalImage, crop,
+          undefined, undefined, undefined,
+          (isScreenHkmc || hasMultiDisplay) ? screenType : undefined,
         );
-        setSteps(prev => prev.map((s, i) => i === captureStepIndex ? { ...s, expected_image: res.data.filename, roi: crop, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now(), exclude_rois: [], expected_images: [] } : s));
+        setSteps(prev => prev.map((s, i) => i === captureStepIndex ? { ...s, expected_image: res.data.filename, roi: crop, screenshot_device_id: screenshotDeviceId, screen_type: (isScreenHkmc || hasMultiDisplay) ? screenType : s.screen_type, _imageVer: Date.now(), exclude_rois: [], expected_images: [] } : s));
         message.success(t('record.cropExpectedSaved', { index: captureStepIndex + 1, size: `${rw}×${rh}` }));
         setCaptureModalOpen(false);
         setCaptureStepIndex(null);
@@ -1627,8 +1629,12 @@ export default function RecordPage() {
           return;
         }
         try {
-          const capRes = await scenarioApi.saveExpectedImage(scenarioName, excludeRoiEditingIndex, modalImage);
-          setSteps(prev => prev.map((s, i) => i === excludeRoiEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now(), roi: null, expected_images: [] } : s));
+          const capRes = await scenarioApi.saveExpectedImage(
+            scenarioName, excludeRoiEditingIndex, modalImage,
+            undefined, undefined, undefined, undefined,
+            (isScreenHkmc || hasMultiDisplay) ? screenType : undefined,
+          );
+          setSteps(prev => prev.map((s, i) => i === excludeRoiEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, screen_type: (isScreenHkmc || hasMultiDisplay) ? screenType : s.screen_type, _imageVer: Date.now(), roi: null, expected_images: [] } : s));
         } catch (e: any) {
           message.error(e.response?.data?.detail || t('record.cropSaveFailed'));
           return;
@@ -1776,7 +1782,11 @@ export default function RecordPage() {
       }
       try {
         // preserve_crops=true: 기존 multi_crop 아이템을 유지 (아래 cropFromExpected에서 추가/교체)
-        const capRes = await scenarioApi.saveExpectedImage(scenarioName, multiCropEditingIndex, modalImage, undefined, undefined, undefined, true);
+        const capRes = await scenarioApi.saveExpectedImage(
+          scenarioName, multiCropEditingIndex, modalImage,
+          undefined, undefined, undefined, true,
+          (isScreenHkmc || hasMultiDisplay) ? screenType : undefined,
+        );
         setSteps(prev => prev.map((s, i) => i === multiCropEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now(), roi: null, exclude_rois: [] } : s));
         const replaceIdx = multiCropSelectedIdx ?? undefined;
         const res = await scenarioApi.cropFromExpected(scenarioName, multiCropEditingIndex, crop, '', replaceIdx);
