@@ -549,7 +549,7 @@ export default function RecordPage() {
   // Get current screen device info
   const screenDevice = primaryDevices.find(d => d.id === screenshotDeviceId);
   const isScreenHkmc = screenDevice?.type === 'hkmc6th' || screenDevice?.type === 'isap_agent';
-  const isScreenCCRC = isScreenHkmc && screenDevice?.info?.device_model === 'CCRC';
+  const isScreenCCRC = isScreenHkmc && screenDevice?.info?.device_model === 'ccRC';
 
   // CCRC: front_center/cluster 비허용 → 자동으로 rear_right로 교정
   useEffect(() => {

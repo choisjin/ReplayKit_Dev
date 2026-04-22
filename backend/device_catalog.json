@@ -4,21 +4,15 @@
       "name": "HKMC",
       "enabled": true,
       "models": [
-        {
-          "label": "Connected Wide",
-          "value": "Connected_Wide",
-          "enabled": true
-        },
-        {
-          "label": "CCIC",
-          "value": "HKMC",
-          "enabled": true
-        },
-        {
-          "label": "CCRC",
-          "value": "CCRC",
-          "enabled": true
-        }
+        { "value": "ccRC",                 "enabled": true },
+        { "value": "ccIC",                 "enabled": true },
+        { "value": "ccIC27",               "enabled": true },
+        { "value": "Connect Wide",         "enabled": true },
+        { "value": "CCU2",                 "enabled": true },
+        { "value": "Gen6 Premium",         "enabled": true },
+        { "value": "Gen5 Standard (Wide)", "enabled": true },
+        { "value": "Gen5 Standard",        "enabled": true },
+        { "value": "Gen5 Premium",         "enabled": true }
       ]
     },
     {

@@ -124,7 +124,7 @@ export default function AdminPage() {
     markDirty();
   };
   const addModel = (projIdx: number) => {
-    const value = prompt('모델 이름 (Device ID prefix, 예: Connected_Wide / CCRC / GVM)');
+    const value = prompt('모델 이름 (Device ID prefix, 예: ccRC / Gen6 Premium / GVM)');
     if (!value || !value.trim()) return;
     const trimmed = value.trim();
     const p = catalog.projects[projIdx];

@@ -69,9 +69,15 @@ _DEFAULT_DEVICE_CATALOG: dict = {
             "name": "HKMC",
             "enabled": True,
             "models": [
-                {"value": "Connected_Wide", "enabled": True},
-                {"value": "HKMC",           "enabled": True},
-                {"value": "CCRC",           "enabled": True},
+                {"value": "ccRC",                  "enabled": True},
+                {"value": "ccIC",                  "enabled": True},
+                {"value": "ccIC27",                "enabled": True},
+                {"value": "Connect Wide",          "enabled": True},
+                {"value": "CCU2",                  "enabled": True},
+                {"value": "Gen6 Premium",          "enabled": True},
+                {"value": "Gen5 Standard (Wide)",  "enabled": True},
+                {"value": "Gen5 Standard",         "enabled": True},
+                {"value": "Gen5 Premium",          "enabled": True},
             ],
         },
         {
