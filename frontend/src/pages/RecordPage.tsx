@@ -480,7 +480,7 @@ export default function RecordPage() {
     if (screenshotDeviceId) {
       try {
         const dev = primaryDevices.find(d => d.id === screenshotDeviceId);
-        const needsScreenType = (dev?.type === 'hkmc6th' || dev?.type === 'isap_agent') || (dev?.type === 'adb' && (dev.info?.displays?.length ?? 0) > 1);
+        const needsScreenType = (dev?.type === 'hkmc_agent' || dev?.type === 'isap_agent') || (dev?.type === 'adb' && (dev.info?.displays?.length ?? 0) > 1);
         const res = await deviceApi.screenshot(screenshotDeviceId, needsScreenType ? screenType : undefined);
         if (res.data.image) {
           const fmt = res.data.format || 'jpeg';
@@ -548,7 +548,7 @@ export default function RecordPage() {
 
   // Get current screen device info
   const screenDevice = primaryDevices.find(d => d.id === screenshotDeviceId);
-  const isScreenHkmc = screenDevice?.type === 'hkmc6th' || screenDevice?.type === 'isap_agent';
+  const isScreenHkmc = screenDevice?.type === 'hkmc_agent' || screenDevice?.type === 'isap_agent';
   const isScreenCCRC = isScreenHkmc && screenDevice?.info?.device_model === 'ccRC';
 
   // CCRC: front_center/cluster 비허용 → 자동으로 rear_right로 교정
@@ -676,7 +676,7 @@ export default function RecordPage() {
         setHkmcKeys(res.data.keys || []);
         setHkmcSubCommands(res.data.sub_commands || {});
       }).catch(() => {});
-    } else if (dev?.type === 'hkmc6th') {
+    } else if (dev?.type === 'hkmc_agent') {
       deviceApi.listHkmcKeys(dev.id).then(res => {
         setHkmcKeys(res.data.keys || []);
         setHkmcSubCommands(res.data.sub_commands || {});
@@ -747,7 +747,7 @@ export default function RecordPage() {
   // Map generic gesture actions to HKMC equivalents when target is HKMC device
   const resolveAction = useCallback((action: string, targetDevice: string): string => {
     const dev = allDevices.find(d => d.id === targetDevice);
-    if (dev?.type !== 'hkmc6th' && dev?.type !== 'isap_agent') return action;
+    if (dev?.type !== 'hkmc_agent' && dev?.type !== 'isap_agent') return action;
     if (action === 'tap') return 'hkmc_touch';
     if (action === 'swipe') return 'hkmc_swipe';
     if (action === 'long_press') return 'hkmc_touch'; // Agent has no long_press, treat as touch
@@ -757,7 +757,7 @@ export default function RecordPage() {
   // Inject screen_type into params for HKMC / ADB multi-display actions
   const resolveParams = useCallback((action: string, params: Record<string, any>, targetDevice: string): Record<string, any> => {
     const dev = allDevices.find(d => d.id === targetDevice);
-    if ((dev?.type === 'hkmc6th' || dev?.type === 'isap_agent') && (action === 'hkmc_touch' || action === 'hkmc_swipe' || action === 'hkmc_key' || action === 'repeat_tap')) {
+    if ((dev?.type === 'hkmc_agent' || dev?.type === 'isap_agent') && (action === 'hkmc_touch' || action === 'hkmc_swipe' || action === 'hkmc_key' || action === 'repeat_tap')) {
       return { ...params, screen_type: screenType };
     }
     // ADB multi-display: 모든 디스플레이에 screen_type 주입 (display 0 포함 — screencap에 SF display ID 필요)
@@ -3324,7 +3324,7 @@ export default function RecordPage() {
                   ];
                   const devType = screenDevice?.type;
                   const isIsap = devType === 'isap_agent';
-                  const isHkmc = devType === 'hkmc6th';
+                  const isHkmc = devType === 'hkmc_agent';
                   const canConfigKeys = isIsap || isHkmc;
                   return (
                     <div style={{ marginTop: 4, width: '100%' }}>
@@ -4379,7 +4379,7 @@ export default function RecordPage() {
               await deviceApi.updateIsapKeys(screenshotDeviceId, payload);
               const r = await deviceApi.listIsapKeys(screenshotDeviceId);
               setHkmcKeys(r.data.keys || []);
-            } else if (devType === 'hkmc6th') {
+            } else if (devType === 'hkmc_agent') {
               await deviceApi.updateHkmcKeys(screenshotDeviceId, payload);
               const r = await deviceApi.listHkmcKeys(screenshotDeviceId);
               setHkmcKeys(r.data.keys || []);

@@ -412,7 +412,7 @@ async def websocket_screen_mirror(websocket: WebSocket):
 
     # 디바이스 타입 판별
     dev = device_manager.get_device(target_device_id) if target_device_id else None
-    is_hkmc = dev and dev.type == "hkmc6th"
+    is_hkmc = dev and dev.type == "hkmc_agent"
     is_isap = dev and dev.type == "isap_agent"
     is_vision_camera = dev and dev.type == "vision_camera"
     is_webcam = dev and dev.type == "webcam"

@@ -309,7 +309,7 @@ async def capture_expected_image(req: CaptureExpectedImageRequest):
     # Resolve device and take screenshot
     dev = dm.get_device(req.device_id)
     try:
-        if dev and dev.type == "hkmc6th":
+        if dev and dev.type == "hkmc_agent":
             hkmc = dm.get_hkmc_service(req.device_id)
             if not hkmc:
                 raise HTTPException(status_code=400, detail=f"HKMC device {req.device_id} not connected")

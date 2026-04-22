@@ -602,7 +602,7 @@ class PlaybackService:
                             f.write(img_bytes)
                     else:
                         raise RuntimeError(f"iSAP device {ss_device['id']} not connected")
-                elif ss_device["type"] == "hkmc6th":
+                elif ss_device["type"] == "hkmc_agent":
                     hkmc_svc = self.dm.get_hkmc_service(ss_device["id"])
                     if hkmc_svc:
                         img_bytes = await hkmc_svc.async_screencap_bytes(
@@ -1044,7 +1044,7 @@ class PlaybackService:
         if not dev:
             return
 
-        if dev.type == "hkmc6th":
+        if dev.type == "hkmc_agent":
             hkmc = self.dm.get_hkmc_service(device_id)
             if hkmc and hkmc.is_connected:
                 return
@@ -1187,7 +1187,7 @@ class PlaybackService:
         if not device_id:
             return False
         dev = self.dm.get_device(device_id)
-        return dev is not None and dev.type in ("hkmc6th", "isap_agent")
+        return dev is not None and dev.type in ("hkmc_agent", "isap_agent")
 
     def _get_agent_service(self, device_id: Optional[str]):
         """Return (svc, is_isap) for hkmc6th 또는 isap_agent device, or (None, False)."""
@@ -1198,7 +1198,7 @@ class PlaybackService:
             return None, False
         if dev.type == "isap_agent":
             return self.dm.get_isap_service(device_id), True
-        if dev.type == "hkmc6th":
+        if dev.type == "hkmc_agent":
             return self.dm.get_hkmc_service(device_id), False
         return None, False
 
@@ -1207,7 +1207,7 @@ class PlaybackService:
 
         Returns:
             {"type": "adb", "id": serial} or
-            {"type": "hkmc6th", "id": device_id, "screen_type": ...} or
+            {"type": "hkmc_agent", "id": device_id, "screen_type": ...} or
             {"type": "vision_camera", "id": device_id} or
             None (no screenshot possible)
         """
@@ -1226,9 +1226,9 @@ class PlaybackService:
             resolved_ss_id = self._resolve_alias(step.screenshot_device_id, self._device_map)
             ss_dev = self.dm.get_device(resolved_ss_id)
             if ss_dev:
-                if ss_dev.type == "hkmc6th":
+                if ss_dev.type == "hkmc_agent":
                     screen_type = step.screen_type or step.params.get("screen_type", "front_center")
-                    return {"type": "hkmc6th", "id": ss_dev.id, "screen_type": screen_type}
+                    return {"type": "hkmc_agent", "id": ss_dev.id, "screen_type": screen_type}
                 if ss_dev.type == "isap_agent":
                     screen_type = step.screen_type or step.params.get("screen_type", "front_center")
                     return {"type": "isap_agent", "id": ss_dev.id, "screen_type": screen_type}
@@ -1249,9 +1249,9 @@ class PlaybackService:
             if dev and dev.type in ("serial", "module"):
                 # 보조 디바이스는 스크린샷 불가 → primary 디바이스로 폴백
                 pass
-            elif dev and dev.type == "hkmc6th":
+            elif dev and dev.type == "hkmc_agent":
                 screen_type = step.screen_type or step.params.get("screen_type", "front_center")
-                return {"type": "hkmc6th", "id": dev.id, "screen_type": screen_type}
+                return {"type": "hkmc_agent", "id": dev.id, "screen_type": screen_type}
             elif dev and dev.type == "isap_agent":
                 screen_type = step.screen_type or step.params.get("screen_type", "front_center")
                 return {"type": "isap_agent", "id": dev.id, "screen_type": screen_type}
@@ -1273,8 +1273,8 @@ class PlaybackService:
         primary = self.dm.list_primary()
         if primary:
             dev = primary[0]
-            if dev.type == "hkmc6th":
-                return {"type": "hkmc6th", "id": dev.id, "screen_type": "front_center"}
+            if dev.type == "hkmc_agent":
+                return {"type": "hkmc_agent", "id": dev.id, "screen_type": "front_center"}
             if dev.type == "isap_agent":
                 return {"type": "isap_agent", "id": dev.id, "screen_type": "front_center"}
             if dev.type == "vision_camera":

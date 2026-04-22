@@ -6,39 +6,48 @@
       "models": [
         {
           "value": "ccRC",
-          "enabled": true
+          "enabled": true,
+          "agent": "HKMC Agent"
         },
         {
           "value": "ccIC",
-          "enabled": true
+          "enabled": true,
+          "agent": "HKMC Agent"
         },
         {
           "value": "ccIC27",
-          "enabled": true
+          "enabled": true,
+          "agent": "HKMC Agent"
         },
         {
           "value": "Connect Wide",
-          "enabled": true
+          "enabled": true,
+          "agent": "iSAP Agent"
         },
         {
           "value": "CCU2",
-          "enabled": true
+          "enabled": true,
+          "agent": "HKMC Agent"
         },
         {
           "value": "Gen6 Premium",
-          "enabled": true
+          "enabled": true,
+          "agent": "HKMC Agent"
         },
         {
           "value": "Gen5 Standard (Wide)",
-          "enabled": true
+          "enabled": true,
+          "agent": "HKMC Agent"
         },
         {
           "value": "Gen5 Standard",
-          "enabled": true
+          "enabled": true,
+          "agent": "HKMC Agent"
         },
         {
           "value": "Gen5 Premium",
-          "enabled": true
+          "enabled": true,
+          "agent": "HKMC Agent"
         }
       ]
     },
@@ -58,15 +67,13 @@
       "models": [
         {
           "value": "Android",
-          "enabled": true
+          "enabled": true,
+          "agent": "ADB"
         },
         {
           "value": "Phone",
-          "enabled": true
-        },
-        {
-          "value": "SSH",
-          "enabled": true
+          "enabled": true,
+          "agent": "ADB"
         }
       ]
     },
@@ -96,11 +103,13 @@
       "models": [
         {
           "value": "WebCam",
-          "enabled": true
+          "enabled": true,
+          "agent": "Webcam"
         },
         {
           "value": "VisionCamera",
-          "enabled": true
+          "enabled": true,
+          "agent": "VisionCamera"
         }
       ]
     }
@@ -126,10 +135,30 @@
     "MLP": false
   },
   "agents": [
-    { "name": "ADB",          "type": "adb",           "enabled": true },
-    { "name": "HKMC Agent",   "type": "hkmc6th",       "enabled": true },
-    { "name": "iSAP Agent",   "type": "isap_agent",    "enabled": true },
-    { "name": "VisionCamera", "type": "vision_camera", "enabled": true },
-    { "name": "Webcam",       "type": "webcam",        "enabled": true }
+    {
+      "name": "ADB",
+      "type": "adb",
+      "enabled": true
+    },
+    {
+      "name": "HKMC Agent",
+      "type": "hkmc_agent",
+      "enabled": true
+    },
+    {
+      "name": "iSAP Agent",
+      "type": "isap_agent",
+      "enabled": true
+    },
+    {
+      "name": "VisionCamera",
+      "type": "vision_camera",
+      "enabled": true
+    },
+    {
+      "name": "Webcam",
+      "type": "webcam",
+      "enabled": true
+    }
   ]
 }

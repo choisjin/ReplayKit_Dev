@@ -103,7 +103,7 @@ _DEFAULT_DEVICE_CATALOG: dict = {
     # name은 UI 표시용 + 모델에서 참조하는 식별자.
     "agents": [
         {"name": "ADB",          "type": "adb",           "enabled": True},
-        {"name": "HKMC Agent",   "type": "hkmc6th",       "enabled": True},
+        {"name": "HKMC Agent",   "type": "hkmc_agent",       "enabled": True},
         {"name": "iSAP Agent",   "type": "isap_agent",    "enabled": True},
         {"name": "VisionCamera", "type": "vision_camera", "enabled": True},
         {"name": "Webcam",       "type": "webcam",        "enabled": True},
@@ -112,7 +112,7 @@ _DEFAULT_DEVICE_CATALOG: dict = {
 
 
 def _load_device_catalog() -> dict:
-    """카탈로그 로드. 레거시 label 필드가 남아 있어도 관대하게 처리한다."""
+    """카탈로그 로드. 레거시 필드 자동 마이그레이션 포함."""
     if _DEVICE_CATALOG_FILE.exists():
         try:
             data = _json.loads(_DEVICE_CATALOG_FILE.read_text(encoding="utf-8"))
@@ -121,6 +121,10 @@ def _load_device_catalog() -> dict:
                 for m in proj.get("models", []) or []:
                     if "label" in m:
                         m.pop("label", None)
+            # 에이전트 type 마이그레이션: "hkmc6th" → "hkmc_agent"
+            for a in data.get("agents", []) or []:
+                if a.get("type") == "hkmc6th":
+                    a["type"] = "hkmc_agent"
             return data
         except Exception:
             pass
@@ -172,7 +176,7 @@ def _build_constructor_kwargs(dev) -> dict | None:
 
 
 class ConnectRequest(BaseModel):
-    type: str  # "adb" | "serial" | "module" | "hkmc6th" | "isap_agent" | "vision_camera" | "webcam" | "ssh"
+    type: str  # "adb" | "serial" | "module" | "hkmc_agent" | "isap_agent" | "vision_camera" | "webcam" | "ssh"
     category: str = ""  # "primary" | "auxiliary" — auto-detected if empty
     address: str = ""  # COM port for serial, IP for socket/HKMC/SSH, etc.
     baudrate: Optional[int] = 115200
@@ -442,7 +446,7 @@ async def connect_device(req: ConnectRequest):
             }
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
-    elif req.type == "hkmc6th":
+    elif req.type == "hkmc_agent":
         if not req.address or not req.port:
             raise HTTPException(status_code=400, detail="HKMC6th requires address (IP) and port (TCP port)")
         try:
@@ -615,7 +619,7 @@ async def get_device_info(device_id: str):
             return await adb.get_device_info(dev.address)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
-    elif dev.type == "hkmc6th":
+    elif dev.type == "hkmc_agent":
         hkmc = dm.get_hkmc_service(device_id)
         info = dev.to_dict()
         if hkmc:
@@ -691,7 +695,7 @@ async def device_input(req: InputRequest):
                     )
             return {"result": "ok"}
 
-        if req.action in ("hkmc_touch", "hkmc_swipe", "hkmc_key", "repeat_tap") and dev and dev.type == "hkmc6th":
+        if req.action in ("hkmc_touch", "hkmc_swipe", "hkmc_key", "repeat_tap") and dev and dev.type == "hkmc_agent":
             hkmc = dm.get_hkmc_service(req.device_id)
             if not hkmc:
                 raise HTTPException(status_code=400, detail=f"HKMC device {req.device_id} not connected")
@@ -1116,7 +1120,7 @@ async def update_hkmc_keys(req: UpdateHkmcKeysRequest):
     dev = dm.get_device(req.device_id)
     if not dev:
         raise HTTPException(status_code=404, detail=f"Device {req.device_id} not found")
-    if dev.type != "hkmc6th":
+    if dev.type != "hkmc_agent":
         raise HTTPException(status_code=400, detail=f"Device {req.device_id} is not an HKMC device")
     clean: dict[str, dict] = {}
     for name, ov in (req.keys or {}).items():
@@ -1193,7 +1197,7 @@ async def get_screenshot(device_id: str, fmt: str = "jpeg", screen_type: str = "
     """Capture and return a screenshot for a specific primary device."""
     dev = dm.get_device(device_id)
     try:
-        if dev and dev.type == "hkmc6th":
+        if dev and dev.type == "hkmc_agent":
             hkmc = dm.get_hkmc_service(device_id)
             if not hkmc:
                 raise HTTPException(status_code=400, detail=f"HKMC device {device_id} not connected")

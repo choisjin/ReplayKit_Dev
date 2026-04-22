@@ -230,7 +230,7 @@ export default function DevicePage() {
   const [forceIpSubnet, setForceIpSubnet] = useState('255.255.255.0');
   const [forceIpGateway, setForceIpGateway] = useState('0.0.0.0');
   const [forceIpLoading, setForceIpLoading] = useState(false);
-  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc6th' | 'isap_agent' | 'vision_camera' | 'webcam' | 'ssh'>('adb');
+  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc_agent' | 'isap_agent' | 'vision_camera' | 'webcam' | 'ssh'>('adb');
   const [connectAddress, setConnectAddress] = useState('');
   const [baudrate, setBaudrate] = useState(115200);
   const [connecting, setConnecting] = useState(false);
@@ -608,8 +608,8 @@ export default function DevicePage() {
           extra[f.name] = extraFieldValues[f.name] ?? f.default ?? '';
         }
       }
-      const tcpPort = (devType === 'hkmc6th' || devType === 'isap_agent') ? hkmcPort : undefined;
-      const model = (devType === 'adb' || devType === 'hkmc6th' || devType === 'isap_agent') ? (deviceModel || undefined) : undefined;
+      const tcpPort = (devType === 'hkmc_agent' || devType === 'isap_agent') ? hkmcPort : undefined;
+      const model = (devType === 'adb' || devType === 'hkmc_agent' || devType === 'isap_agent') ? (deviceModel || undefined) : undefined;
       const result = await connectDevice(devType, connectAddress.trim(), baudrate, '', modalCategory, selectedModule, moduleConnType, extra, '', tcpPort, model);
       message.success(result);
       setConnectAddress('');
@@ -663,7 +663,7 @@ export default function DevicePage() {
     if (!ensurePrimaryProjectModel()) return;
     setConnecting(true);
     try {
-      const result = await connectDevice('hkmc6th', ip, undefined, '', 'primary', undefined, undefined, undefined, '', port, deviceModel || undefined);
+      const result = await connectDevice('hkmc_agent', ip, undefined, '', 'primary', undefined, undefined, undefined, '', port, deviceModel || undefined);
       message.success(result);
       closeAddModal();
     } catch (e: any) {
@@ -1571,7 +1571,7 @@ export default function DevicePage() {
                     {(!selectedModule || moduleConnType === undefined) && (
                       <Select value={connectType} onChange={setConnectType} style={{ width: '100%' }}>
                         <Option value="adb">ADB (WiFi / TCP)</Option>
-                        {modalCategory === 'primary' && <Option value="hkmc6th">HKMC Agent (TCP)</Option>}
+                        {modalCategory === 'primary' && <Option value="hkmc_agent">HKMC Agent (TCP)</Option>}
                         {modalCategory === 'primary' && <Option value="isap_agent">iSAP Agent (TCP)</Option>}
                         {modalCategory === 'primary' && <Option value="vision_camera">Vision Camera</Option>}
                         {modalCategory === 'primary' && <Option value="webcam">{t('device.webcam')}</Option>}
@@ -1621,7 +1621,7 @@ export default function DevicePage() {
                       </div>
                     )}
 
-                    {!selectedModule && connectType === 'hkmc6th' && (
+                    {!selectedModule && connectType === 'hkmc_agent' && (
                       <>
                         <Input
                           placeholder={t('device.hkmcIpPlaceholder')}
@@ -1769,7 +1769,7 @@ export default function DevicePage() {
                       </>
                     )}
 
-                    {!selectedModule && connectType !== 'hkmc6th' && connectType !== 'isap_agent' && connectType !== 'vision_camera' && connectType !== 'ssh' && (
+                    {!selectedModule && connectType !== 'hkmc_agent' && connectType !== 'isap_agent' && connectType !== 'vision_camera' && connectType !== 'ssh' && (
                       <>
                         <Input
                           placeholder={connectType === 'adb' ? t('device.adbPlaceholder') : t('device.comPlaceholder')}

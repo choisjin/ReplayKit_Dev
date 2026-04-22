@@ -641,16 +641,25 @@ class DeviceManager:
         return device_id == self.DEFAULT_COMMON_DEVICE_ID
 
     def _load_auxiliary_devices(self) -> None:
-        """Load saved auxiliary devices from disk."""
+        """Load saved auxiliary devices from disk.
+
+        레거시 type 문자열 자동 마이그레이션: "hkmc6th" → "hkmc_agent".
+        """
         if not _AUX_DEVICES_FILE.exists():
             return
         try:
             data = json.loads(_AUX_DEVICES_FILE.read_text(encoding="utf-8"))
+            migrated = False
             for d in data:
+                dev_type = d.get("type", "")
+                if dev_type == "hkmc6th":
+                    dev_type = "hkmc_agent"
+                    d["type"] = dev_type
+                    migrated = True
                 dev = ManagedDevice(
                     id=d["id"],
-                    type=d["type"],
-                    category=d.get("category", "primary" if d["type"] == "adb" else "auxiliary"),
+                    type=dev_type,
+                    category=d.get("category", "primary" if dev_type == "adb" else "auxiliary"),
                     address=d["address"],
                     status="unknown",
                     name=d.get("name", d["id"]),
@@ -658,6 +667,9 @@ class DeviceManager:
                 )
                 self._devices[dev.id] = dev
             logger.info("Loaded %d auxiliary devices from %s", len(data), _AUX_DEVICES_FILE)
+            if migrated:
+                # 마이그레이션된 경우 즉시 디스크에 반영
+                self._save_auxiliary_devices()
         except Exception as e:
             logger.warning("Failed to load auxiliary devices: %s", e)
 
@@ -671,7 +683,7 @@ class DeviceManager:
             prefix = "Android"
         elif dev_type == "serial":
             prefix = "Serial"
-        elif dev_type == "hkmc6th":
+        elif dev_type == "hkmc_agent":
             prefix = "HKMC"
         elif dev_type == "isap_agent":
             prefix = "iSAP"
@@ -697,7 +709,7 @@ class DeviceManager:
         aux = [
             d.to_dict()
             for d in self._devices.values()
-            if d.category == "auxiliary" or d.type in ("adb", "hkmc6th", "isap_agent", "vision_camera", "webcam", "ssh")
+            if d.category == "auxiliary" or d.type in ("adb", "hkmc_agent", "isap_agent", "vision_camera", "webcam", "ssh")
         ]
         try:
             _AUX_DEVICES_FILE.write_text(json.dumps(aux, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -771,7 +783,7 @@ class DeviceManager:
 
     async def add_hkmc6th_device(self, host: str, port: int, device_id: str = "", name: str = "", device_model: str = "") -> ManagedDevice:
         """HKMC 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행)."""
-        final_id = device_id or self._generate_device_id("hkmc6th", device_model=device_model)
+        final_id = device_id or self._generate_device_id("hkmc_agent", device_model=device_model)
         display_name = name or f"HKMC ({host}:{port})"
         info: dict = {"port": port}
         if device_model:
@@ -779,7 +791,7 @@ class DeviceManager:
 
         dev = ManagedDevice(
             id=final_id,
-            type="hkmc6th",
+            type="hkmc_agent",
             category="primary",
             address=host,
             status="disconnected",
@@ -797,7 +809,7 @@ class DeviceManager:
             return svc
         # Fallback: device_map이 address로 해석된 경우, address로 디바이스를 찾아 ID로 재조회
         dev = self.get_device(device_id)
-        if dev and dev.type == "hkmc6th":
+        if dev and dev.type == "hkmc_agent":
             return self._hkmc_conns.get(dev.id)
         return None
 
@@ -908,7 +920,7 @@ class DeviceManager:
             # 사용자가 연결 끊기한 디바이스는 자동 상태 갱신 안 함
             if dev.id not in self._ever_connected:
                 continue
-            if dev.type == "hkmc6th":
+            if dev.type == "hkmc_agent":
                 hkmc = self._hkmc_conns.get(dev.id)
                 if hkmc and hkmc.is_connected:
                     dev.status = "connected"
@@ -1035,7 +1047,7 @@ class DeviceManager:
                                  attempts + 1, self.ADB_MAX_RECONNECT_ATTEMPTS, dev.id, e)
                 continue
 
-            if dev.type == "hkmc6th":
+            if dev.type == "hkmc_agent":
                 hkmc = self._hkmc_conns.get(dev.id)
                 if hkmc and hkmc.is_connected:
                     # 연결 정상 — 실패 카운터 리셋
@@ -1592,7 +1604,7 @@ class DeviceManager:
                 except Exception as e:
                     dev.status = "disconnected"
                     logger.warning("Failed to open serial %s (%s): %s", dev.id, dev.address, e)
-            elif dev.type == "hkmc6th":
+            elif dev.type == "hkmc_agent":
                 port = dev.info.get("port", 0)
                 if not port:
                     continue
@@ -1749,7 +1761,7 @@ class DeviceManager:
                 dev.status = "disconnected"
                 return f"Serial connect failed: {dev.id} — {e}"
 
-        elif dev.type == "hkmc6th":
+        elif dev.type == "hkmc_agent":
             port = dev.info.get("port", 0)
             if not port:
                 return f"HKMC {dev.id}: no port configured"
@@ -1953,7 +1965,7 @@ class DeviceManager:
             dev.status = "disconnected"
             return f"Disconnected: {dev.id}"
 
-        elif dev.type == "hkmc6th":
+        elif dev.type == "hkmc_agent":
             svc = self._hkmc_conns.pop(device_id, None)
             if svc:
                 try:
