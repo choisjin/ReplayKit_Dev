@@ -44,6 +44,10 @@
           "value": "GVM",
           "enabled": true,
           "agent": "ADB"
+        },
+        {
+          "value": "Info4.0 VCU",
+          "enabled": false
         }
       ]
     },
@@ -71,23 +75,44 @@
           "value": "CDC_High",
           "enabled": true,
           "agent": "ADB"
+        },
+        {
+          "value": "CDC_STD",
+          "enabled": true,
+          "agent": "ADB"
         }
       ]
     },
     {
       "name": "Renault",
-      "enabled": true,
-      "models": []
+      "enabled": false,
+      "models": [
+        {
+          "value": "Latam",
+          "enabled": false,
+          "agent": "ADB"
+        },
+        {
+          "value": "EGG",
+          "enabled": false,
+          "agent": "ADB"
+        },
+        {
+          "value": "AUB",
+          "enabled": false,
+          "agent": "ADB"
+        },
+        {
+          "value": "CDC",
+          "enabled": false,
+          "agent": "ADB"
+        }
+      ]
     },
     {
       "name": "VW",
-      "enabled": true,
-      "models": [
-        {
-          "value": "ICAS",
-          "enabled": true
-        }
-      ]
+      "enabled": false,
+      "models": []
     },
     {
       "name": "Camera",
@@ -102,6 +127,16 @@
           "value": "VisionCamera",
           "enabled": true,
           "agent": "VisionCamera"
+        }
+      ]
+    },
+    {
+      "name": "ICAS",
+      "enabled": true,
+      "models": [
+        {
+          "value": "ICAS EU",
+          "enabled": true
         }
       ]
     }
