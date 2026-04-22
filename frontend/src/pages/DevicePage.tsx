@@ -1897,10 +1897,6 @@ export default function DevicePage() {
               )}
             </div>
             {/* 수정 가능한 필드 */}
-            <div>
-              <span style={{ fontSize: 12, color: '#888' }}>{`${t('common.name')}:`}</span>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-            </div>
             {(editDevice.type === 'serial' || editDevice.info?.baudrate) && (
               <div>
                 <span style={{ fontSize: 12, color: '#888' }}>Baudrate:</span>
