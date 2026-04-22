@@ -30,19 +30,19 @@ _SCAN_SETTINGS_FILE = Path(__file__).resolve().parent.parent.parent / "scan_sett
 
 _DEFAULT_SCAN_SETTINGS = {
     "builtin": {
-        "adb":            {"enabled": True,  "module": ""},
-        "serial":         {"enabled": True,  "module": "SerialLogging"},
-        "hkmc":           {"enabled": True,  "module": "", "ports": [6655, 5000]},
-        "isap":           {"enabled": False, "module": "", "ports": [20000]},
-        "dlt":            {"enabled": True,  "module": "DLTLogging", "ports": [3490]},
-        "bench":          {"enabled": True,  "module": "CCIC_BENCH", "ports": [25000]},
-        "vision_camera":  {"enabled": False, "module": "VisionCamera"},
-        "webcam":         {"enabled": True,  "module": "WebcamDevice"},
-        "ssh":            {"enabled": True,  "module": "SSHManager", "port": 22},
-        "smartbench":     {"enabled": True,  "module": "SmartBench", "host": "192.167.0.5", "port": 8000},
+        "adb":            {"enabled": True,  "module": "",             "category": "primary"},
+        "serial":         {"enabled": True,  "module": "SerialLogging","category": "auxiliary"},
+        "hkmc":           {"enabled": True,  "module": "",             "category": "primary",   "ports": [6655, 5000]},
+        "isap":           {"enabled": False, "module": "",             "category": "primary",   "ports": [20000]},
+        "dlt":            {"enabled": True,  "module": "DLTLogging",   "category": "auxiliary", "ports": [3490]},
+        "bench":          {"enabled": True,  "module": "CCIC_BENCH",   "category": "auxiliary", "ports": [25000]},
+        "vision_camera":  {"enabled": False, "module": "VisionCamera", "category": "primary"},
+        "webcam":         {"enabled": True,  "module": "WebcamDevice", "category": "primary"},
+        "ssh":            {"enabled": True,  "module": "SSHManager",   "category": "auxiliary", "port": 22},
+        "smartbench":     {"enabled": True,  "module": "SmartBench",   "category": "auxiliary", "host": "192.167.0.5", "port": 8000},
     },
-    # type: "tcp" | "udp"
-    # [{"label": "MLP", "type": "tcp", "port": 5001, "module": "MLP", "enabled": true}, ...]
+    # type: "tcp" | "udp", category: "primary" | "auxiliary"
+    # [{"label": "MLP", "type": "tcp", "port": 5001, "module": "MLP", "enabled": true, "category": "auxiliary"}, ...]
     "custom": [],
 }
 

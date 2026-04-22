@@ -321,23 +321,41 @@ export default function DevicePage() {
 
   // Scan settings modal
   const [scanSettingsOpen, setScanSettingsOpen] = useState(false);
-  const [scanBuiltin, setScanBuiltin] = useState<Record<string, { enabled: boolean; module: string; port?: number; ports?: number[]; host?: string }>>({
-    adb: { enabled: true, module: '' },
-    serial: { enabled: true, module: 'SerialLogging' },
-    hkmc: { enabled: true, module: '', ports: [6655, 5000] },
-    isap: { enabled: false, module: '', ports: [20000] },
-    dlt: { enabled: true, module: 'DLTLogging', ports: [3490] },
-    bench: { enabled: true, module: 'CCIC_BENCH', ports: [25000] },
-    vision_camera: { enabled: false, module: 'VisionCamera' },
-    webcam: { enabled: true, module: 'WebcamDevice' },
-    ssh: { enabled: true, module: 'SSHManager', port: 22 },
-    smartbench: { enabled: true, module: 'SmartBench', host: '192.167.0.5', port: 8000 },
+  type ScanCategory = 'primary' | 'auxiliary';
+  const [scanBuiltin, setScanBuiltin] = useState<Record<string, { enabled: boolean; module: string; port?: number; ports?: number[]; host?: string; category?: ScanCategory }>>({
+    adb: { enabled: true, module: '', category: 'primary' },
+    serial: { enabled: true, module: 'SerialLogging', category: 'auxiliary' },
+    hkmc: { enabled: true, module: '', ports: [6655, 5000], category: 'primary' },
+    isap: { enabled: false, module: '', ports: [20000], category: 'primary' },
+    dlt: { enabled: true, module: 'DLTLogging', ports: [3490], category: 'auxiliary' },
+    bench: { enabled: true, module: 'CCIC_BENCH', ports: [25000], category: 'auxiliary' },
+    vision_camera: { enabled: false, module: 'VisionCamera', category: 'primary' },
+    webcam: { enabled: true, module: 'WebcamDevice', category: 'primary' },
+    ssh: { enabled: true, module: 'SSHManager', port: 22, category: 'auxiliary' },
+    smartbench: { enabled: true, module: 'SmartBench', host: '192.167.0.5', port: 8000, category: 'auxiliary' },
   });
-  const [scanCustom, setScanCustom] = useState<{ label: string; type: string; port: number; module: string; enabled: boolean }[]>([]);
+  const [scanCustom, setScanCustom] = useState<{ label: string; type: string; port: number; module: string; enabled: boolean; category?: ScanCategory }[]>([]);
+
+  // 앱 시작 시 스캔 설정 동기화 — device 추가 모달에서 category 기준 필터링 위해 필요
+  useEffect(() => {
+    deviceApi.getScanSettings().then(res => {
+      if (res.data?.builtin) setScanBuiltin(prev => ({ ...prev, ...res.data.builtin }));
+      if (Array.isArray(res.data?.custom)) setScanCustom(res.data.custom);
+    }).catch(() => { /* 실패 시 프론트 기본값 유지 */ });
+  }, []);
+
+  // key → category 해석 (값 없으면 기본 정책 적용)
+  const _defaultCategoryForKey = (key: string): ScanCategory => {
+    const primaryKeys = new Set(['adb', 'hkmc', 'isap', 'vision_camera', 'webcam']);
+    return primaryKeys.has(key) ? 'primary' : 'auxiliary';
+  };
+  const scanItemCategory = (key: string): ScanCategory =>
+    (scanBuiltin[key]?.category as ScanCategory) || _defaultCategoryForKey(key);
   const [newCustomLabel, setNewCustomLabel] = useState('');
   const [newCustomPort, setNewCustomPort] = useState<number | null>(null);
   const [newCustomType, setNewCustomType] = useState<string>('tcp');
   const [newCustomModule, setNewCustomModule] = useState<string>('');
+  const [newCustomCategory, setNewCustomCategory] = useState<ScanCategory>('auxiliary');
 
   const getModuleInfo = (moduleName?: string): ModuleInfo | undefined => {
     if (!moduleName) return undefined;
@@ -414,10 +432,12 @@ export default function DevicePage() {
       port: newCustomPort,
       module: newCustomModule,
       enabled: true,
+      category: newCustomCategory,
     }]);
     setNewCustomLabel('');
     setNewCustomPort(null);
     setNewCustomModule('');
+    setNewCustomCategory('auxiliary');
   };
 
   const openAddModal = (category: 'primary' | 'auxiliary') => {
@@ -1039,7 +1059,7 @@ export default function DevicePage() {
                     const PAGE_SIZE = 5;
                     const scanTabs: { key: string; label: React.ReactNode; children: React.ReactNode }[] = [];
 
-                    if (modalCategory === 'primary' && scannedAdb.length > 0) {
+                    if (scanItemCategory('adb') === modalCategory && scannedAdb.length > 0) {
                       scanTabs.push({
                         key: 'adb',
                         label: <span>{t('device.detectedAdb')} <Tag style={{ marginLeft: 4 }}>{scannedAdb.length}</Tag></span>,
@@ -1060,8 +1080,7 @@ export default function DevicePage() {
                       });
                     }
 
-                    // 주 디바이스 검색에서는 시리얼 포트 탭 숨김 (보조 디바이스에서만 노출)
-                    if (scannedSerial.length > 0 && modalCategory !== 'primary') {
+                    if (scanItemCategory('serial') === modalCategory && scannedSerial.length > 0) {
                       scanTabs.push({
                         key: 'serial',
                         label: <span>{t('device.detectedSerial')} <Tag style={{ marginLeft: 4 }}>{scannedSerial.length}</Tag></span>,
@@ -1105,7 +1124,7 @@ export default function DevicePage() {
                       });
                     }
 
-                    if (modalCategory === 'primary' && scannedHkmc.length > 0) {
+                    if (scanItemCategory('hkmc') === modalCategory && scannedHkmc.length > 0) {
                       scanTabs.push({
                         key: 'hkmc',
                         label: <span>{t('device.detectedHkmc')} <Tag style={{ marginLeft: 4 }}>{scannedHkmc.length}</Tag></span>,
@@ -1126,7 +1145,7 @@ export default function DevicePage() {
                       });
                     }
 
-                    if (modalCategory === 'primary' && scannedIsap.length > 0) {
+                    if (scanItemCategory('isap') === modalCategory && scannedIsap.length > 0) {
                       scanTabs.push({
                         key: 'isap',
                         label: <span>{t('device.detectedIsap')} <Tag style={{ marginLeft: 4 }}>{scannedIsap.length}</Tag></span>,
@@ -1147,7 +1166,7 @@ export default function DevicePage() {
                       });
                     }
 
-                    if (modalCategory === 'auxiliary' && scannedBench.length > 0) {
+                    if (scanItemCategory('bench') === modalCategory && scannedBench.length > 0) {
                       scanTabs.push({
                         key: 'bench',
                         label: <span>{t('device.detectedBench')} <Tag style={{ marginLeft: 4 }}>{scannedBench.length}</Tag></span>,
@@ -1186,7 +1205,7 @@ export default function DevicePage() {
                       });
                     }
 
-                    if (modalCategory === 'primary' && scannedVision.length > 0) {
+                    if (scanItemCategory('vision_camera') === modalCategory && scannedVision.length > 0) {
                       scanTabs.push({
                         key: 'vision',
                         label: <span>{t('device.detectedVision')} <Tag style={{ marginLeft: 4 }}>{scannedVision.length}</Tag></span>,
@@ -1259,7 +1278,7 @@ export default function DevicePage() {
                       });
                     }
 
-                    if (modalCategory === 'primary' && scannedWebcams.length > 0) {
+                    if (scanItemCategory('webcam') === modalCategory && scannedWebcams.length > 0) {
                       scanTabs.push({
                         key: 'webcam',
                         label: <span>{t('device.detectedWebcam')} <Tag style={{ marginLeft: 4 }}>{scannedWebcams.length}</Tag></span>,
@@ -1308,7 +1327,7 @@ export default function DevicePage() {
                       });
                     }
 
-                    if (scannedDlt.length > 0) {
+                    if (scanItemCategory('dlt') === modalCategory && scannedDlt.length > 0) {
                       const dltModule = (scanBuiltin.dlt as any)?.module || 'DLTLogging';
                       scanTabs.push({
                         key: 'dlt',
@@ -1343,7 +1362,7 @@ export default function DevicePage() {
                       });
                     }
 
-                    if (scannedSmartbench.length > 0) {
+                    if (scanItemCategory('smartbench') === modalCategory && scannedSmartbench.length > 0) {
                       scanTabs.push({
                         key: 'smartbench',
                         label: <span>SmartBench <Tag style={{ marginLeft: 4 }}>{scannedSmartbench.length}</Tag></span>,
@@ -1377,7 +1396,7 @@ export default function DevicePage() {
                       });
                     }
 
-                    if (scannedSsh.length > 0) {
+                    if (scanItemCategory('ssh') === modalCategory && scannedSsh.length > 0) {
                       scanTabs.push({
                         key: 'ssh',
                         label: <span>{t('device.detectedSsh')} <Tag style={{ marginLeft: 4 }}>{scannedSsh.length}</Tag></span>,
@@ -1411,10 +1430,12 @@ export default function DevicePage() {
                       });
                     }
 
-                    // 커스텀 스캔 결과
+                    // 커스텀 스캔 결과 — 설정 카테고리 일치 시에만 노출 (미지정은 auxiliary 기본)
                     scannedCustom.forEach((group, gi) => {
                       if (group.hosts.length === 0) return;
                       const customEntry = scanCustom.find(c => c.label === group.label);
+                      const customCat: ScanCategory = (customEntry?.category as ScanCategory) || 'auxiliary';
+                      if (customCat !== modalCategory) return;
                       const moduleName = customEntry?.module || '';
                       scanTabs.push({
                         key: `custom_${gi}`,
@@ -1948,6 +1969,7 @@ export default function DevicePage() {
               <th style={{ padding: '6px 4px', width: 40 }}></th>
               <th style={{ padding: '6px 4px' }}>{t('common.name')}</th>
               <th style={{ padding: '6px 4px', width: 80 }}>Protocol</th>
+              <th style={{ padding: '6px 4px', width: 100 }}>Category</th>
               <th style={{ padding: '6px 4px', width: 90 }}>Port</th>
               <th style={{ padding: '6px 4px', width: 140 }}>Module</th>
               <th style={{ padding: '6px 4px', width: 40 }}></th>
@@ -1980,6 +2002,17 @@ export default function DevicePage() {
                   </td>
                   <td style={{ padding: '4px' }}>{item.label}</td>
                   <td style={{ padding: '4px' }}><Tag>{item.proto}</Tag></td>
+                  <td style={{ padding: '4px' }}>
+                    <Select size="small"
+                      value={(v.category as ScanCategory) || _defaultCategoryForKey(item.key)}
+                      onChange={(cat) => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, category: cat } })}
+                      style={{ width: '100%' }}
+                      options={[
+                        { label: '주', value: 'primary' },
+                        { label: '보조', value: 'auxiliary' },
+                      ]}
+                    />
+                  </td>
                   <td style={{ padding: '4px' }}>
                     {item.editablePorts ? (
                       <Input
@@ -2032,6 +2065,17 @@ export default function DevicePage() {
                 </td>
                 <td style={{ padding: '4px' }}>{entry.label}</td>
                 <td style={{ padding: '4px' }}><Tag color={entry.type === 'udp' ? 'orange' : 'blue'}>{entry.type.toUpperCase()}</Tag></td>
+                <td style={{ padding: '4px' }}>
+                  <Select size="small"
+                    value={(entry.category as ScanCategory) || 'auxiliary'}
+                    onChange={(cat) => { const n = [...scanCustom]; n[idx] = { ...entry, category: cat }; setScanCustom(n); }}
+                    style={{ width: '100%' }}
+                    options={[
+                      { label: '주', value: 'primary' },
+                      { label: '보조', value: 'auxiliary' },
+                    ]}
+                  />
+                </td>
                 <td style={{ padding: '4px' }}>{entry.port}</td>
                 <td style={{ padding: '4px' }}>
                   <Select size="small" allowClear placeholder="-" value={entry.module || undefined}
@@ -2054,6 +2098,10 @@ export default function DevicePage() {
               <td style={{ padding: '4px' }}>
                 <Select size="small" value={newCustomType} onChange={setNewCustomType} style={{ width: '100%' }}
                   options={[{ label: 'TCP', value: 'tcp' }, { label: 'UDP', value: 'udp' }]} />
+              </td>
+              <td style={{ padding: '4px' }}>
+                <Select size="small" value={newCustomCategory} onChange={setNewCustomCategory} style={{ width: '100%' }}
+                  options={[{ label: '주', value: 'primary' }, { label: '보조', value: 'auxiliary' }]} />
               </td>
               <td style={{ padding: '4px' }}>
                 <InputNumber size="small" placeholder="Port" value={newCustomPort}
