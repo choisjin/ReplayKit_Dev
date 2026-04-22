@@ -343,21 +343,39 @@ async def _scan_smartbench(host: str | None = None, port: int | None = None) -> 
 
 
 def _probe_smartbench_sync(ip: str, port: int, timeout: float) -> dict | None:
-    """SmartBench TCP 연결 프로브."""
+    """SmartBench 프로브 — TCP 연결 후 CONNECT 핸드셰이크까지 검증.
+
+    단순 TCP 포트 listen 만으로는 다른 장비도 오탐되므로, SmartBench 플러그인이
+    사용하는 프로토콜 `CONNECT\\n` → `CONNECTED` 응답을 확인한 경우에만 발견으로 처리.
+    이후 플러그인 연결에 영향이 없도록 `DISCONNECT\\n`로 정리 후 소켓 종료.
+    """
     sock = None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(timeout)
         sock.connect((ip, port))
-        sock.close()
-        sock = None
+        # 핸드셰이크
+        sock.settimeout(timeout)
+        sock.sendall(b"CONNECT\n")
+        rc = sock.recv(1024).decode("utf-8", errors="replace").replace("\n", "").replace(" ", "").strip()
+        if rc != "CONNECTED":
+            logger.debug("SmartBench probe: unexpected handshake response %r at %s:%d", rc, ip, port)
+            return None
+        # 깨끗한 종료 — 다음 연결에 영향 없도록
+        try:
+            sock.sendall(b"DISCONNECT\n")
+            sock.settimeout(0.5)
+            sock.recv(1024)
+        except Exception:
+            pass
         return {
             "ip": ip,
             "port": port,
             "label": "SmartBench",
             "module": "SmartBench",
         }
-    except Exception:
+    except Exception as e:
+        logger.debug("SmartBench probe %s:%d failed: %s", ip, port, e)
         return None
     finally:
         if sock:
