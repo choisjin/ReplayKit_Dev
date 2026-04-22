@@ -1060,7 +1060,8 @@ export default function DevicePage() {
                       });
                     }
 
-                    if (scannedSerial.length > 0) {
+                    // 주 디바이스 검색에서는 시리얼 포트 탭 숨김 (보조 디바이스에서만 노출)
+                    if (scannedSerial.length > 0 && modalCategory !== 'primary') {
                       scanTabs.push({
                         key: 'serial',
                         label: <span>{t('device.detectedSerial')} <Tag style={{ marginLeft: 4 }}>{scannedSerial.length}</Tag></span>,
