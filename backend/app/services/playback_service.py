@@ -519,7 +519,30 @@ class PlaybackService:
                 return step_result
             t0 = time.time()
             action_device_id = self._resolve_real_device_id(step)
-            if action_device_id:
+            # MODULE_COMMAND의 경우 step.device_id가 엉뚱한 primary(HKMC/iSAP)를 가리킬 때가
+            # 있어(레거시 녹화·수동 편집) 해당 디바이스 재연결에 오래 걸림. 모듈 자체는
+            # module_service가 자체 인스턴스/연결을 관리하므로, 매칭되지 않으면 ensure 스킵.
+            skip_ensure = False
+            if step.type == StepType.MODULE_COMMAND:
+                requested_module = (step.params or {}).get("module", "") if step.params else ""
+                if action_device_id:
+                    dev_check = self.dm.get_device(action_device_id)
+                    has_matching_module = bool(
+                        dev_check and dev_check.info
+                        and dev_check.info.get("module") == requested_module
+                    )
+                    # Android 가상 모듈은 ADB 기기에 붙으므로 타입 체크로 대체 허용
+                    if not has_matching_module and requested_module == "Android":
+                        has_matching_module = bool(dev_check and dev_check.type == "adb")
+                    if not has_matching_module:
+                        logger.warning(
+                            "Step %d MODULE_COMMAND device_id=%s mismatches module=%s (dev.type=%s, dev.module=%s) — skip reconnect",
+                            step.id, action_device_id, requested_module,
+                            dev_check.type if dev_check else None,
+                            (dev_check.info or {}).get("module") if dev_check else None,
+                        )
+                        skip_ensure = True
+            if action_device_id and not skip_ensure:
                 await self._ensure_device_connected(action_device_id)
             t1 = time.time()
 
@@ -1308,23 +1331,62 @@ class PlaybackService:
             shared_conn = None
             ssh_credentials = None
             adb_serial: Optional[str] = None
-            if real_id:
-                dev = self.dm.get_device(real_id)
-                if dev:
-                    ctor_kwargs = _build_ctor_kwargs(dev)
-                    shared_conn = self.dm.get_serial_conn(real_id)
-                    # SSH 디바이스: 저장된 자격증명을 SSHManager.create_ssh_client에 전달
-                    if dev.type == "ssh":
-                        ssh_credentials = {
-                            "host": dev.info.get("host", dev.address),
-                            "port": int(dev.info.get("port", 22)),
-                            "username": dev.info.get("username", ""),
-                            "password": dev.info.get("password", ""),
-                            "key_file_path": dev.info.get("key_file_path", ""),
-                        }
-                    # ADB 디바이스: Android 모듈의 Send_adb_command가 사용
-                    if dev.type == "adb":
-                        adb_serial = dev.address
+            dev = self.dm.get_device(real_id) if real_id else None
+
+            # MODULE_COMMAND는 step.device_id가 과거 녹화·편집 과정에서 엉뚱한 디바이스를
+            # 가리키는 경우가 있음(예: HKMC/DLT address로 resolve). 모듈 이름이 일반
+            # 모듈(Android/CMD 제외)이면 현재 시점에 유일하게 해당 모듈이 붙어있는
+            # auxiliary 디바이스가 있는지 찾아, 있으면 그것으로 강제 교체한다.
+            if module_name and module_name not in ("Android", "CMD"):
+                candidates = [
+                    d for d in self.dm.list_auxiliary()
+                    if (d.info or {}).get("module") == module_name
+                ]
+                # dev가 이미 올바른 모듈 디바이스면 그대로 사용
+                dev_module = (dev.info or {}).get("module") if dev else None
+                if dev_module != module_name:
+                    if len(candidates) == 1:
+                        chosen = candidates[0]
+                        logger.info(
+                            "MODULE_COMMAND: overriding step device %s (module=%s, type=%s) → %s (module=%s)",
+                            real_id, dev_module,
+                            dev.type if dev else None,
+                            chosen.id, module_name,
+                        )
+                        dev = chosen
+                        real_id = chosen.id
+                    elif len(candidates) > 1:
+                        # 여러 개 중에는 연결된 것을 우선, 그 다음 첫 번째
+                        chosen = next(
+                            (c for c in candidates if c.status in ("connected", "device")),
+                            candidates[0],
+                        )
+                        logger.info(
+                            "MODULE_COMMAND: multiple %s devices; using %s (status=%s) instead of %s",
+                            module_name, chosen.id, chosen.status, real_id,
+                        )
+                        dev = chosen
+                        real_id = chosen.id
+                    else:
+                        logger.warning(
+                            "MODULE_COMMAND: module=%s but no auxiliary device registered for it; falling back to step device %s",
+                            module_name, real_id,
+                        )
+            if dev:
+                ctor_kwargs = _build_ctor_kwargs(dev)
+                shared_conn = self.dm.get_serial_conn(real_id)
+                # SSH 디바이스: 저장된 자격증명을 SSHManager.create_ssh_client에 전달
+                if dev.type == "ssh":
+                    ssh_credentials = {
+                        "host": dev.info.get("host", dev.address),
+                        "port": int(dev.info.get("port", 22)),
+                        "username": dev.info.get("username", ""),
+                        "password": dev.info.get("password", ""),
+                        "key_file_path": dev.info.get("key_file_path", ""),
+                    }
+                # ADB 디바이스: Android 모듈의 Send_adb_command가 사용
+                if dev.type == "adb":
+                    adb_serial = dev.address
             logger.info("Module exec: %s.%s device=%s ctor=%s shared_conn=%s ssh=%s adb=%s",
                         module_name, func_name, real_id, ctor_kwargs,
                         shared_conn is not None, ssh_credentials is not None, adb_serial)
