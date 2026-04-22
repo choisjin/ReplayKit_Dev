@@ -474,6 +474,8 @@ export default function DevicePage() {
   };
 
   const handleConnect = async () => {
+    // 주 디바이스는 프로젝트·모델 필수
+    if (!ensurePrimaryProjectModel()) return;
     const moduleConnType = getModuleConnectType(selectedModule);
     const fields = getModuleConnectFields(selectedModule);
 
@@ -582,7 +584,18 @@ export default function DevicePage() {
     setConnecting(false);
   };
 
+  // 주 디바이스 등록 시 프로젝트·모델 필수 선택 여부 확인
+  const primaryProjectModelMissing = modalCategory === 'primary' && (!deviceProject || !deviceModel);
+  const ensurePrimaryProjectModel = (): boolean => {
+    if (primaryProjectModelMissing) {
+      message.warning('주 디바이스 추가 시 프로젝트와 장비 모델을 먼저 선택하세요.');
+      return false;
+    }
+    return true;
+  };
+
   const handleAddSerial = async (port: string, description: string) => {
+    if (!ensurePrimaryProjectModel()) return;
     setConnecting(true);
     try {
       const scanModuleConnType = getModuleConnectType(scanSelectedModule);
@@ -596,6 +609,7 @@ export default function DevicePage() {
   };
 
   const handleAddAdb = async (serial: string) => {
+    if (!ensurePrimaryProjectModel()) return;
     setConnecting(true);
     try {
       const result = await connectDevice('adb', serial, undefined, '', 'primary', undefined, undefined, undefined, '', undefined, deviceModel || undefined);
@@ -609,6 +623,7 @@ export default function DevicePage() {
   };
 
   const handleAddHkmc = async (ip: string, port: number) => {
+    if (!ensurePrimaryProjectModel()) return;
     setConnecting(true);
     try {
       const result = await connectDevice('hkmc6th', ip, undefined, '', 'primary', undefined, undefined, undefined, '', port, deviceModel || undefined);
@@ -621,6 +636,7 @@ export default function DevicePage() {
   };
 
   const handleAddIsap = async (ip: string, port: number) => {
+    if (!ensurePrimaryProjectModel()) return;
     setConnecting(true);
     try {
       const result = await connectDevice('isap_agent', ip, undefined, '', 'primary', undefined, undefined, undefined, '', port, deviceModel || undefined);
@@ -885,7 +901,7 @@ export default function DevicePage() {
       key: 'action',
       width: 100,
       render: (_: any, r: SerialPort) => (
-        <Button size="small" type="primary" loading={connecting} onClick={() => handleAddSerial(r.port, r.description)}>
+        <Button size="small" type="primary" loading={connecting} disabled={primaryProjectModelMissing} title={primaryProjectModelMissing ? '프로젝트·모델을 먼저 선택하세요' : undefined} onClick={() => handleAddSerial(r.port, r.description)}>
           {t('common.add')}
         </Button>
       ),
@@ -1034,7 +1050,7 @@ export default function DevicePage() {
                             pagination={scannedAdb.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
                             renderItem={(d) => (
                               <List.Item actions={[
-                                <Button size="small" type="primary" loading={connecting} onClick={() => handleAddAdb(d.serial)}>{t('common.add')}</Button>
+                                <Button size="small" type="primary" loading={connecting} disabled={primaryProjectModelMissing} title={primaryProjectModelMissing ? '프로젝트·모델을 먼저 선택하세요' : undefined} onClick={() => handleAddAdb(d.serial)}>{t('common.add')}</Button>
                               ]}>
                                 <Tag color="green">{d.serial}</Tag> {d.model} <Tag>{d.status}</Tag>
                               </List.Item>
@@ -1099,7 +1115,7 @@ export default function DevicePage() {
                             pagination={scannedHkmc.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
                             renderItem={(d) => (
                               <List.Item actions={[
-                                <Button size="small" type="primary" loading={connecting} onClick={() => handleAddHkmc(d.ip, d.port)}>{t('common.add')}</Button>
+                                <Button size="small" type="primary" loading={connecting} disabled={primaryProjectModelMissing} title={primaryProjectModelMissing ? '프로젝트·모델을 먼저 선택하세요' : undefined} onClick={() => handleAddHkmc(d.ip, d.port)}>{t('common.add')}</Button>
                               ]}>
                                 <Tag color="volcano">HKMC</Tag> <Tag color="blue">{d.ip}</Tag> <span style={{ color: '#888' }}>TCP: {d.port}</span>
                               </List.Item>
@@ -1120,7 +1136,7 @@ export default function DevicePage() {
                             pagination={scannedIsap.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
                             renderItem={(d) => (
                               <List.Item actions={[
-                                <Button size="small" type="primary" loading={connecting} onClick={() => handleAddIsap(d.ip, d.port)}>{t('common.add')}</Button>
+                                <Button size="small" type="primary" loading={connecting} disabled={primaryProjectModelMissing} title={primaryProjectModelMissing ? '프로젝트·모델을 먼저 선택하세요' : undefined} onClick={() => handleAddIsap(d.ip, d.port)}>{t('common.add')}</Button>
                               ]}>
                                 <Tag color="geekblue">iSAP</Tag> <Tag color="blue">{d.ip}</Tag> <span style={{ color: '#888' }}>TCP: {d.port}</span>
                               </List.Item>
@@ -1255,6 +1271,7 @@ export default function DevicePage() {
                               const busy = !!w.in_use_by_recording;
                               const dup = !!w.already_registered;
                               const handleQuickAdd = async () => {
+                                if (!ensurePrimaryProjectModel()) return;
                                 setConnecting(true);
                                 try {
                                   const extra = { device_index: w.index, width: w.width || 0, height: w.height || 0 };
@@ -1269,7 +1286,9 @@ export default function DevicePage() {
                               return (
                                 <List.Item actions={[
                                   <Button size="small" type="primary" loading={connecting}
-                                          disabled={dup || busy} onClick={handleQuickAdd}>
+                                          disabled={dup || busy || primaryProjectModelMissing}
+                                          title={primaryProjectModelMissing ? '프로젝트·모델을 먼저 선택하세요' : undefined}
+                                          onClick={handleQuickAdd}>
                                     {t('common.add')}
                                   </Button>
                                 ]}>
@@ -1738,6 +1757,8 @@ export default function DevicePage() {
                       icon={<PlusOutlined />}
                       onClick={handleConnect}
                       loading={connecting}
+                      disabled={primaryProjectModelMissing}
+                      title={primaryProjectModelMissing ? '프로젝트·모델을 먼저 선택하세요' : undefined}
                       block
                     >
                       {t('common.connect')}

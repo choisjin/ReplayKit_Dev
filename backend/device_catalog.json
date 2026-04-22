@@ -4,15 +4,42 @@
       "name": "HKMC",
       "enabled": true,
       "models": [
-        { "value": "ccRC",                 "enabled": true },
-        { "value": "ccIC",                 "enabled": true },
-        { "value": "ccIC27",               "enabled": true },
-        { "value": "Connect Wide",         "enabled": true },
-        { "value": "CCU2",                 "enabled": true },
-        { "value": "Gen6 Premium",         "enabled": true },
-        { "value": "Gen5 Standard (Wide)", "enabled": true },
-        { "value": "Gen5 Standard",        "enabled": true },
-        { "value": "Gen5 Premium",         "enabled": true }
+        {
+          "value": "ccRC",
+          "enabled": true
+        },
+        {
+          "value": "ccIC",
+          "enabled": true
+        },
+        {
+          "value": "ccIC27",
+          "enabled": true
+        },
+        {
+          "value": "Connect Wide",
+          "enabled": true
+        },
+        {
+          "value": "CCU2",
+          "enabled": true
+        },
+        {
+          "value": "Gen6 Premium",
+          "enabled": true
+        },
+        {
+          "value": "Gen5 Standard (Wide)",
+          "enabled": true
+        },
+        {
+          "value": "Gen5 Standard",
+          "enabled": true
+        },
+        {
+          "value": "Gen5 Premium",
+          "enabled": true
+        }
       ]
     },
     {
@@ -20,7 +47,6 @@
       "enabled": true,
       "models": [
         {
-          "label": "GVM",
           "value": "GVM",
           "enabled": true
         }
@@ -31,17 +57,14 @@
       "enabled": true,
       "models": [
         {
-          "label": "Android",
           "value": "Android",
           "enabled": true
         },
         {
-          "label": "Phone",
           "value": "Phone",
           "enabled": true
         },
         {
-          "label": "SSH",
           "value": "SSH",
           "enabled": true
         }
@@ -62,8 +85,21 @@
       "enabled": true,
       "models": [
         {
-          "label": "ICAS",
           "value": "ICAS",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "name": "Camera",
+      "enabled": true,
+      "models": [
+        {
+          "value": "WebCam",
+          "enabled": true
+        },
+        {
+          "value": "VisionCamera",
           "enabled": true
         }
       ]
