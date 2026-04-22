@@ -263,9 +263,9 @@ export default function DevicePage() {
   const PROJECT_OPTIONS = useMemo(() => [
     { label: '전체', value: '' },
     ...catalogProjects
-      .filter(p => p.enabled !== false)
+      .filter(p => p.enabled !== false && typeof p.name === 'string' && p.name.length > 0)
       .map(p => ({ label: p.name, value: p.name }))
-      .sort((a, b) => a.label.localeCompare(b.label)),
+      .sort((a, b) => (a.label || '').localeCompare(b.label || '')),
   ], [catalogProjects]);
 
   const DEVICE_MODELS = useMemo(() => {
@@ -275,11 +275,14 @@ export default function DevicePage() {
       : enabledProjects;
     const flat: { label: string; value: string }[] = [];
     for (const p of src) {
-      for (const m of p.models) {
-        if (m.enabled !== false) flat.push({ label: m.value, value: m.value });
+      for (const m of (p.models || [])) {
+        if (m.enabled === false) continue;
+        const v = typeof m.value === 'string' ? m.value : '';
+        if (!v) continue; // value 누락 항목 스킵
+        flat.push({ label: v, value: v });
       }
     }
-    return flat.sort((a, b) => a.label.localeCompare(b.label));
+    return flat.sort((a, b) => (a.label || '').localeCompare(b.label || ''));
   }, [deviceProject, catalogProjects]);
 
   const isModuleVisible = useCallback((name?: string) => {
@@ -384,7 +387,7 @@ export default function DevicePage() {
     // 모듈 목록 로드 (커스텀 스캔에서 모듈 선택용)
     try {
       const modRes = await deviceApi.listModules();
-      setModules((modRes.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => a.label.localeCompare(b.label)));
+      setModules((modRes.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => (a.label || a.name || '').localeCompare(b.label || b.name || '')));
     } catch { /* ignore */ }
     try {
       const res = await deviceApi.getScanSettings();
@@ -443,7 +446,7 @@ export default function DevicePage() {
     setScannedCustom([]);
     setHasScanned(false);
     if (category === 'auxiliary') {
-      deviceApi.listModules().then(res => setModules((res.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => a.label.localeCompare(b.label)))).catch(() => {});
+      deviceApi.listModules().then(res => setModules((res.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => (a.label || a.name || '').localeCompare(b.label || b.name || '')))).catch(() => {});
     }
   };
 
@@ -649,7 +652,7 @@ export default function DevicePage() {
     if (mods.length === 0) {
       try {
         const res = await deviceApi.listModules();
-        mods = (res.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => a.label.localeCompare(b.label));
+        mods = (res.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => (a.label || a.name || '').localeCompare(b.label || b.name || ''));
         setModules(mods);
       } catch { /* ignore */ }
     }

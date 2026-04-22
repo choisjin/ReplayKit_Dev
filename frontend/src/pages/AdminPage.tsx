@@ -50,7 +50,7 @@ export default function AdminPage() {
         projects: Array.isArray(cat.projects) ? cat.projects : [],
         module_visibility: cat.module_visibility || {},
       });
-      setModules((modRes.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => a.label.localeCompare(b.label)));
+      setModules((modRes.data.modules || []).sort((a: ModuleInfo, b: ModuleInfo) => (a.label || a.name || '').localeCompare(b.label || b.name || '')));
       setDirty(false);
     } catch (e: any) {
       message.error('카탈로그 로드 실패: ' + (e.response?.data?.detail || e.message));
