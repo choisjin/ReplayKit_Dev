@@ -68,15 +68,17 @@ CCRC_SRC_REAR_LEFT_MONITOR = 0x0B
 CCRC_SRC_REAR_RIGHT_MONITOR = 0x0C
 
 # CCRC monitor 필드 (data[3]) — 대상 모니터
-# 주의: Touch 좌표용 screen_type(rear_right=1, rear_left=2)과 값이 반대!
 CCRC_MONITOR_LEFT = 0x01
 CCRC_MONITOR_RIGHT = 0x02
 
-# Screen type mapping for touch
+# Screen type mapping for touch — CCRC_MONITOR_LEFT/RIGHT 값과 정렬.
+# (레거시 에이전트 호환을 위해 rear_right=1, rear_left=2 였으나, 최신 HKMC Agent
+# 에서는 monitor 바이트가 키와 터치 공통으로 LEFT=1, RIGHT=2 로 해석되어
+# 반대 값일 경우 좌우가 뒤섞인다.)
 SCREEN_TOUCH_MAP = {
     "front_center": 0,
-    "rear_right": 1,
-    "rear_left": 2,
+    "rear_left":  CCRC_MONITOR_LEFT,   # 1
+    "rear_right": CCRC_MONITOR_RIGHT,  # 2
 }
 
 # Screen type mapping for image capture (bitmask)
