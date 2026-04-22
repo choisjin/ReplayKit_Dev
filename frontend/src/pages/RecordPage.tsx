@@ -557,6 +557,35 @@ export default function RecordPage() {
       setScreenType('rear_right');
     }
   }, [isScreenCCRC, screenType, setScreenType]);
+
+  // rear_left / rear_right 전환 시 RRC_LEFT / RRC_RIGHT 하드키 자동 발송.
+  //  - HKMC/iSAP 디바이스에서만 동작 (이 키가 실제 존재하는 경우만)
+  //  - 녹화 중이면 스텝으로도 기록됨
+  //  - 최초 마운트·같은 값 반복에서는 발송 안 함
+  const prevScreenTypeRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevScreenTypeRef.current;
+    if (prev === null) {
+      // 최초 진입 — 기록만
+      prevScreenTypeRef.current = screenType;
+      return;
+    }
+    if (prev === screenType) return;
+    prevScreenTypeRef.current = screenType;
+    if (!isScreenHkmc) return;
+    // ccRC 전용 CCRC_* 프로토콜을 쓰는 모델은 RRC_LEFT/RIGHT가 의미 없으므로 제외
+    if (isScreenCCRC) return;
+    let targetKey: string | null = null;
+    if (screenType === 'rear_left') targetKey = 'RRC_LEFT';
+    else if (screenType === 'rear_right') targetKey = 'RRC_RIGHT';
+    if (!targetKey) return;
+    // 해당 디바이스의 hkmcKeys에 키가 실제 존재할 때만 발송
+    const hasKey = hkmcKeys.some(k => k.name === targetKey && k.visible !== false);
+    if (!hasKey) return;
+    const label = `${targetKey} → ${screenType}`;
+    executeAction('hkmc_key', { key_name: targetKey, sub_cmd: HKMC_SHORT_KEY, screen_type: screenType }, label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screenType, isScreenHkmc, isScreenCCRC, hkmcKeys]);
   const isScreenAdb = screenDevice?.type === 'adb';
   // 카메라류(vision_camera/webcam)는 관찰 전용 — 조작(탭/스와이프/키) 금지
   const isScreenReadonly = screenDevice?.type === 'vision_camera' || screenDevice?.type === 'webcam';

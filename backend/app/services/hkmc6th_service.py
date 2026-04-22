@@ -898,8 +898,9 @@ class HKMC6thService:
         key_data = key_info["key"]
         is_ccrc = bool(key_info.get("ccrc"))
 
-        # CCRC: monitor 미지정 시 screen_type으로부터 유도
-        if is_ccrc and monitor not in (CCRC_MONITOR_LEFT, CCRC_MONITOR_RIGHT):
+        # monitor 미지정(0x00 NONE) + rear_left/rear_right 화면이면 자동으로 LEFT/RIGHT 유도.
+        # CCRC·일반 하드키 공통 — 일반 키도 monitor 필드가 rear 모니터 라우팅에 사용됨.
+        if monitor not in (CCRC_MONITOR_LEFT, CCRC_MONITOR_RIGHT):
             if screen_type == "rear_left":
                 monitor = CCRC_MONITOR_LEFT
             elif screen_type == "rear_right":
