@@ -165,7 +165,7 @@ export default function AdminPage() {
   };
   const enabledAgentOptions = catalog.agents
     .filter(a => a.enabled !== false)
-    .map(a => ({ label: `${a.name} (${a.type})`, value: a.name }));
+    .map(a => ({ label: a.name, value: a.name }));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
