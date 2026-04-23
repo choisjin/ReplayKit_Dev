@@ -656,134 +656,107 @@ class ICASAgentService:
         if not self.private_server_ip:
             raise RuntimeError("ICAS IID/HUD capture: private_server_ip not configured")
 
-        try:
-            from scp import SCPClient
-        except ImportError as e:
-            raise RuntimeError("scp module required: pip install scp") from e
-
         tmp_dir = tempfile.mkdtemp(prefix="icas_iid_")
+        local_bmp = os.path.join(tmp_dir, "screenshot.bmp")
         try:
-            # hop_ssh: private_server로 ssh hop용 (interactive shell이라 공유 불가 — 매회 새로 생성)
-            # HU → local SCP pull은 공유 세션 재사용하여 매 프레임 재인증 제거
+            # 방식: HU의 공유 SSH transport 위에 direct-tcpip 채널을 열어
+            #        private_server:22로 터널링한 뒤, paramiko로 native SSH 로그인.
+            #        이후 exec_command(+recv_exit_status)로 screenshot 실행,
+            #        SFTP로 private_server:/tmp/screenshot.bmp → 로컬로 직접 pull.
+            #
+            # interactive shell-over-shell + scp password expect 방식은
+            # 프롬프트 타이밍에 따라 자주 실패 → direct-tcpip으로 기초부터 제거.
             import paramiko
-            hop_ssh = paramiko.SSHClient()
-            hop_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            hop_ssh.connect(self.host, username=self.username, port=self.port,
-                            password=self.password, timeout=10)
-            try:
-                hop_shel = hop_ssh.invoke_shell()
-                hop_shel.settimeout(1.0)
-                # 초기 HU 프롬프트 드레인
-                self._drain_until(hop_shel, want=None, max_wait_s=1.5)
 
-                ps_host = self.private_server_ip
-                is_ipv6 = ":" in ps_host and "." not in ps_host
-
-                # 1) HU → private_server ssh hop
-                ssh_cmd = (
-                    f'ssh -o "StrictHostKeyChecking=no" '
-                    f'-o "UserKnownHostsFile=/dev/null" root@{ps_host}'
+            def _do_capture() -> None:
+                # HU 공유 SSH의 transport를 사용해 HU→private_server:22 TCP 터널 생성
+                with self._ssh_lock:
+                    shared = self._get_shared_ssh()
+                    hu_transport = shared.get_transport()
+                    if hu_transport is None or not hu_transport.is_active():
+                        raise RuntimeError("ICAS shared HU transport not active")
+                    chan = hu_transport.open_channel(
+                        "direct-tcpip",
+                        (self.private_server_ip, 22),
+                        ("127.0.0.1", 0),
+                        timeout=10,
+                    )
+                # 터널 채널 위로 private_server에 paramiko SSH 인증
+                ps_ssh = paramiko.SSHClient()
+                ps_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                ps_ssh.connect(
+                    self.private_server_ip, port=22,
+                    username="root", password=(self.private_server_password or ""),
+                    sock=chan, timeout=15,
+                    allow_agent=False, look_for_keys=False,
                 )
-                hop_shel.send(ssh_cmd + "\n")
-                buf = self._drain_until(hop_shel, want=("password:", "Password:", "yes/no", "$", "#"),
-                                        max_wait_s=8.0)
-                if "yes/no" in buf:
-                    hop_shel.send("yes\n")
-                    buf = self._drain_until(hop_shel, want=("password:", "Password:"), max_wait_s=5.0)
-                if "password" in buf.lower():
-                    hop_shel.send((self.private_server_password or "") + "\n")
-                    # 로그인 완료까지 프롬프트 대기
-                    self._drain_until(hop_shel, want=("$", "#"), max_wait_s=6.0)
-
-                # 2) private_server에서 screenshot 실행 — 파일이 생길 때까지 대기
-                hop_shel.send("cd /tmp\n")
-                self._drain_until(hop_shel, want=("$", "#"), max_wait_s=2.0)
-                hop_shel.send(f"screenshot -display={display_number}\n")
-                # 완료 마커: ls로 파일 크기 확인될 때까지 폴링
-                self._wait_for_remote_file(hop_shel, "/tmp/screenshot.bmp", max_wait_s=8.0)
-
-                # 3) private_server → HU로 scp (private_server는 password 프롬프트 나옴)
-                hop_shel.send("exit\n")
-                self._drain_until(hop_shel, want=("$", "#"), max_wait_s=3.0)
-
-                if is_ipv6:
-                    scp_cmd = (
-                        f'scp -o "StrictHostKeyChecking=no" '
-                        f'-o "UserKnownHostsFile=/dev/null" '
-                        f'root@[{ps_host}]:/tmp/screenshot.bmp /tmp/'
+                try:
+                    # screenshot 명령 실행 + 완료 대기
+                    stdin, stdout, stderr = ps_ssh.exec_command(
+                        f"cd /tmp && screenshot -display={display_number}",
+                        timeout=15,
                     )
-                else:
-                    scp_cmd = (
-                        f'scp -o "StrictHostKeyChecking=no" '
-                        f'-o "UserKnownHostsFile=/dev/null" '
-                        f'root@{ps_host}:/tmp/screenshot.bmp /tmp/'
-                    )
-                hop_shel.send(scp_cmd + "\n")
-                buf = self._drain_until(hop_shel, want=("password:", "Password:", "yes/no", "$", "#", "100%"),
-                                        max_wait_s=8.0)
-                # yes/no 프롬프트 → 응답 후 password 프롬프트로 이어짐
-                if "yes/no" in buf:
-                    hop_shel.send("yes\n")
-                    buf = self._drain_until(hop_shel, want=("password:", "Password:", "$", "#"),
-                                            max_wait_s=5.0)
-                if "password" in buf.lower():
-                    hop_shel.send((self.private_server_password or "") + "\n")
-                    # 전송 완료까지 프롬프트 대기
-                    self._drain_until(hop_shel, want=("$", "#"), max_wait_s=10.0)
-                # HU 에서 파일 생겼는지 확인 (scp 완료 여부 검증)
-                self._wait_for_remote_file(hop_shel, "/tmp/screenshot.bmp", max_wait_s=8.0)
-
-                # 3) local로 SCP pull + HU에서 정리 — 공유 SSH로 처리
-                local_bmp = os.path.join(tmp_dir, "screenshot.bmp")
-
-                def _do_pull(ssh) -> None:
-                    with SCPClient(ssh.get_transport()) as scp:
-                        scp.get("/tmp/screenshot.bmp", local_bmp)
-                    # rm 채널도 exit_status 대기 + close (sshd 세션 누수 방지)
                     try:
-                        stdin, stdout, stderr = ssh.exec_command("rm -f /tmp/screenshot.bmp", timeout=5)
+                        stdin.close()
+                    except Exception:
+                        pass
+                    try:
+                        stdout.channel.settimeout(15)
+                        stdout.channel.recv_exit_status()
+                    except Exception:
+                        pass
+                    for f in (stdout, stderr):
                         try:
-                            stdin.close()
+                            f.close()
                         except Exception:
                             pass
+
+                    # SFTP로 private_server:/tmp/screenshot.bmp → 로컬 pull
+                    with ps_ssh.open_sftp() as sftp:
                         try:
-                            stdout.channel.settimeout(5)
-                            stdout.channel.recv_exit_status()
+                            st = sftp.stat("/tmp/screenshot.bmp")
+                            if st.st_size <= 0:
+                                raise RuntimeError("screenshot.bmp is empty on private_server")
+                        except IOError as ie:
+                            raise RuntimeError(
+                                f"screenshot.bmp not found on private_server (display={display_number}): {ie}"
+                            ) from ie
+                        sftp.get("/tmp/screenshot.bmp", local_bmp)
+                        try:
+                            sftp.remove("/tmp/screenshot.bmp")
                         except Exception:
                             pass
-                        for f in (stdout, stderr):
-                            try:
-                                f.close()
-                            except Exception:
-                                pass
+                finally:
+                    try:
+                        ps_ssh.close()
                     except Exception:
                         pass
 
+            # 1회 재시도 — transport 죽어있으면 공유 SSH를 리셋 후 재시도
+            try:
+                _do_capture()
+            except Exception as e:
+                logger.warning("ICAS IID/HUD capture via direct-tcpip failed, retrying: %s", e)
                 with self._ssh_lock:
-                    try:
-                        shared = self._get_shared_ssh()
-                        _do_pull(shared)
-                    except Exception as e:
-                        logger.warning("ICAS IID/HUD pull via shared SSH failed, retrying: %s", e)
-                        if self._ssh_client is not None:
-                            try:
-                                self._ssh_client.close()
-                            except Exception:
-                                pass
-                            self._ssh_client = None
-                        shared = self._get_shared_ssh()
-                        _do_pull(shared)
+                    if self._ssh_client is not None:
+                        try:
+                            self._ssh_client.close()
+                        except Exception:
+                            pass
+                        self._ssh_client = None
+                    if self._ssh_shell is not None:
+                        try:
+                            self._ssh_shell.close()
+                        except Exception:
+                            pass
+                        self._ssh_shell = None
+                _do_capture()
 
-                if not os.path.exists(local_bmp) or os.path.getsize(local_bmp) == 0:
-                    raise RuntimeError("IID/HUD screenshot transfer failed")
+            if not os.path.exists(local_bmp) or os.path.getsize(local_bmp) == 0:
+                raise RuntimeError("IID/HUD screenshot transfer failed")
 
-                img = Image.open(local_bmp).convert("RGBA")
-                return _encode_image(img, fmt)
-            finally:
-                try:
-                    hop_ssh.close()
-                except Exception:
-                    pass
+            img = Image.open(local_bmp).convert("RGBA")
+            return _encode_image(img, fmt)
         finally:
             _rm_tree(tmp_dir)
 
