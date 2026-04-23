@@ -1082,6 +1082,71 @@ class PlaybackService:
             return f"all_random ×{rc} @{iv}ms"
         return step.type.value
 
+    async def _force_reconnect_hkmc(self, device_id: str) -> bool:
+        """HKMC/iSAP 디바이스를 강제 재연결 (stale is_connected 플래그 극복용).
+
+        `_ensure_device_connected` 는 `is_connected == True` 면 재연결을 스킵하는데,
+        TCP 소켓은 죽었지만 `_connected` 플래그만 True 로 남은 zombie 상태에서는
+        스킵이 오히려 버그를 은폐한다. 여기서는 기존 서비스가 있든 없든 무조건
+        disconnect → 새 서비스 → connect 시퀀스를 실행한다.
+
+        Returns:
+            True 면 재연결 성공, False 면 실패 (디바이스 미존재 / port 미설정 / connect 실패).
+        """
+        dev = self.dm.get_device(device_id)
+        if not dev:
+            logger.error("[HKMC RECONNECT] device %s not found in dm", device_id)
+            return False
+        port = dev.info.get("port", 0)
+        if not port:
+            logger.error("[HKMC RECONNECT] device %s has no port in dev.info", device_id)
+            return False
+        lock = self.dm.get_reconnect_lock(device_id)
+        async with lock:
+            existing = self.dm._hkmc_conns.get(dev.id) if dev.type == "hkmc_agent" else self.dm._isap_conns.get(dev.id)
+            if existing:
+                try:
+                    await existing.async_disconnect()
+                except Exception as e:
+                    logger.debug("[HKMC RECONNECT] disconnect failed (ignored): %s", e)
+            try:
+                if dev.type == "hkmc_agent":
+                    from .hkmc6th_service import HKMC6thService
+                    svc = HKMC6thService(dev.address, port, device_id=dev.id,
+                                          key_overrides=dev.info.get("hkmc_keys"))
+                    ok = await svc.async_connect()
+                    if ok:
+                        self.dm._hkmc_conns[dev.id] = svc
+                        dev.status = "connected"
+                        dev.info["agent_version"] = svc.agent_version
+                        try:
+                            dev.info["screens"] = svc.get_info()["screens"]
+                        except Exception:
+                            pass
+                        logger.info("[HKMC RECONNECT] reconnected %s (address=%s port=%s)",
+                                    dev.id, dev.address, port)
+                        return True
+                elif dev.type == "isap_agent":
+                    from .isap_agent_service import ISAPAgentService
+                    svc = ISAPAgentService(dev.address, port, device_id=dev.id,
+                                           key_overrides=dev.info.get("isap_keys"))
+                    ok = await svc.async_connect()
+                    if ok:
+                        self.dm._isap_conns[dev.id] = svc
+                        dev.status = "connected"
+                        dev.info["agent_version"] = svc.agent_version
+                        try:
+                            dev.info["screens"] = svc.get_info()["screens"]
+                        except Exception:
+                            pass
+                        logger.info("[HKMC RECONNECT] iSAP reconnected %s", dev.id)
+                        return True
+            except Exception as e:
+                logger.error("[HKMC RECONNECT] connect failed for %s: %s", dev.id, e)
+                return False
+        logger.error("[HKMC RECONNECT] reconnect returned False for %s", dev.id)
+        return False
+
     async def _ensure_device_connected(self, device_id: str, max_retries: int = 24, retry_interval: float = 5.0) -> None:
         """특정 디바이스의 연결 상태 확인 + 끊어진 경우 재연결 시도.
 
@@ -1546,13 +1611,26 @@ class PlaybackService:
                 is_isap = kind == "isap"
                 if not svc or not svc.is_connected:
                     if _hkmc_attempt == 0:
+                        # 진단 로그: 실제 디바이스/서비스 상태 출력
+                        _dev = self.dm.get_device(real_id)
+                        _svc_by_id = None
+                        if _dev:
+                            _svc_by_id = self.dm._hkmc_conns.get(_dev.id)
                         logger.warning(
-                            "HKMC/iSAP device %s not connected on pre-check, forcing reconnect",
+                            "[HKMC RECONNECT] real_id=%s svc=%s is_connected=%s dev=%s dev.id=%s dev.address=%s dev.type=%s "
+                            "svc_by_dev_id=%s _hkmc_conns_keys=%s port=%s",
                             real_id,
+                            svc, (svc.is_connected if svc else None),
+                            _dev, (_dev.id if _dev else None),
+                            (_dev.address if _dev else None),
+                            (_dev.type if _dev else None),
+                            _svc_by_id,
+                            list(self.dm._hkmc_conns.keys()),
+                            (_dev.info.get("port") if _dev else None),
                         )
-                        await self._ensure_device_connected(
-                            real_id, max_retries=3, retry_interval=2.0,
-                        )
+                        # 강제 재연결: stale flag(is_connected=True 인데 실제 socket 죽은 경우)도
+                        # 극복하기 위해 직접 disconnect + 새 서비스 생성 + connect 수행.
+                        await self._force_reconnect_hkmc(real_id)
                         continue  # 재시도
                     raise ValueError(f"HKMC/iSAP device {real_id} not connected")
                 try:
