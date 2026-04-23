@@ -39,7 +39,7 @@ const { Sider, Content } = Layout;
 
 // 전체 UI 스케일 80% — AntD 기본 토큰 × 0.8 (파생 토큰은 자동 스케일)
 const SCALE_TOKENS = {
-  fontSize: 9,           // AntD 기본 텍스트 크기
+  fontSize: 12,          // AntD 기본 텍스트 크기
   sizeUnit: 3,           // 4  → 3.2  → 3
   sizeStep: 3,           // 4  → 3.2  → 3
   controlHeight: 26,     // 32 → 25.6 → 26
