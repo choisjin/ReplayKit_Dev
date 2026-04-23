@@ -779,8 +779,10 @@ class ISAPAgentService:
                 time.sleep(0.05)
                 self.send_key(cmd, RELEASE_KEY, key_data, screen_type, direction)
             elif sub_cmd == LONG_KEY:
+                # PRESS~LONG 간격을 짧게(0.05초) — 길게 두면 리어 모니터 포커스가
+                # 풀려 LONG 이 엉뚱한 화면에서 처리됨. sub_cmd=LONG_KEY 로 의미 전달.
                 self.send_key(cmd, PRESS_KEY, key_data, screen_type, direction)
-                time.sleep(1.0)
+                time.sleep(0.05)
                 self.send_key(cmd, LONG_KEY, key_data, screen_type, direction)
                 time.sleep(0.05)
                 self.send_key(cmd, RELEASE_KEY, key_data, screen_type, direction)

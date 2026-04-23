@@ -945,8 +945,12 @@ class HKMC6thService:
                 self.send_key(cmd, RELEASE_KEY, key_data, monitor, direction)
             elif sub_cmd == LONG_KEY:
                 # 롱프레스: PRESS → LONG → RELEASE
+                # SHORT와 동일하게 0.1초 간격으로 보낸다. PRESS~LONG 사이를 길게(1초)
+                # 두면 일부 IVI가 리어 모니터 포커스를 잃고 front_center 로 전환되어
+                # LONG 이 엉뚱한 화면에서 처리되는 현상이 있음 — sub_cmd=LONG_KEY(0x44)
+                # 자체로 IVI가 롱키 의미를 인식하므로 실제 홀드 시간은 불필요.
                 self.send_key(cmd, PRESS_KEY, key_data, monitor, direction)
-                time.sleep(1.0)
+                time.sleep(0.1)
                 self.send_key(cmd, LONG_KEY, key_data, monitor, direction)
                 time.sleep(0.1)
                 self.send_key(cmd, RELEASE_KEY, key_data, monitor, direction)
