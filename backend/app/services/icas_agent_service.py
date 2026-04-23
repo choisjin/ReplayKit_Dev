@@ -590,20 +590,39 @@ class ICASAgentService:
             #   - dump 2개를 `&` + `wait`로 병렬 실행 + 단일 exec_command → SSH 왕복 1회
             #   - SCPClient(get당 새 subsystem) → SFTP(subsystem 1회로 2파일 get)
             def _do_capture(ssh) -> list[str]:
-                parallel_cmd = (
-                    "export XDG_RUNTIME_DIR=/run/platform/weston; "
-                    "LayerManagerControl dump screen 0 to /tmp/screen1.png & "
-                    "LayerManagerControl dump screen 2 to /tmp/screen2.png & "
-                    "wait"
+                # dump 2개를 && 체인으로 순차 실행 — 단일 exec_command(SSH 왕복 1회).
+                # 병렬(&+wait) 패턴은 일부 sh 구현에서 wait이 기대대로 동작하지 않는 경우가
+                # 있어 순차로 통일. 총 체감 시간은 여전히 기존 2-exec 방식보다 짧음.
+                dump_cmd = (
+                    "export XDG_RUNTIME_DIR=/run/platform/weston && "
+                    "LayerManagerControl dump screen 0 to /tmp/screen1.png && "
+                    "LayerManagerControl dump screen 2 to /tmp/screen2.png"
                 )
-                stdin, stdout, stderr = ssh.exec_command(parallel_cmd, timeout=15)
+                stdin, stdout, stderr = ssh.exec_command(dump_cmd, timeout=20)
                 try:
                     stdin.close()
                 except Exception:
                     pass
+                exit_status = -1
+                err_text = ""
                 try:
-                    stdout.channel.settimeout(15)
-                    stdout.channel.recv_exit_status()
+                    stdout.channel.settimeout(20)
+                    # stderr 수집 — 실패 시 로그에 노출
+                    while not stdout.channel.exit_status_ready():
+                        if stdout.channel.recv_stderr_ready():
+                            try:
+                                err_text += stdout.channel.recv_stderr(4096).decode("utf-8", errors="replace")
+                            except Exception:
+                                pass
+                        else:
+                            # 출력 버퍼 유휴 대기
+                            time.sleep(0.05)
+                    while stdout.channel.recv_stderr_ready():
+                        try:
+                            err_text += stdout.channel.recv_stderr(4096).decode("utf-8", errors="replace")
+                        except Exception:
+                            break
+                    exit_status = stdout.channel.recv_exit_status()
                 except Exception:
                     pass
                 finally:
@@ -613,12 +632,16 @@ class ICASAgentService:
                         except Exception:
                             pass
 
+                if exit_status != 0:
+                    snippet = err_text.strip().replace("\r", " ").replace("\n", " | ")[:200]
+                    logger.warning("ICAS HU dump exit=%d stderr=%r", exit_status, snippet)
+
                 files: list[str] = []
                 # SFTP — 단일 subsystem 채널에서 2파일 연속 get
                 try:
                     sftp = ssh.open_sftp()
                 except Exception as ee:
-                    logger.debug("ICAS HU open_sftp failed: %s", ee)
+                    logger.warning("ICAS HU open_sftp failed: %s", ee)
                     return files
                 try:
                     for remote, fname in (("/tmp/screen1.png", "screen1.png"),
@@ -632,7 +655,6 @@ class ICASAgentService:
                             if os.path.exists(local) and os.path.getsize(local) > 0:
                                 files.append(local)
                         except IOError as ee:
-                            # 파일 없음/권한 — 다른 화면만 있어도 진행
                             logger.debug("ICAS HU sftp %s failed: %s", remote, ee)
                 finally:
                     try:
