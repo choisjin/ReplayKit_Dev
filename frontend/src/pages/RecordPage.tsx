@@ -3448,8 +3448,12 @@ export default function RecordPage() {
                               {keys.map(k => (
                                 <Button key={k.name} size="small"
                                   className="hk-btn"
-                                  style={{ fontSize: 9, padding: '0 6px', height: 22, margin: '0 2px 2px 0' }}
-                                  onMouseDown={(e) => {
+                                  style={{ fontSize: 9, padding: '0 6px', height: 22, margin: '0 2px 2px 0', touchAction: 'none' }}
+                                  onPointerDown={(e) => {
+                                    // 좌클릭/터치만 처리 (우클릭/가운데 클릭 무시)
+                                    if (e.button !== 0) return;
+                                    // 포인터 캡처: 버튼 바깥으로 커서가 벗어나도 pointerup 이 계속 이 버튼에서 발생
+                                    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* ignore */ }
                                     // 이전 잔여 타이머가 있으면 먼저 정리 (빠른 재클릭 방어)
                                     const prev = hkTimerRef.current.get(k.name);
                                     if (prev) clearTimeout(prev.timer);
@@ -3459,7 +3463,9 @@ export default function RecordPage() {
                                     const timer = window.setTimeout(() => { btn.classList.add('long-done'); }, HKMC_LONG_PRESS_MS);
                                     hkTimerRef.current.set(k.name, { downTs: Date.now(), timer });
                                   }}
-                                  onMouseUp={(e) => {
+                                  onPointerUp={(e) => {
+                                    if (e.button !== 0) return;
+                                    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
                                     const entry = hkTimerRef.current.get(k.name);
                                     if (entry) {
                                       clearTimeout(entry.timer);
@@ -3472,14 +3478,15 @@ export default function RecordPage() {
                                     hkTimerRef.current.delete(k.name);
                                     e.currentTarget.classList.remove('pressing', 'long-done');
                                   }}
-                                  onMouseLeave={(e) => {
+                                  onPointerCancel={(e) => {
+                                    // OS 가 포인터를 취소하는 경우 (예: 시스템 제스처) — 타이머만 정리
                                     const entry = hkTimerRef.current.get(k.name);
                                     if (entry) clearTimeout(entry.timer);
                                     hkTimerRef.current.delete(k.name);
                                     e.currentTarget.classList.remove('pressing', 'long-done');
                                   }}
                                   onContextMenu={(e) => {
-                                    // 우클릭 시에도 타이머 정리 (우클릭 메뉴 열리면 mouseup 안 옴)
+                                    // 우클릭 시 타이머 정리 (우클릭 메뉴 열리면 pointerup 안 옴)
                                     e.preventDefault();
                                     const entry = hkTimerRef.current.get(k.name);
                                     if (entry) clearTimeout(entry.timer);
