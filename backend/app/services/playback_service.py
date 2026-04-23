@@ -1377,13 +1377,21 @@ class PlaybackService:
                     result["screen_type"] = "0"
                 return result
         # device_id 없거나, 보조 디바이스인 경우 → 첫 번째 primary 디바이스로 스크린샷
+        # fallback이라도 step에 저장된 screen_type(rear_left/rear_right 등)은 반드시 존중해야
+        # 한다. 이를 놓치면 스텝 테스트(override 적용)는 통과하지만 시나리오 재생은
+        # front_center 로 캡처하여 SSIM이 틀리는 버그가 발생한다.
         primary = self.dm.list_primary()
         if primary:
             dev = primary[0]
             if dev.type == "hkmc_agent":
-                return {"type": "hkmc_agent", "id": dev.id, "screen_type": "front_center"}
+                screen_type = step.screen_type or step.params.get("screen_type", "front_center")
+                return {"type": "hkmc_agent", "id": dev.id, "screen_type": screen_type}
             if dev.type == "isap_agent":
-                return {"type": "isap_agent", "id": dev.id, "screen_type": "front_center"}
+                screen_type = step.screen_type or step.params.get("screen_type", "front_center")
+                return {"type": "isap_agent", "id": dev.id, "screen_type": screen_type}
+            if dev.type == "icas_agent":
+                screen_type = step.screen_type or step.params.get("screen_type", "HU")
+                return {"type": "icas_agent", "id": dev.id, "screen_type": screen_type}
             if dev.type == "vision_camera":
                 return {"type": "vision_camera", "id": dev.id}
             if dev.type == "webcam":
