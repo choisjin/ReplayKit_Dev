@@ -635,12 +635,12 @@ class ICASAgentService:
     # ------------------------------------------------------------------
     def screencap_bytes(self, screen_type: str = "HU",
                         fmt: str = "png", timeout: float = 15.0) -> bytes:
-        """스크린샷 캡처. screen_type: HU | IID | HUD."""
-        st = (screen_type or "HU").upper()
-        if st == "IID":
-            return self._screencap_iid_hud(self.iid_display, fmt=fmt)
-        if st == "HUD":
-            return self._screencap_iid_hud(self.hud_display, fmt=fmt)
+        """스크린샷 캡처. 현재는 HU만 지원.
+
+        IID/HUD 경로는 private_server의 `screenshot` 바이너리가 'no displays'를
+        반환하는 환경 제약으로 비활성. 향후 지원 시 `_screencap_iid_hud` 재활성.
+        """
+        # screen_type은 UI 호환을 위해 받되, 실제 경로는 항상 HU.
         return self._screencap_hu(fmt=fmt)
 
     # ------------------------------------------------------------------

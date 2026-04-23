@@ -559,9 +559,9 @@ export default function RecordPage() {
     }
   }, [isScreenCCRC, screenType, setScreenType]);
 
-  // ICAS: HKMC 계열 screenType(front_center/rear_* 등)이 들어오면 HU로 교정
+  // ICAS: 현재 HU만 지원 (IID/HUD 비활성) — 다른 screenType이 들어오면 HU로 교정
   useEffect(() => {
-    if (isScreenICAS && !['HU', 'IID', 'HUD'].includes(screenType || '')) {
+    if (isScreenICAS && screenType !== 'HU') {
       setScreenType('HU');
     }
   }, [isScreenICAS, screenType, setScreenType]);
@@ -3270,18 +3270,7 @@ export default function RecordPage() {
                       ))}
                     </Select>
                   )}
-                  {isScreenICAS && (
-                    <Select
-                      size="small"
-                      value={screenType || 'HU'}
-                      onChange={setScreenType}
-                      style={{ minWidth: 120 }}
-                    >
-                      <Option value="HU">HU</Option>
-                      <Option value="IID">IID</Option>
-                      <Option value="HUD">HUD</Option>
-                    </Select>
-                  )}
+                  {/* ICAS는 현재 HU만 지원 — IID/HUD는 private_server 환경 제약으로 비활성 */}
                   <Tooltip title={t('record.viewCrop')}>
                     <Button
                       size="small"
