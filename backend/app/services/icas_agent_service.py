@@ -583,16 +583,18 @@ class ICASAgentService:
         from PIL import Image, ImageFile
         ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+        # HU sshd는 SFTP 서브시스템 미지원 → SCP(paramiko-scp)로 pull.
+        try:
+            from scp import SCPClient
+        except ImportError as e:
+            raise RuntimeError("scp module required: pip install scp") from e
+
         tmp_dir = tempfile.mkdtemp(prefix="icas_cap_")
         try:
-            # 공유 SSH 세션에서 dump + SFTP pull 을 일괄 수행 (매 프레임마다 재인증 방지).
-            # 최적화:
-            #   - dump 2개를 `&` + `wait`로 병렬 실행 + 단일 exec_command → SSH 왕복 1회
-            #   - SCPClient(get당 새 subsystem) → SFTP(subsystem 1회로 2파일 get)
+            # 공유 SSH 세션에서 dump + SCP pull 을 일괄 수행 (매 프레임마다 재인증 방지).
+            # - dump 2개를 && 체인으로 단일 exec_command (SSH 왕복 1회)
+            # - SCPClient 하나로 2 파일 연속 get (subsystem 1회)
             def _do_capture(ssh) -> list[str]:
-                # dump 2개를 && 체인으로 순차 실행 — 단일 exec_command(SSH 왕복 1회).
-                # 병렬(&+wait) 패턴은 일부 sh 구현에서 wait이 기대대로 동작하지 않는 경우가
-                # 있어 순차로 통일. 총 체감 시간은 여전히 기존 2-exec 방식보다 짧음.
                 dump_cmd = (
                     "export XDG_RUNTIME_DIR=/run/platform/weston && "
                     "LayerManagerControl dump screen 0 to /tmp/screen1.png && "
@@ -607,7 +609,6 @@ class ICASAgentService:
                 err_text = ""
                 try:
                     stdout.channel.settimeout(20)
-                    # stderr 수집 — 실패 시 로그에 노출
                     while not stdout.channel.exit_status_ready():
                         if stdout.channel.recv_stderr_ready():
                             try:
@@ -615,7 +616,6 @@ class ICASAgentService:
                             except Exception:
                                 pass
                         else:
-                            # 출력 버퍼 유휴 대기
                             time.sleep(0.05)
                     while stdout.channel.recv_stderr_ready():
                         try:
@@ -637,30 +637,19 @@ class ICASAgentService:
                     logger.warning("ICAS HU dump exit=%d stderr=%r", exit_status, snippet)
 
                 files: list[str] = []
-                # SFTP — 단일 subsystem 채널에서 2파일 연속 get
                 try:
-                    sftp = ssh.open_sftp()
+                    with SCPClient(ssh.get_transport()) as scp:
+                        for remote, fname in (("/tmp/screen1.png", "screen1.png"),
+                                              ("/tmp/screen2.png", "screen2.png")):
+                            local = os.path.join(tmp_dir, fname)
+                            try:
+                                scp.get(remote, local)
+                                if os.path.exists(local) and os.path.getsize(local) > 0:
+                                    files.append(local)
+                            except Exception as ee:
+                                logger.debug("ICAS HU scp %s failed: %s", remote, ee)
                 except Exception as ee:
-                    logger.warning("ICAS HU open_sftp failed: %s", ee)
-                    return files
-                try:
-                    for remote, fname in (("/tmp/screen1.png", "screen1.png"),
-                                          ("/tmp/screen2.png", "screen2.png")):
-                        local = os.path.join(tmp_dir, fname)
-                        try:
-                            st = sftp.stat(remote)
-                            if st.st_size <= 0:
-                                continue
-                            sftp.get(remote, local)
-                            if os.path.exists(local) and os.path.getsize(local) > 0:
-                                files.append(local)
-                        except IOError as ee:
-                            logger.debug("ICAS HU sftp %s failed: %s", remote, ee)
-                finally:
-                    try:
-                        sftp.close()
-                    except Exception:
-                        pass
+                    logger.warning("ICAS HU SCPClient failed: %s", ee)
                 return files
 
             local_files: list[str] = []
@@ -747,12 +736,15 @@ class ICASAgentService:
                     allow_agent=False, look_for_keys=False,
                 )
                 try:
-                    # screenshot 바이너리는 login shell의 PATH/env에 의존하므로
-                    # get_pty=True + `bash -l -c` 로 interactive 로그인과 동일한 환경을 재현.
+                    # private_server는 busybox 계열이라 bash가 없을 수 있음 → 기본 쉘(sh/busybox)
+                    # 사용. PATH가 최소한이라 `screenshot` 바이너리를 못 찾을 수 있어
+                    # 일반적인 시스템 경로를 명시적으로 prepend.
                     # 기존 stale bmp 제거 후 실행 → 파일 생성 여부로 성공 판정.
                     cmd = (
-                        "bash -l -c 'cd /tmp && rm -f /tmp/screenshot.bmp && "
-                        f"screenshot -display={display_number}'"
+                        "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:"
+                        "/sbin:/bin:$PATH && "
+                        "cd /tmp && rm -f /tmp/screenshot.bmp && "
+                        f"screenshot -display={display_number}"
                     )
                     stdin, stdout, stderr = ps_ssh.exec_command(
                         cmd, timeout=30, get_pty=True,
