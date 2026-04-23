@@ -24,7 +24,7 @@ const SortableStepItem = ({ id, index, isDark, children }: { id: string; index: 
     opacity: isDragging ? 0.5 : 1,
     display: 'flex',
     padding: '4px 8px',
-    gap: 8,
+    gap: 6,
     background: index % 2 === 0 ? undefined : 'rgba(255,255,255,0.04)',
     borderBottom: isDark ? '1px solid #303030' : '1px solid #f0f0f0',
   };
@@ -46,11 +46,11 @@ const JumpEditorInner = React.memo(({ step, index, steps, onUpdate, t }: {
   onUpdate: (index: number, field: 'on_pass_goto' | 'on_fail_goto', value: number | null) => void;
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
 }) => (
-  <Space direction="vertical" size={4} style={{ padding: 4 }}>
-    <div style={{ fontSize: 12, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+  <Space direction="vertical" size={4} style={{ padding: 3 }}>
+    <div style={{ fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
       {t('record.conditionalJumpTitle', { index: String(index + 1) })}
       {(step.on_pass_goto != null || step.on_fail_goto != null) && (
-        <Button size="small" type="link" danger style={{ padding: 0, fontSize: 11, height: 'auto' }}
+        <Button size="small" type="link" danger style={{ padding: 0, fontSize: 9, height: 'auto' }}
           onClick={() => { onUpdate(index, 'on_pass_goto', null); onUpdate(index, 'on_fail_goto', null); }}>
           {t('common.reset')}
         </Button>
@@ -2556,7 +2556,7 @@ export default function RecordPage() {
   const [wMax, setWMax] = useState(10000);
 
   const renderWaitPopoverContent = (afterIndex?: number) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 200 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 200 }}>
       <Radio.Group size="small" value={wMode} onChange={(e) => setWMode(e.target.value)} optionType="button" buttonStyle="solid"
         options={[
           { label: t('record.waitBasic'), value: 'basic' },
@@ -2568,15 +2568,15 @@ export default function RecordPage() {
         <InputNumber size="small" min={0} step={100} value={wDuration} onChange={(v) => setWDuration(v || 0)} suffix="ms" style={{ width: '100%' }} />
       )}
       {wMode === 'cycle' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <Space><span style={{ fontSize: 12, minWidth: 30 }}>{t('record.waitStart')}:</span><InputNumber size="small" min={0} step={100} value={wStart} onChange={(v) => setWStart(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
-          <Space><span style={{ fontSize: 12, minWidth: 30 }}>{t('record.waitInterval')}:</span><InputNumber size="small" min={0} step={100} value={wInterval} onChange={(v) => setWInterval(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <Space><span style={{ fontSize: 10, minWidth: 30 }}>{t('record.waitStart')}:</span><InputNumber size="small" min={0} step={100} value={wStart} onChange={(v) => setWStart(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
+          <Space><span style={{ fontSize: 10, minWidth: 30 }}>{t('record.waitInterval')}:</span><InputNumber size="small" min={0} step={100} value={wInterval} onChange={(v) => setWInterval(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
         </div>
       )}
       {wMode === 'random' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <Space><span style={{ fontSize: 12, minWidth: 30 }}>Min:</span><InputNumber size="small" min={0} step={100} value={wMin} onChange={(v) => setWMin(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
-          <Space><span style={{ fontSize: 12, minWidth: 30 }}>Max:</span><InputNumber size="small" min={0} step={100} value={wMax} onChange={(v) => setWMax(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <Space><span style={{ fontSize: 10, minWidth: 30 }}>Min:</span><InputNumber size="small" min={0} step={100} value={wMin} onChange={(v) => setWMin(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
+          <Space><span style={{ fontSize: 10, minWidth: 30 }}>Max:</span><InputNumber size="small" min={0} step={100} value={wMax} onChange={(v) => setWMax(v || 0)} suffix="ms" style={{ width: 120 }} /></Space>
         </div>
       )}
       <Button size="small" type="primary" block onClick={() => {
@@ -2628,12 +2628,12 @@ export default function RecordPage() {
   const renderDeviceSwapContent = () => {
     const entries = Object.entries(deviceSwapMap);
     if (entries.length === 0) {
-      return <div style={{ color: '#888', fontSize: 12, padding: 8 }}>{t('record.noDeviceInSteps')}</div>;
+      return <div style={{ color: '#888', fontSize: 10, padding: 6 }}>{t('record.noDeviceInSteps')}</div>;
     }
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 280 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5, minWidth: 280 }}>
         {entries.map(([from, to]) => (
-          <div key={from} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div key={from} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Tag style={{ minWidth: 80, textAlign: 'center' }}>{from}</Tag>
             <span style={{ color: '#888' }}>→</span>
             <Select
@@ -2977,13 +2977,13 @@ export default function RecordPage() {
     <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
     <SortableContext items={steps.map((_, i) => `step-${i}`)} strategy={verticalListSortingStrategy}>
     <div className="ant-list ant-list-sm">
-      {steps.length === 0 && <div style={{ padding: 16, textAlign: 'center', color: '#888' }}>{t('record.noSteps')}</div>}
+      {steps.length === 0 && <div style={{ padding: 13, textAlign: 'center', color: '#888' }}>{t('record.noSteps')}</div>}
       {steps.map((s, index) => (
         <SortableStepItem key={`step-${index}`} id={`step-${index}`} index={index} isDark={isDark}>
           {/* 좌측: 스텝 정보 */}
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* 1행: 설명, 함수(인자), delay(우측정렬) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
               <Tag color={s.type === 'wait' ? 'cyan' : 'blue'} style={{ margin: 0, minWidth: 28, textAlign: 'center', flexShrink: 0 }}>{index + 1}</Tag>
               <Input
                 size="small"
@@ -2993,7 +2993,7 @@ export default function RecordPage() {
                 style={{ flex: 1, minWidth: 60, maxWidth: 180 }}
               />
               {s.type !== 'wait' && (
-                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 4, flex: 1 }}>
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 3, flex: 1 }}>
                   {s.type === 'module_command'
                     ? `${s.params.function}(${s.params.args ? Object.entries(s.params.args).map(([, v]) => `"${v}"`).join(', ') : ''})`
                     : s.type === 'serial_command'
@@ -3010,7 +3010,7 @@ export default function RecordPage() {
                 </span>
               )}
               {s.type === 'wait' ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 'auto', flexShrink: 0 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 'auto', flexShrink: 0 }}>
                   <Tag color="cyan" style={{ margin: 0 }}>WAIT</Tag>
                   <InputNumber size="small" min={100} step={100} value={s.params.duration_ms} onChange={(v) => setSteps(prev => prev.map((st, i) => i === index ? { ...st, params: { ...st.params, duration_ms: v || 1000 } } : st))} suffix="ms" style={{ width: 110 }} />
                 </span>
@@ -3029,7 +3029,7 @@ export default function RecordPage() {
               )}
             </div>
             {/* 2행: 디바이스/타입/이미지/태그 (좌측 정렬) */}
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 3, alignItems: 'center', marginTop: 2, flexWrap: 'wrap' }}>
               <span style={{ minWidth: 28, flexShrink: 0 }} />
               {getDeviceTag(s.device_id)}
               <Tag color={s.type === 'wait' ? 'cyan' : s.type === 'module_command' ? 'geekblue' : s.type.startsWith('hkmc_') ? 'volcano' : undefined}>{s.type === 'module_command' ? (s.params.module || 'module_command') : s.type}</Tag>
@@ -3052,13 +3052,13 @@ export default function RecordPage() {
                       style={{ margin: 0, cursor: 'pointer' }}
                       onClick={() => showAnnotatedPreview(s)}
                     >
-                      <CameraOutlined style={{ marginRight: 4 }} />{modeLabel}
+                      <CameraOutlined style={{ marginRight: 3 }} />{modeLabel}
                     </Tag>
                     <Popover
                       trigger="click"
                       placement="bottom"
                       content={
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                           <InputNumber size="small" min={1} max={100} step={1}
                             value={threshPct}
                             onChange={(v) => { if (v != null) setSteps(prev => prev.map((st, i) => i === index ? { ...st, similarity_threshold: v / 100 } : st)); }}
@@ -3067,7 +3067,7 @@ export default function RecordPage() {
                         </div>
                       }
                     >
-                      <Tag style={{ margin: 0, cursor: 'pointer', fontSize: 11 }}>{threshPct}%</Tag>
+                      <Tag style={{ margin: 0, cursor: 'pointer', fontSize: 9 }}>{threshPct}%</Tag>
                     </Popover>
                     <CloseCircleOutlined
                       onClick={async () => {
@@ -3077,7 +3077,7 @@ export default function RecordPage() {
                         }
                         setSteps((prev) => prev.map((st, i) => i === index ? { ...st, expected_image: null, roi: null, exclude_rois: [], expected_images: [] } : st));
                       }}
-                      style={{ fontSize: 14, color: '#ff4d4f', cursor: 'pointer' }}
+                      style={{ fontSize: 11, color: '#ff4d4f', cursor: 'pointer' }}
                     />
                   </span>
                 );
@@ -3085,7 +3085,7 @@ export default function RecordPage() {
             </div>
           </div>
           {/* 우측: 2행 아이콘 영역 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, borderLeft: isDark ? '1px solid #333' : '1px solid #d9d9d9', paddingLeft: 8, alignSelf: 'stretch', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0, borderLeft: isDark ? '1px solid #333' : '1px solid #d9d9d9', paddingLeft: 6, alignSelf: 'stretch', justifyContent: 'center' }}>
             {/* 1행: 테스트 + 가져오기 + 삭제 (순서는 드래그로 변경) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'flex-end' }}>
               {scenarioName && (() => {
@@ -3096,7 +3096,7 @@ export default function RecordPage() {
                 );
               })()}
               <Button size="small" type="text" icon={<PlusOutlined />} title={t('record.importSteps')} onClick={() => openImportStepModal(index, 'copy')} style={{ width: 28 }} />
-              <Button size="small" type="text" title={t('record.moveSteps')} onClick={() => openImportStepModal(index, 'move')} style={{ width: 28, fontSize: 12, fontWeight: 600, color: '#faad14' }}>M</Button>
+              <Button size="small" type="text" title={t('record.moveSteps')} onClick={() => openImportStepModal(index, 'move')} style={{ width: 28, fontSize: 10, fontWeight: 600, color: '#faad14' }}>M</Button>
               <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => Modal.confirm({ title: t('record.confirmDeleteStep', { index: index + 1 }), okText: t('common.delete'), okType: 'danger', cancelText: t('common.cancel'), onOk: () => deleteStep(index) })} style={{ width: 28 }} />
             </div>
             {/* 2행: 편집 + 조건부이동 + W + 카메라 */}
@@ -3125,7 +3125,7 @@ export default function RecordPage() {
                   trigger="click"
                   placement="bottomRight"
                   content={
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 130 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 130 }}>
                       <Button size="small" block onClick={() => selectCompareMode(index, 'full')}>
                         <CameraOutlined /> {t('record.fullScreen')}
                       </Button>
@@ -3188,7 +3188,7 @@ export default function RecordPage() {
         .record-page .ant-input-number-sm .ant-input-number-handler-wrap { display: none; }
       `}</style>
       <Splitter style={{ flex: 1, minHeight: 0 }}>
-        <Splitter.Panel defaultSize="40%" min="20%" max="70%" style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
+        <Splitter.Panel defaultSize="40%" min="20%" max="70%" style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden' }}>
           {/* Left panel: Device screen + Webcam */}
           <Card
             size="small"
@@ -3337,7 +3337,7 @@ export default function RecordPage() {
             style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 }}
             styles={{
               header: { flexWrap: 'wrap', height: 'auto', minHeight: 40, padding: '4px 12px' },
-              body: { flex: 1, overflow: 'auto', padding: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' },
+              body: { flex: 1, overflow: 'auto', padding: 6, display: 'flex', flexDirection: 'column', alignItems: 'center' },
             }}
           >
             {screenshotDeviceId && screenshot ? (
@@ -3374,13 +3374,13 @@ export default function RecordPage() {
                 })()}
                 {testingStepIndex != null && (
                   <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', borderRadius: 4, pointerEvents: 'none' }}>
-                    <Tag color="processing" style={{ fontSize: 14, padding: '4px 12px' }}>{t('record.stepTesting')}</Tag>
+                    <Tag color="processing" style={{ fontSize: 11, padding: '4px 12px' }}>{t('record.stepTesting')}</Tag>
                   </div>
                 )}
                 </div>
                 {viewCropEnabled && (
                   <div style={{ width: '100%', padding: '4px 0' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: subTextColor }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: subTextColor }}>
                       <span style={{ minWidth: 16 }}>X</span>
                       <Slider
                         range
@@ -3391,7 +3391,7 @@ export default function RecordPage() {
                         tooltip={{ formatter: (v) => `${Math.round((v ?? 0) * 100)}%` }}
                       />
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: subTextColor }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: subTextColor }}>
                       <span style={{ minWidth: 16 }}>Y</span>
                       <Slider
                         range
@@ -3402,7 +3402,7 @@ export default function RecordPage() {
                         tooltip={{ formatter: (v) => `${Math.round((v ?? 0) * 100)}%` }}
                       />
                     </div>
-                    <div style={{ fontSize: 10, color: subTextColor, textAlign: 'center' }}>
+                    <div style={{ fontSize: 8, color: subTextColor, textAlign: 'center' }}>
                       {t('record.viewCropRange', {
                         x1: String(Math.round(viewCropX[0] * deviceRes.width)),
                         x2: String(Math.round(viewCropX[1] * deviceRes.width)),
@@ -3412,7 +3412,7 @@ export default function RecordPage() {
                     </div>
                   </div>
                 )}
-                <div style={{ marginTop: 4, color: subTextColor, fontSize: 11 }}>
+                <div style={{ marginTop: 3, color: subTextColor, fontSize: 9 }}>
                   {lastGesture
                     ? `${lastGesture} → ${recording ? t('record.gestureRecord') : t('record.directExec')}`
                     : t('record.gestureHint', { device: screenshotDeviceId || screenDevice?.id || '' })}
@@ -3437,18 +3437,18 @@ export default function RecordPage() {
                   const isHkmc = devType === 'hkmc_agent';
                   const canConfigKeys = isIsap || isHkmc;
                   return (
-                    <div style={{ marginTop: 4, width: '100%' }}>
+                    <div style={{ marginTop: 3, width: '100%' }}>
                       {groups.map((group) => {
                         const keys = byGroup[group];
                         if (!keys || keys.length === 0) return null;
                         return (
                           <details key={group} style={{ marginBottom: 2 }}>
-                            <summary style={{ fontSize: 11, color: subTextColor, cursor: 'pointer', userSelect: 'none' }}>{group} <span style={{ color: '#888' }}>({keys.length})</span></summary>
+                            <summary style={{ fontSize: 9, color: subTextColor, cursor: 'pointer', userSelect: 'none' }}>{group} <span style={{ color: '#888' }}>({keys.length})</span></summary>
                             <div style={{ padding: '2px 0 2px 4px' }}>
                               {keys.map(k => (
                                 <Button key={k.name} size="small"
                                   className="hk-btn"
-                                  style={{ fontSize: 10, padding: '0 6px', height: 22, margin: '0 2px 2px 0' }}
+                                  style={{ fontSize: 8, padding: '0 6px', height: 22, margin: '0 2px 2px 0' }}
                                   onMouseDown={(e) => {
                                     // 이전 잔여 타이머가 있으면 먼저 정리 (빠른 재클릭 방어)
                                     const prev = hkTimerRef.current.get(k.name);
@@ -3493,15 +3493,15 @@ export default function RecordPage() {
                         );
                       })}
                       {canConfigKeys && (
-                        <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-                          <span style={{ fontSize: 11, color: subTextColor, marginRight: 2 }}>Random:</span>
+                        <div style={{ marginTop: 5, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+                          <span style={{ fontSize: 9, color: subTextColor, marginRight: 2 }}>Random:</span>
                           {/* 반복 횟수 */}
                           <InputNumber
                             size="small"
                             min={1} max={100000}
                             value={randRepeatCount}
                             onChange={(v) => setRandRepeatCount(Math.max(1, Math.floor(v || 1)))}
-                            style={{ width: 70, fontSize: 10 }}
+                            style={{ width: 70, fontSize: 8 }}
                             title="반복 횟수"
                             disabled={randRunning}
                           />
@@ -3511,53 +3511,53 @@ export default function RecordPage() {
                             min={0} max={60000} step={50}
                             value={randIntervalMs}
                             onChange={(v) => setRandIntervalMs(Math.max(0, Math.floor(v || 0)))}
-                            style={{ width: 70, fontSize: 10 }}
+                            style={{ width: 70, fontSize: 8 }}
                             title="간격 (ms)"
                             disabled={randRunning}
                             suffix="ms"
                           />
                           {/* HK */}
                           <Button.Group style={{ marginLeft: 2 }}>
-                            <Button size="small" danger disabled={randRunning} style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                            <Button size="small" danger disabled={randRunning} style={{ fontSize: 8, padding: '0 6px', height: 22 }}
                               onClick={() => runRandomRepeat(randHK)}>
                               HK{randHkKeysConfig && randHkKeysConfig.length > 0 ? ` (${randHkKeysConfig.length})` : ''}
                             </Button>
-                            <Button size="small" icon={<SettingOutlined />} disabled={randRunning} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
+                            <Button size="small" icon={<SettingOutlined />} disabled={randRunning} style={{ fontSize: 8, padding: '0 4px', height: 22 }}
                               onClick={() => setRandHkModalOpen(true)} title="HK 설정" />
                           </Button.Group>
                           {/* SK */}
                           <Button.Group style={{ marginLeft: 2 }}>
-                            <Button size="small" danger disabled={randRunning} style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                            <Button size="small" danger disabled={randRunning} style={{ fontSize: 8, padding: '0 6px', height: 22 }}
                               onClick={() => runRandomRepeat(randSK)}>
                               SK{randSkRegion ? ' ▣' : ''}
                             </Button>
-                            <Button size="small" icon={<SettingOutlined />} disabled={randRunning} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
+                            <Button size="small" icon={<SettingOutlined />} disabled={randRunning} style={{ fontSize: 8, padding: '0 4px', height: 22 }}
                               onClick={() => openRandRegionModal('sk')} title="SK 영역 설정" />
                           </Button.Group>
                           {/* DRAG */}
                           <Button.Group style={{ marginLeft: 2 }}>
-                            <Button size="small" danger disabled={randRunning} style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                            <Button size="small" danger disabled={randRunning} style={{ fontSize: 8, padding: '0 6px', height: 22 }}
                               onClick={() => runRandomRepeat(randDrag)}>
                               DRAG{randDragRegion ? ' ▣' : ''}
                             </Button>
-                            <Button size="small" icon={<SettingOutlined />} disabled={randRunning} style={{ fontSize: 10, padding: '0 4px', height: 22 }}
+                            <Button size="small" icon={<SettingOutlined />} disabled={randRunning} style={{ fontSize: 8, padding: '0 4px', height: 22 }}
                               onClick={() => openRandRegionModal('drag')} title="DRAG 영역 설정" />
                           </Button.Group>
-                          <Button size="small" type="primary" danger disabled={randRunning} style={{ fontSize: 10, padding: '0 8px', height: 22, marginLeft: 4 }}
+                          <Button size="small" type="primary" danger disabled={randRunning} style={{ fontSize: 8, padding: '0 8px', height: 22, marginLeft: 3 }}
                             onClick={() => allRandHandler()}>ALL RAND</Button>
                           {/* 진행 상태 / 중지 */}
                           {randRunning && (
                             <>
-                              <span style={{ fontSize: 10, color: '#faad14', marginLeft: 6 }}>
+                              <span style={{ fontSize: 8, color: '#faad14', marginLeft: 5 }}>
                                 {randProgress.current}/{randProgress.total}
                               </span>
                               <Button size="small" danger type="primary" icon={<StopOutlined />}
-                                style={{ fontSize: 10, padding: '0 6px', height: 22, marginLeft: 2 }}
+                                style={{ fontSize: 8, padding: '0 6px', height: 22, marginLeft: 2 }}
                                 onClick={stopRandRepeat}>중지</Button>
                             </>
                           )}
                           <span style={{ flex: 1 }} />
-                          <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 10, height: 22 }}
+                          <Button size="small" icon={<SettingOutlined />} style={{ fontSize: 8, height: 22 }}
                             onClick={() => { setIsapKeysDraft(hkmcKeys.map(k => ({ ...k }))); setIsapKeysModalOpen(true); }}>
                             키 설정
                           </Button>
@@ -3568,7 +3568,7 @@ export default function RecordPage() {
                 })()}
               </>
             ) : (
-              <div style={{ color: mutedTextColor, textAlign: 'center', padding: 24 }}>
+              <div style={{ color: mutedTextColor, textAlign: 'center', padding: 19 }}>
                 {connectedPrimaryDevices.length === 0
                   ? t('record.addPrimaryDevice')
                   : t('record.selectPrimaryDevice')}
@@ -3578,14 +3578,14 @@ export default function RecordPage() {
 
         </Splitter.Panel>
 
-        <Splitter.Panel style={{ display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', opacity: testingStepIndex != null ? 0.5 : 1, pointerEvents: testingStepIndex != null ? 'none' : 'auto' }}>
+        <Splitter.Panel style={{ display: 'flex', flexDirection: 'column', gap: 6, overflow: 'hidden', opacity: testingStepIndex != null ? 0.5 : 1, pointerEvents: testingStepIndex != null ? 'none' : 'auto' }}>
           {/* Right panel: Controls + Steps */}
           {recording && (
             /* 녹화 중: 1행 시나리오+설명+녹화상태 */
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
               <Input size="small" value={scenarioName} disabled style={{ flex: 1, minWidth: 100 }} />
               <Input size="small" placeholder={t('record.descriptionPlaceholder')} value={description} onChange={(e) => setDescription(e.target.value)} style={{ flex: 2, minWidth: 120 }} />
-              <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+              <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
                 <Tag color="red" style={{ margin: 0, lineHeight: '22px' }}>{t('record.recording')}</Tag>
                 <Button size="small" danger icon={<PauseOutlined />} onClick={stopRecording} disabled={hasPendingSteps}>
                   {hasPendingSteps ? t('record.savingSteps') : t('record.stopRecording')}
@@ -3593,7 +3593,7 @@ export default function RecordPage() {
               </span>
             </div>
           )}
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
             {recording && (
             <Card
               size="small"
@@ -3611,7 +3611,7 @@ export default function RecordPage() {
               }
               style={{ flex: 1, minWidth: 0 }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {/* 1행: 모듈 선택 (매칭된 디바이스별 항목) */}
                 <Select
                   showSearch
@@ -3631,9 +3631,9 @@ export default function RecordPage() {
                     const dev = (opt.data as any)._device;
                     const moduleName = dev?.info?.module || '';
                     return (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                         <Tag color="purple" style={{ margin: 0 }}>{moduleName}</Tag>
-                        <span style={{ fontSize: 12, color: isDark ? '#8bb4e0' : '#1677ff' }}>
+                        <span style={{ fontSize: 10, color: isDark ? '#8bb4e0' : '#1677ff' }}>
                           → {dev?.id || dev?.address}
                         </span>
                       </span>
@@ -3642,9 +3642,9 @@ export default function RecordPage() {
                 />
                 {/* 2행: 함수 선택 + 파라미터 입력 */}
                 {selectedModuleName && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     {moduleDescription && (
-                      <div style={{ padding: '4px 8px', background: isDark ? '#1a2a1a' : '#f6ffed', borderRadius: 4, fontSize: 12, color: isDark ? '#8bc48b' : '#52c41a', lineHeight: 1.5, border: `1px solid ${isDark ? '#1a3a1a' : '#d9f7be'}` }}>
+                      <div style={{ padding: '4px 8px', background: isDark ? '#1a2a1a' : '#f6ffed', borderRadius: 4, fontSize: 10, color: isDark ? '#8bc48b' : '#52c41a', lineHeight: 1.5, border: `1px solid ${isDark ? '#1a3a1a' : '#d9f7be'}` }}>
                         {moduleDescription}
                       </div>
                     )}
@@ -3674,9 +3674,9 @@ export default function RecordPage() {
                       const fn = moduleFunctions.find(f => f.name === selectedModuleFunc);
                       if (!fn) return null;
                       return (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           {fn.description && (
-                            <div style={{ padding: '4px 8px', background: isDark ? '#1a2332' : '#f0f7ff', borderRadius: 4, fontSize: 12, color: isDark ? '#8bb4e0' : '#1677ff', lineHeight: 1.5, border: `1px solid ${isDark ? '#1a3a5c' : '#d6e8fc'}` }}>
+                            <div style={{ padding: '4px 8px', background: isDark ? '#1a2332' : '#f0f7ff', borderRadius: 4, fontSize: 10, color: isDark ? '#8bb4e0' : '#1677ff', lineHeight: 1.5, border: `1px solid ${isDark ? '#1a3a5c' : '#d6e8fc'}` }}>
                               {fn.description}
                             </div>
                           )}
@@ -3693,7 +3693,7 @@ export default function RecordPage() {
                                 />
                               </Space>
                               {p.description && (
-                                <div style={{ marginLeft: 78, fontSize: 11, color: isDark ? '#888' : '#999', lineHeight: 1.4 }}>
+                                <div style={{ marginLeft: 62, fontSize: 9, color: isDark ? '#888' : '#999', lineHeight: 1.4 }}>
                                   {p.description}
                                 </div>
                               )}
@@ -3703,7 +3703,7 @@ export default function RecordPage() {
                       );
                     })()}
                     {selectedModuleName === 'DLTViewer' && selectedModuleFunc === 'WaitLog' && (
-                      <label style={{ fontSize: 12, color: subTextColor }}>
+                      <label style={{ fontSize: 10, color: subTextColor }}>
                         <input type="checkbox" checked={dltBackground} onChange={(e) => setDltBackground(e.target.checked)} />
                         {' '}{t('dlt.backgroundMonitor')}
                       </label>
@@ -3715,9 +3715,9 @@ export default function RecordPage() {
             )}
             {!recording && (
             <Card size="small" title={t('record.control')} style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {/* Row 1: 폴더 콤보 + 시나리오 콤보 + 관리 버튼 */}
-                <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Select
                     size="small"
                     value={recordSelectedFolder}
@@ -3753,7 +3753,7 @@ export default function RecordPage() {
                   <Button size="small" icon={<PlusOutlined />} onClick={createNewWithName}>{t('record.createNew')}</Button>
                 </div>
                 {/* Row 2: 설명 + 상태 + 녹화 버튼 */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                   <Input
                     size="small"
                     placeholder={t('record.descriptionPlaceholder')}
@@ -3833,7 +3833,7 @@ export default function RecordPage() {
             style={{ cursor: 'crosshair', maxWidth: '100%' }}
           />
         </div>
-        <div style={{ marginTop: 8, color: subTextColor, fontSize: 12, textAlign: 'center' }}>
+        <div style={{ marginTop: 6, color: subTextColor, fontSize: 10, textAlign: 'center' }}>
           {t('record.cropModalHint')}
         </div>
       </Modal>
@@ -3872,7 +3872,7 @@ export default function RecordPage() {
             style={{ cursor: 'crosshair', maxWidth: '100%' }}
           />
         </div>
-        <div style={{ marginTop: 8, color: subTextColor, fontSize: 12, textAlign: 'center' }}>
+        <div style={{ marginTop: 6, color: subTextColor, fontSize: 10, textAlign: 'center' }}>
           {roiEditingIndex != null && steps[roiEditingIndex]?.roi
             ? t('record.roiCurrent', { size: `${steps[roiEditingIndex].roi!.width}×${steps[roiEditingIndex].roi!.height}`, pos: `${steps[roiEditingIndex].roi!.x}, ${steps[roiEditingIndex].roi!.y}` })
             : t('record.dragArea')}
@@ -3912,8 +3912,8 @@ export default function RecordPage() {
           />
         </div>
         {excludeRoiEditingIndex != null && (steps[excludeRoiEditingIndex]?.exclude_rois?.length || 0) > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: 12, color: subTextColor, marginBottom: 4 }}>{t('record.excludeList')}</div>
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 10, color: subTextColor, marginBottom: 3 }}>{t('record.excludeList')}</div>
             <Space wrap>
               {steps[excludeRoiEditingIndex]?.exclude_rois?.map((r, ri) => (
                 <Tag
@@ -3974,8 +3974,8 @@ export default function RecordPage() {
           />
         </div>
         {multiCropEditingIndex != null && (steps[multiCropEditingIndex]?.expected_images?.length || 0) > 0 && (
-          <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: 12, color: subTextColor, marginBottom: 4 }}>{t('record.cropList')}</div>
+          <div style={{ marginTop: 6 }}>
+            <div style={{ fontSize: 10, color: subTextColor, marginBottom: 3 }}>{t('record.cropList')}</div>
             <Space wrap>
               {steps[multiCropEditingIndex]?.expected_images?.map((ci, ci_idx) => (
                 <Tag
@@ -4027,12 +4027,12 @@ export default function RecordPage() {
           if (['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe', 'icas_touch', 'icas_swipe'].includes(step.type)) {
             return (
               <div>
-                <div style={{ marginBottom: 8, color: subTextColor, fontSize: 12 }}>
+                <div style={{ marginBottom: 6, color: subTextColor, fontSize: 10 }}>
                   {(step.type === 'tap' || step.type === 'hkmc_touch' || step.type === 'icas_touch') && t('record.tapHint')}
                   {step.type === 'long_press' && t('record.longPressHint')}
                   {(step.type === 'swipe' || step.type === 'hkmc_swipe' || step.type === 'icas_swipe') && t('record.swipeHint')}
                 </div>
-                <div style={{ marginBottom: 8 }}>
+                <div style={{ marginBottom: 6 }}>
                   <Tag>{t('record.currentParams', { params: JSON.stringify(step.params) })}</Tag>
                 </div>
                 <div style={{ overflow: 'auto', maxHeight: '70vh', textAlign: 'center' }}>
@@ -4050,7 +4050,7 @@ export default function RecordPage() {
           if (step.type === 'input_text') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.inputTextLabel')}</div>
+                <div style={{ marginBottom: 6, fontWeight: 600 }}>{t('record.inputTextLabel')}</div>
                 <TextArea
                   rows={3}
                   value={editStepParams.text ?? ''}
@@ -4063,7 +4063,7 @@ export default function RecordPage() {
           if (step.type === 'key_event') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.keycodeLabel')}</div>
+                <div style={{ marginBottom: 6, fontWeight: 600 }}>{t('record.keycodeLabel')}</div>
                 <Input
                   value={editStepParams.keycode ?? ''}
                   onChange={(e) => setEditStepParams({ ...editStepParams, keycode: e.target.value })}
@@ -4076,7 +4076,7 @@ export default function RecordPage() {
           if (step.type === 'wait') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.waitTimeLabel')}</div>
+                <div style={{ marginBottom: 6, fontWeight: 600 }}>{t('record.waitTimeLabel')}</div>
                 <Space>
                   <InputNumber
                     min={100}
@@ -4094,7 +4094,7 @@ export default function RecordPage() {
           if (step.type === 'adb_command') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.adbCommandLabel')}</div>
+                <div style={{ marginBottom: 6, fontWeight: 600 }}>{t('record.adbCommandLabel')}</div>
                 <TextArea
                   rows={3}
                   value={editStepParams.command ?? ''}
@@ -4108,14 +4108,14 @@ export default function RecordPage() {
           if (step.type === 'serial_command') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.serialDataLabel')}</div>
+                <div style={{ marginBottom: 6, fontWeight: 600 }}>{t('record.serialDataLabel')}</div>
                 <TextArea
                   rows={3}
                   value={editStepParams.data ?? ''}
                   onChange={(e) => setEditStepParams({ ...editStepParams, data: e.target.value })}
                 />
-                <div style={{ marginTop: 8 }}>
-                  <span style={{ marginRight: 8 }}>Read Timeout</span>
+                <div style={{ marginTop: 6 }}>
+                  <span style={{ marginRight: 6 }}>Read Timeout</span>
                   <InputNumber
                     min={0.1}
                     max={30}
@@ -4124,7 +4124,7 @@ export default function RecordPage() {
                     onChange={(v) => setEditStepParams({ ...editStepParams, read_timeout: v ?? 1.0 })}
                     style={{ width: 120 }}
                   />
-                  <span style={{ color: subTextColor, marginLeft: 4 }}>s</span>
+                  <span style={{ color: subTextColor, marginLeft: 3 }}>s</span>
                 </div>
               </div>
             );
@@ -4135,14 +4135,14 @@ export default function RecordPage() {
             const editFnGuide = moduleFunctions.find(f => f.name === editStepParams.function);
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>{editStepParams.module}::{editStepParams.function}()</div>
+                <div style={{ marginBottom: 6, fontWeight: 600 }}>{editStepParams.module}::{editStepParams.function}()</div>
                 {editFnGuide?.description && (
-                  <div style={{ padding: '4px 8px', marginBottom: 8, background: isDark ? '#1a2332' : '#f0f7ff', borderRadius: 4, fontSize: 12, color: isDark ? '#8bb4e0' : '#1677ff', lineHeight: 1.5, border: `1px solid ${isDark ? '#1a3a5c' : '#d6e8fc'}` }}>
+                  <div style={{ padding: '4px 8px', marginBottom: 6, background: isDark ? '#1a2332' : '#f0f7ff', borderRadius: 4, fontSize: 10, color: isDark ? '#8bb4e0' : '#1677ff', lineHeight: 1.5, border: `1px solid ${isDark ? '#1a3a5c' : '#d6e8fc'}` }}>
                     {editFnGuide.description}
                   </div>
                 )}
                 {Object.keys(args).length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     {Object.entries(args).map(([k, v]) => {
                       const paramGuide = editFnGuide?.params.find(p => p.name === k);
                       return (
@@ -4157,7 +4157,7 @@ export default function RecordPage() {
                             />
                           </Space>
                           {paramGuide?.description && (
-                            <div style={{ marginLeft: 78, fontSize: 11, color: isDark ? '#888' : '#999', lineHeight: 1.4 }}>
+                            <div style={{ marginLeft: 62, fontSize: 9, color: isDark ? '#888' : '#999', lineHeight: 1.4 }}>
                               {paramGuide.description}
                             </div>
                           )}
@@ -4175,7 +4175,7 @@ export default function RecordPage() {
           if (step.type === 'hkmc_key' || step.type === 'icas_key') {
             return (
               <div>
-                <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.hkmcKey')}</div>
+                <div style={{ marginBottom: 6, fontWeight: 600 }}>{t('record.hkmcKey')}</div>
                 <Select
                   showSearch
                   value={editStepParams.key_name ?? ''}
@@ -4207,7 +4207,7 @@ export default function RecordPage() {
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
           {importMode !== 'move' && (
             <div>
-              <div style={{ marginBottom: 4, fontSize: 13 }}>{t('record.importSource')}</div>
+              <div style={{ marginBottom: 3, fontSize: 10 }}>{t('record.importSource')}</div>
               <Select
                 style={{ width: '100%' }}
                 value={importSourceName || undefined}
@@ -4220,13 +4220,13 @@ export default function RecordPage() {
               </Select>
             </div>
           )}
-          <div style={{ fontSize: 12, color: '#888' }}>
+          <div style={{ fontSize: 10, color: '#888' }}>
             {t('record.importInsertAt', { index: importInsertIndex + 1 })}
             {' · '}{t('record.importSelectHint')}
           </div>
           <div style={{ maxHeight: 400, overflow: 'auto', border: '1px solid #303030', borderRadius: 4 }}>
             {importSourceSteps.length === 0 ? (
-              <div style={{ padding: 16, textAlign: 'center', color: '#888' }}>{t('record.noSteps')}</div>
+              <div style={{ padding: 13, textAlign: 'center', color: '#888' }}>{t('record.noSteps')}</div>
             ) : importSourceSteps.map((s, i) => (
               <div
                 key={i}
@@ -4236,15 +4236,15 @@ export default function RecordPage() {
                   return next;
                 })}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', cursor: 'pointer',
                   background: importChecked.has(i) ? 'rgba(22,119,255,0.15)' : (i % 2 ? 'rgba(255,255,255,0.02)' : undefined),
                   borderBottom: '1px solid rgba(255,255,255,0.06)',
                 }}
               >
                 <input type="checkbox" checked={importChecked.has(i)} readOnly style={{ flexShrink: 0 }} />
                 <Tag style={{ margin: 0, minWidth: 28, textAlign: 'center' }}>{i + 1}</Tag>
-                <span style={{ flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  <Tag color="blue" style={{ margin: 0, marginRight: 4 }}>{s.type}</Tag>
+                <span style={{ flex: 1, fontSize: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <Tag color="blue" style={{ margin: 0, marginRight: 3 }}>{s.type}</Tag>
                   {s.description || JSON.stringify(s.params).slice(0, 60)}
                 </span>
                 {s.expected_image && <CameraOutlined style={{ color: '#52c41a', flexShrink: 0 }} />}
@@ -4263,13 +4263,13 @@ export default function RecordPage() {
         okText={t('common.execute')}
         width={360}
       >
-        <Space direction="vertical" style={{ width: '100%', marginTop: 12 }} size={12}>
+        <Space direction="vertical" style={{ width: '100%', marginTop: 10 }} size={12}>
           <div>
-            <div style={{ marginBottom: 4, fontSize: 13 }}>{t('record.repeatTapCount')}</div>
+            <div style={{ marginBottom: 3, fontSize: 10 }}>{t('record.repeatTapCount')}</div>
             <InputNumber min={2} max={200} value={repeatTapCount} onChange={v => setRepeatTapCount(v ?? 5)} style={{ width: '100%' }} />
           </div>
           <div>
-            <div style={{ marginBottom: 4, fontSize: 13 }}>{t('record.repeatTapInterval')}</div>
+            <div style={{ marginBottom: 3, fontSize: 10 }}>{t('record.repeatTapInterval')}</div>
             <InputNumber min={10} max={5000} step={10} value={repeatTapInterval} onChange={v => setRepeatTapInterval(v ?? 100)} style={{ width: '100%' }} addonAfter="ms" />
           </div>
         </Space>
@@ -4283,15 +4283,15 @@ export default function RecordPage() {
         footer={null}
         width={420}
       >
-        <Space direction="vertical" style={{ width: '100%', marginTop: 12 }} size={16}>
+        <Space direction="vertical" style={{ width: '100%', marginTop: 10 }} size={16}>
           {!webcamExposureInfo.supported ? (
-            <div style={{ color: '#888', textAlign: 'center', padding: 16 }}>
+            <div style={{ color: '#888', textAlign: 'center', padding: 13 }}>
               {t('record.webcamExposureUnsupported')}
             </div>
           ) : (
             <>
               <div>
-                <div style={{ marginBottom: 8, fontSize: 13 }}>{t('record.webcamExposureMode')}</div>
+                <div style={{ marginBottom: 6, fontSize: 10 }}>{t('record.webcamExposureMode')}</div>
                 <Radio.Group
                   value={webcamExposureInfo.auto ? 'auto' : 'manual'}
                   onChange={async (e) => {
@@ -4319,7 +4319,7 @@ export default function RecordPage() {
                 </Radio.Group>
               </div>
               <div>
-                <div style={{ marginBottom: 8, fontSize: 13 }}>
+                <div style={{ marginBottom: 6, fontSize: 10 }}>
                   {t('record.webcamExposureValue')}: <strong>{webcamExposureInfo.value?.toFixed(1) ?? '-'}</strong>
                 </div>
                 <Slider
@@ -4341,7 +4341,7 @@ export default function RecordPage() {
                     setWebcamExposureLoading(false);
                   }}
                 />
-                <div style={{ fontSize: 11, color: '#888' }}>
+                <div style={{ fontSize: 9, color: '#888' }}>
                   {t('record.webcamExposureHint')}
                 </div>
               </div>
@@ -4360,16 +4360,16 @@ export default function RecordPage() {
       >
         {testResult && (
           <div>
-            <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-              {testResult.status === 'pass' && <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 20 }} />}
-              {testResult.status === 'fail' && <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 20 }} />}
-              {testResult.status === 'warning' && <WarningOutlined style={{ color: '#faad14', fontSize: 20 }} />}
-              {testResult.status === 'error' && <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 20 }} />}
+            <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {testResult.status === 'pass' && <CheckCircleOutlined style={{ color: '#52c41a', fontSize: 16 }} />}
+              {testResult.status === 'fail' && <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 16 }} />}
+              {testResult.status === 'warning' && <WarningOutlined style={{ color: '#faad14', fontSize: 16 }} />}
+              {testResult.status === 'error' && <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 16 }} />}
               <Tag color={
                 testResult.status === 'pass' ? 'green' :
                 testResult.status === 'fail' ? 'red' :
                 testResult.status === 'warning' ? 'orange' : 'red'
-              } style={{ fontSize: 14 }}>
+              } style={{ fontSize: 11 }}>
                 {testResult.status.toUpperCase()}
               </Tag>
               {testResult.similarity_score != null && (
@@ -4380,13 +4380,13 @@ export default function RecordPage() {
               </span>
             </div>
             {testResult.command && (
-              <div style={{ marginBottom: 8, padding: '6px 10px', background: '#1a1a2e', borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}>
+              <div style={{ marginBottom: 6, padding: '6px 10px', background: '#1a1a2e', borderRadius: 4, fontFamily: 'monospace', fontSize: 10 }}>
                 <span style={{ color: subTextColor }}>$ </span><span style={{ color: '#e0e0e0' }}>{testResult.command}</span>
               </div>
             )}
             {testResult.message && (
               <div style={{
-                marginBottom: 12, padding: '8px 10px', borderRadius: 4, fontSize: 13, fontFamily: 'monospace',
+                marginBottom: 10, padding: '8px 10px', borderRadius: 4, fontSize: 10, fontFamily: 'monospace',
                 background: testResult.status === 'fail' ? '#2a1215' : '#122010',
                 border: `1px solid ${testResult.status === 'fail' ? '#5c2024' : '#274916'}`,
                 color: testResult.status === 'fail' ? '#ff7875' : '#95de64',
@@ -4396,7 +4396,7 @@ export default function RecordPage() {
             <Row gutter={12}>
               {testResult.expected_image && (
                 <Col span={testResult.actual_image ? 12 : 24}>
-                  <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>{t('record.expectedImageLabel')}</div>
+                  <div style={{ textAlign: 'center', fontSize: 10, marginBottom: 3, fontWeight: 600 }}>{t('record.expectedImageLabel')}</div>
                   {(() => {
                     const imgSrc = `/screenshots/${testResult.expected_annotated_image || testResult.expected_image}?t=${testResult._ts || ''}`;
                     // key=imgSrc: antd Image 컴포넌트가 preview src를 내부 캐싱하므로 src 변경 시 강제 리마운트
@@ -4406,10 +4406,10 @@ export default function RecordPage() {
               )}
               {testResult.actual_image && (
                 <Col span={testResult.expected_image ? 12 : 24}>
-                  <div style={{ textAlign: 'center', fontSize: 12, marginBottom: 4, fontWeight: 600 }}>
+                  <div style={{ textAlign: 'center', fontSize: 10, marginBottom: 3, fontWeight: 600 }}>
                     {t('record.actualResult')}
                     {testResult.match_location && (
-                      <span style={{ fontWeight: 400, color: '#ff4d4f', marginLeft: 4 }}>
+                      <span style={{ fontWeight: 400, color: '#ff4d4f', marginLeft: 3 }}>
                         ({t('record.matchLocation')}: {testResult.match_location.x},{testResult.match_location.y} {testResult.match_location.width}×{testResult.match_location.height})
                       </span>
                     )}
@@ -4424,9 +4424,9 @@ export default function RecordPage() {
             </Row>
             {/* Multi-crop sub_results 테이블 */}
             {testResult.compare_mode === 'multi_crop' && testResult.sub_results?.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>{t('record.cropResults')}</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, marginBottom: 3 }}>{t('record.cropResults')}</div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #303030' }}>
                       <th style={{ padding: '4px 8px', textAlign: 'left' }}>#</th>
@@ -4455,7 +4455,7 @@ export default function RecordPage() {
               </div>
             )}
             {!testResult.expected_image && !testResult.actual_image && (
-              <div style={{ color: subTextColor, textAlign: 'center', padding: 24 }}>
+              <div style={{ color: subTextColor, textAlign: 'center', padding: 19 }}>
                 {t('record.noExpectedImage')}
               </div>
             )}
@@ -4506,7 +4506,7 @@ export default function RecordPage() {
         }}
       >
         <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-          <div style={{ fontSize: 11, color: subTextColor, marginBottom: 8 }}>
+          <div style={{ fontSize: 9, color: subTextColor, marginBottom: 6 }}>
             체크박스로 표시할 키를 선택하고, 필요 시 key 값을 차종에 맞게 수정하세요. (cmd는 전문 지식 필요 시에만 변경)
           </div>
           {(() => {
@@ -4525,17 +4525,17 @@ export default function RecordPage() {
               const items = byGroup[group];
               const allVisible = items.every(({ k }) => k.visible !== false);
               return (
-                <details key={group} open style={{ marginBottom: 8, border: '1px solid #2a2a2a', borderRadius: 4, padding: 6 }}>
-                  <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
-                    {group} <span style={{ color: '#888', fontSize: 11 }}>({items.length})</span>
-                    <Button size="small" type="link" style={{ fontSize: 10, padding: '0 4px' }}
+                <details key={group} open style={{ marginBottom: 6, border: '1px solid #2a2a2a', borderRadius: 4, padding: 5 }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 10 }}>
+                    {group} <span style={{ color: '#888', fontSize: 9 }}>({items.length})</span>
+                    <Button size="small" type="link" style={{ fontSize: 8, padding: '0 4px' }}
                       onClick={(e) => {
                         e.preventDefault();
                         setIsapKeysDraft(prev => prev.map((x, i) =>
                           items.find(it => it.idx === i) ? { ...x, visible: !allVisible } : x));
                       }}>{allVisible ? '전체 해제' : '전체 선택'}</Button>
                   </summary>
-                  <table style={{ width: '100%', fontSize: 11, marginTop: 4 }}>
+                  <table style={{ width: '100%', fontSize: 9, marginTop: 3 }}>
                     <thead>
                       <tr style={{ color: '#888', textAlign: 'left' }}>
                         <th style={{ width: 40 }}>표시</th>
@@ -4601,10 +4601,10 @@ export default function RecordPage() {
         onOk={() => setRandHkModalOpen(false)}
       >
         <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-          <div style={{ fontSize: 11, color: subTextColor, marginBottom: 8 }}>
+          <div style={{ fontSize: 9, color: subTextColor, marginBottom: 6 }}>
             RAND HK 실행 시 무작위로 선택될 키 풀을 지정합니다. 아무것도 선택하지 않으면 표시 중인 키(dial 제외) 전체가 사용됩니다.
           </div>
-          <Space style={{ marginBottom: 8 }}>
+          <Space style={{ marginBottom: 6 }}>
             <Button size="small" onClick={() => {
               // all visible non-dial keys
               const all = hkmcKeys.filter(k => k.visible !== false && !k.is_dial).map(k => k.name);
@@ -4623,7 +4623,7 @@ export default function RecordPage() {
               const base = _randStorageBase();
               if (base) localStorage.removeItem(`${base}_hk`);
             }}>기본값으로 복구</Button>
-            <span style={{ fontSize: 11, color: subTextColor }}>
+            <span style={{ fontSize: 9, color: subTextColor }}>
               현재: {randHkKeysConfig == null ? '기본(전체)' : `${randHkKeysConfig.length}개 선택`}
             </span>
           </Space>
@@ -4654,10 +4654,10 @@ export default function RecordPage() {
               const groupSelected = items.filter(k => selected.has(k.name)).length;
               const allOn = groupSelected === items.length;
               return (
-                <details key={group} open style={{ marginBottom: 8, border: '1px solid #2a2a2a', borderRadius: 4, padding: 6 }}>
-                  <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
-                    {group} <span style={{ color: '#888', fontSize: 11 }}>({groupSelected}/{items.length})</span>
-                    <Button size="small" type="link" style={{ fontSize: 10, padding: '0 4px' }}
+                <details key={group} open style={{ marginBottom: 6, border: '1px solid #2a2a2a', borderRadius: 4, padding: 5 }}>
+                  <summary style={{ cursor: 'pointer', fontWeight: 600, fontSize: 10 }}>
+                    {group} <span style={{ color: '#888', fontSize: 9 }}>({groupSelected}/{items.length})</span>
+                    <Button size="small" type="link" style={{ fontSize: 8, padding: '0 4px' }}
                       onClick={(e) => {
                         e.preventDefault();
                         const next = new Set(selected);
@@ -4668,12 +4668,12 @@ export default function RecordPage() {
                         if (base) localStorage.setItem(`${base}_hk`, JSON.stringify(arr));
                       }}>{allOn ? '그룹 해제' : '그룹 선택'}</Button>
                   </summary>
-                  <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  <div style={{ marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                     {items.map(k => {
                       const on = selected.has(k.name);
                       return (
                         <Button key={k.name} size="small" type={on ? 'primary' : 'default'}
-                          style={{ fontSize: 10, padding: '0 6px', height: 22 }}
+                          style={{ fontSize: 8, padding: '0 6px', height: 22 }}
                           onClick={() => toggle(k.name)}>
                           {k.name.replace(`${group}_`, '')}
                         </Button>
@@ -4698,10 +4698,10 @@ export default function RecordPage() {
         cancelButtonProps={{ style: { display: 'none' } }}
         onOk={() => setRandRegionModal(null)}
       >
-        <div style={{ fontSize: 11, color: subTextColor, marginBottom: 8 }}>
+        <div style={{ fontSize: 9, color: subTextColor, marginBottom: 6 }}>
           스크린샷 위에서 드래그하여 영역을 지정하면 즉시 저장됩니다. 지정하지 않으면 전체 화면이 사용됩니다.
         </div>
-        <Space style={{ marginBottom: 8 }}>
+        <Space style={{ marginBottom: 6 }}>
           <Button size="small" onClick={() => randRegionModal && clearRandRegion(randRegionModal)}>
             영역 해제 (전체 화면 사용)
           </Button>
@@ -4709,7 +4709,7 @@ export default function RecordPage() {
             randRegionScreenshotRef.current = await snapshotScreenshot();
             drawRandRegionCanvas();
           }}>스크린샷 새로고침</Button>
-          <span style={{ fontSize: 11, color: subTextColor }}>
+          <span style={{ fontSize: 9, color: subTextColor }}>
             {(() => {
               const r = randRegionModal === 'sk' ? randSkRegion : randDragRegion;
               return r ? `현재: ${r.x},${r.y} ${r.width}×${r.height}` : '현재: 전체 화면';

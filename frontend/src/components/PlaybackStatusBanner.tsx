@@ -71,7 +71,7 @@ export default function PlaybackStatusBanner() {
       type="info"
       showIcon
       icon={<PlayCircleOutlined />}
-      style={{ marginBottom: 8 }}
+      style={{ marginBottom: 6 }}
       message={
         <Space size="middle" wrap>
           <strong>{t('playbackBanner.running') || '재생 중'}</strong>
@@ -102,7 +102,7 @@ export default function PlaybackStatusBanner() {
           percent={cyclePct}
           size="small"
           status={failed > 0 || errors > 0 ? 'exception' : 'active'}
-          style={{ marginTop: 4 }}
+          style={{ marginTop: 3 }}
         />
       }
     />

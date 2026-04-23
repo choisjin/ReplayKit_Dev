@@ -196,7 +196,7 @@ const DLTViewer: React.FC<DLTViewerProps> = ({ sessions, onClose, mode = 'modal'
 
   if (sessions.length === 0) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: bg, padding: 16 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: bg, padding: 13 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: 600 }}>{t('dltViewer.title') || 'DLT 로그 뷰어'}</span>
           {onClose && <Button size="small" icon={<CloseOutlined />} onClick={onClose} />}
@@ -221,7 +221,7 @@ const DLTViewer: React.FC<DLTViewerProps> = ({ sessions, onClose, mode = 'modal'
       }}
     >
       {/* 헤더 + 탭 */}
-      <div style={{ padding: '8px 12px', borderBottom: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ padding: '8px 12px', borderBottom: `1px solid ${borderColor}`, display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ fontWeight: 600 }}>{t('dltViewer.title') || 'DLT 로그 뷰어'}</span>
         <Tag color="processing">{sessions.length} {t('dltViewer.sessions') || '세션'}</Tag>
         <div style={{ flex: 1 }} />
@@ -249,7 +249,7 @@ const DLTViewer: React.FC<DLTViewerProps> = ({ sessions, onClose, mode = 'modal'
           label: (
             <span>
               <span style={{ fontFamily: 'monospace' }}>{s.session_id}</span>
-              <span style={{ color: '#888', marginLeft: 4, fontSize: 11 }}>
+              <span style={{ color: '#888', marginLeft: 3, fontSize: 9 }}>
                 ({(logsBySession[s.session_id] || []).length})
               </span>
             </span>
@@ -263,7 +263,7 @@ const DLTViewer: React.FC<DLTViewerProps> = ({ sessions, onClose, mode = 'modal'
           padding: '8px 12px',
           borderBottom: `1px solid ${borderColor}`,
           display: 'flex',
-          gap: 8,
+          gap: 6,
           alignItems: 'center',
           flexWrap: 'wrap',
         }}
@@ -311,7 +311,7 @@ const DLTViewer: React.FC<DLTViewerProps> = ({ sessions, onClose, mode = 'modal'
           background: logBg,
           color: logColor,
           fontFamily: 'Consolas, "Courier New", monospace',
-          fontSize: 12,
+          fontSize: 10,
           padding: '6px 8px',
           whiteSpace: 'pre',
           lineHeight: 1.4,
@@ -319,7 +319,7 @@ const DLTViewer: React.FC<DLTViewerProps> = ({ sessions, onClose, mode = 'modal'
       >
         {searchResult ? (
           <>
-            <div style={{ color: '#888', marginBottom: 4, whiteSpace: 'normal' }}>
+            <div style={{ color: '#888', marginBottom: 3, whiteSpace: 'normal' }}>
               {searchResult.mode === 'section'
                 ? `[Section ${searchResult.from_step}~${searchResult.to_step}] '${searchResult.keyword}' — ${searchResult.count} 건`
                 : `[All] '${searchResult.keyword}' — ${searchResult.count} 건`}

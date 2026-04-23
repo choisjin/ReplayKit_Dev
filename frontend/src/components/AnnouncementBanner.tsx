@@ -80,7 +80,7 @@ export default function AnnouncementBanner() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Space size={8}>
               <strong>{topAnn.title}</strong>
-              <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13 }}>
+              <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10 }}>
                 {topAnn.content.length > 80 ? topAnn.content.slice(0, 80) + '...' : topAnn.content}
               </span>
               {visibleAnnouncements.length > 1 && (
@@ -100,7 +100,7 @@ export default function AnnouncementBanner() {
         }
         closable
         onClose={() => setDismissed(prev => new Set(prev).add(topAnn.id))}
-        style={{ marginBottom: 8, borderRadius: 6 }}
+        style={{ marginBottom: 6, borderRadius: 6 }}
       />
 
       <Modal
@@ -120,13 +120,13 @@ export default function AnnouncementBanner() {
           const priorityLabel: Record<string, string> = { urgent: '긴급', important: '중요', normal: '일반' };
           const priorityColor: Record<string, string> = { urgent: 'red', important: 'orange', normal: 'blue' };
           return (
-            <div key={ann.id} style={{ marginBottom: 16, padding: 16, background: 'rgba(255,255,255,0.04)', borderRadius: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div key={ann.id} style={{ marginBottom: 13, padding: 13, background: 'rgba(255,255,255,0.04)', borderRadius: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                 <Space>
                   <Tag color={priorityColor[ann.priority]}>{priorityLabel[ann.priority]}</Tag>
                   <Typography.Title level={5} style={{ margin: 0 }}>{ann.title}</Typography.Title>
                 </Space>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 10 }}>
                   {new Date(ann.created_at).toLocaleString('ko-KR')}
                 </Typography.Text>
               </div>

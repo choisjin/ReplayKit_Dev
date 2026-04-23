@@ -37,6 +37,16 @@ import { WebcamProvider } from './context/WebcamContext';
 
 const { Sider, Content } = Layout;
 
+// 전체 UI 스케일 80% — AntD 기본 토큰 × 0.8 (파생 토큰은 자동 스케일)
+const SCALE_TOKENS = {
+  fontSize: 11,          // 14 → 11.2 → 11
+  sizeUnit: 3,           // 4  → 3.2  → 3
+  sizeStep: 3,           // 4  → 3.2  → 3
+  controlHeight: 26,     // 32 → 25.6 → 26
+  borderRadius: 5,       // 6  → 4.8  → 5
+  lineWidth: 1,
+} as const;
+
 const pageKeys = [
   { key: '/', icon: <DesktopOutlined />, labelKey: 'nav.device' as const, component: <DevicePage /> },
   { key: '/record', icon: <VideoCameraOutlined />, labelKey: 'nav.record' as const, component: <RecordPage /> },
@@ -201,14 +211,15 @@ function AppContent() {
     <WebcamProvider webcam={webcam} webcamVisible={webcamVisible} ensureWebcamOpen={ensureWebcamOpen}>
     <ConfigProvider theme={{
       algorithm: themeAlgorithm,
-      ...(!isDark ? {
-        token: {
+      token: {
+        ...SCALE_TOKENS,
+        ...(!isDark ? {
           colorBgContainer: '#e8e8e8',
           colorBgElevated: '#e0e0e0',
           colorBgLayout: '#d0d0d0',
           colorBgBase: '#dcdcdc',
-        },
-      } : {}),
+        } : {}),
+      },
     }}>
       <Layout style={{ minHeight: '100vh' }}>
         <Sider collapsible collapsed={siderCollapsed} onCollapse={setSiderCollapsed} style={isDark ? undefined : { background: '#f0f0f0' }}>
@@ -233,7 +244,7 @@ function AppContent() {
             }}
             style={isDark ? undefined : { background: '#f0f0f0' }}
           />
-          <div style={{ padding: siderCollapsed ? '12px 8px' : '12px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ padding: siderCollapsed ? '12px 8px' : '12px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
             <Tooltip title={t('webcam.title')} placement="right">
               <Button
                 block
@@ -277,7 +288,7 @@ function AppContent() {
                         message.destroy('update');
                         // 업데이트 대기 화면 표시
                         const wrap = document.createElement('div');
-                        wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;font-family:sans-serif';
+                        wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap: 13px;font-family:sans-serif';
                         const title = document.createElement('div');
                         title.style.cssText = 'font-size:20px;font-weight:600';
                         title.textContent = '서버 업데이트 중...';
@@ -357,7 +368,7 @@ function AppContent() {
                   Modal.info({
                     title: '문의 안내',
                     content: (
-                      <div style={{ fontSize: 14, lineHeight: 1.8 }}>
+                      <div style={{ fontSize: 11, lineHeight: 1.8 }}>
                         요청사항 및 문의사항은 제목에<br />
                         <b style={{ color: '#1677ff' }}>[ReplayKit]</b> 붙여 이슈 등록 해주세요!
                       </div>
@@ -374,14 +385,14 @@ function AppContent() {
             <div style={{ padding: siderCollapsed ? '8px 4px' : '8px 16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
               {diskInfoList.map((di) => (
               <Tooltip key={di.drive} title={`${di.drive} — ${di.free_gb} GB 사용가능 / ${di.total_gb} GB`} placement="right">
-                <div style={{ fontSize: 11, color: '#888', marginBottom: diskInfoList.length > 1 ? 6 : 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ fontSize: 9, color: '#888', marginBottom: diskInfoList.length > 1 ? 6 : 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                     {!siderCollapsed && <span style={{ whiteSpace: 'nowrap', minWidth: 24 }}><DatabaseOutlined /> {di.drive.replace(':', '')}</span>}
                     <div style={{ flex: 1, background: '#333', borderRadius: 4, height: 6, overflow: 'hidden' }}>
                       <div style={{ background: di.used_percent > 90 ? '#ff4d4f' : di.used_percent > 70 ? '#faad14' : '#52c41a', width: `${di.used_percent}%`, height: '100%' }} />
                     </div>
                   </div>
-                  <div style={{ marginTop: 2, fontSize: 10, textAlign: 'center' }}>
+                  <div style={{ marginTop: 2, fontSize: 8, textAlign: 'center' }}>
                     {siderCollapsed ? `${di.free_gb}G` : `${di.free_gb} GB 사용가능`}
                   </div>
                 </div>
@@ -391,7 +402,7 @@ function AppContent() {
           )}
         </Sider>
         <Layout style={layoutBg ? { background: layoutBg } : undefined}>
-          <Content style={{ margin: 8, padding: 12, background: contentBg, borderRadius: 8 }}>
+          <Content style={{ margin: 6, padding: 10, background: contentBg, borderRadius: 8 }}>
             <AnnouncementBanner />
             <PlaybackStatusBanner />
             {backendReady ? (
@@ -410,10 +421,10 @@ function AppContent() {
               <div style={{
                 display: 'flex', flexDirection: 'column',
                 justifyContent: 'center', alignItems: 'center',
-                height: 'calc(100vh - 48px)', gap: 24,
+                height: 'calc(100vh - 48px)', gap: 19,
               }}>
-                <Spin indicator={<LoadingOutlined style={{ fontSize: 48 }} spin />} />
-                <div style={{ color: '#888', fontSize: 16 }}>
+                <Spin indicator={<LoadingOutlined style={{ fontSize: 38 }} spin />} />
+                <div style={{ color: '#888', fontSize: 13 }}>
                   {t('common.backendConnecting')}
                 </div>
               </div>
@@ -430,12 +441,12 @@ function AppContent() {
 
       <Modal
         title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>Log</span>
             <select
               value={logSource}
               onChange={(e) => { const s = e.target.value as 'launcher' | 'backend'; setLogSource(s); setLogSelectedDate(''); loadLog('', s); }}
-              style={{ fontSize: 12, padding: '2px 6px', borderRadius: 4, border: '1px solid #d9d9d9' }}
+              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: '1px solid #d9d9d9' }}
             >
               <option value="backend">Backend</option>
               <option value="launcher">Launcher</option>
@@ -444,7 +455,7 @@ function AppContent() {
               <select
                 value={logSelectedDate}
                 onChange={(e) => { setLogSelectedDate(e.target.value); loadLog(e.target.value); }}
-                style={{ fontSize: 12, padding: '2px 6px', borderRadius: 4, border: '1px solid #d9d9d9' }}
+                style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: '1px solid #d9d9d9' }}
               >
                 {logDates.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
@@ -456,8 +467,8 @@ function AppContent() {
         footer={null}
         width={800}
       >
-        <div style={{ maxHeight: 500, overflow: 'auto', background: isDark ? '#1e1e2e' : '#f5f5f5', borderRadius: 6, padding: 12 }}>
-          <pre style={{ margin: 0, fontSize: 11, fontFamily: 'Consolas, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: isDark ? '#cdd6f4' : '#333' }}>
+        <div style={{ maxHeight: 500, overflow: 'auto', background: isDark ? '#1e1e2e' : '#f5f5f5', borderRadius: 6, padding: 10 }}>
+          <pre style={{ margin: 0, fontSize: 9, fontFamily: 'Consolas, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: isDark ? '#cdd6f4' : '#333' }}>
             {launcherLog.length > 0 ? launcherLog.join('\n') : 'No logs'}
           </pre>
         </div>
@@ -471,7 +482,7 @@ function AppContent() {
 
 function App() {
   return (
-    <ConfigProvider theme={{ algorithm: theme.darkAlgorithm }}>
+    <ConfigProvider theme={{ algorithm: theme.darkAlgorithm, token: { ...SCALE_TOKENS } }}>
       <AntdApp>
         <SettingsProvider>
           <DeviceProvider>

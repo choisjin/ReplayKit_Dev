@@ -663,7 +663,7 @@ export default function ResultsPage() {
       title: t('results.execTime'),
       key: 'time',
       width: 200,
-      render: (_: any, g: ResultGroup) => <span style={{ fontSize: 12, lineHeight: 1.4 }}>{formatTime(g.timestamp)}</span>,
+      render: (_: any, g: ResultGroup) => <span style={{ fontSize: 10, lineHeight: 1.4 }}>{formatTime(g.timestamp)}</span>,
       sorter: (a: ResultGroup, b: ResultGroup) => (a.timestamp || '').localeCompare(b.timestamp || ''),
       defaultSortOrder: 'descend' as const,
     },
@@ -748,7 +748,7 @@ export default function ResultsPage() {
     },
   ];
 
-  const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 11, color: '#888' }}>{ko}</span></div>;
+  const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 9, color: '#888' }}>{ko}</span></div>;
   // 필터용: 현재 표시 데이터에서 고유값 추출
   const _allSteps: StepResultDetail[] = detail?.step_results || (groupDetail ? groupDetail.flatMap(d => d.step_results || []) : []);
   const _uniqueStatuses = [...new Set(_allSteps.map(s => s.status).filter(Boolean))].sort();
@@ -761,7 +761,7 @@ export default function ResultsPage() {
       dataIndex: 'timestamp',
       key: 'timestamp',
       align: 'center' as const,
-      render: (v: string | null) => <span style={{ fontSize: 12, lineHeight: 1.4 }}>{v ? formatTime(v) : '-'}</span>,
+      render: (v: string | null) => <span style={{ fontSize: 10, lineHeight: 1.4 }}>{v ? formatTime(v) : '-'}</span>,
       _hide: false,
     },
     {
@@ -807,7 +807,7 @@ export default function ResultsPage() {
         if (isModuleStep && r.message) {
           if (r.message.match(/\[BG_TASK:/)) return <span>{v} <Tag color="processing">BG</Tag></span>;
           if (r.message.startsWith('⏳')) return <span>{v} <Tag color="processing">⏳</Tag></span>;
-          return <Tooltip title={<pre style={{ margin: 0, fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto' }}>{r.message}</pre>}><span>{v}</span></Tooltip>;
+          return <Tooltip title={<pre style={{ margin: 0, fontSize: 9, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto' }}>{r.message}</pre>}><span>{v}</span></Tooltip>;
         }
         return <span style={{ textAlign: 'left', display: 'block' }}>{v || r.message || '-'}</span>;
       },
@@ -931,7 +931,7 @@ export default function ResultsPage() {
             expandedRowRender: (g: ResultGroup) => g.items.length > 1 ? (
               <div style={{ padding: '4px 0' }}>
                 {g.items.map((r, idx) => (
-                  <div key={r.filename} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', borderBottom: idx < g.items.length - 1 ? '1px solid #f0f0f0' : undefined }}>
+                  <div key={r.filename} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderBottom: idx < g.items.length - 1 ? '1px solid #f0f0f0' : undefined }}>
                     <Tag style={{ margin: 0 }}>{idx + 1}</Tag>
                     <span style={{ flex: 1 }}>{r.scenario_name}</span>
                     <Tag color={statusColor(r.status)}>{r.status.toUpperCase()}</Tag>
@@ -1011,7 +1011,7 @@ export default function ResultsPage() {
           const cycleErr = cycleSteps.filter(s => s.status !== 'pass' && s.status !== 'fail' && s.status !== 'warning').length;
           return (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                 <span style={{ fontWeight: 600 }}>Cycle:</span>
                 {Array.from({ length: totalRepeat }, (_, i) => i + 1).map(c => (
                   <Button key={c} size="small" type={groupDetailCycle === c ? 'primary' : 'default'} onClick={() => setGroupDetailCycle(c)}>
@@ -1022,7 +1022,7 @@ export default function ResultsPage() {
                   {groupDetail.map(d => d.scenario_name).join(' → ')}
                 </span>
               </div>
-              <Space size={8} style={{ marginBottom: 12 }}>
+              <Space size={8} style={{ marginBottom: 10 }}>
                 <Tag color="green">{cyclePass} Pass</Tag>
                 <Tag color="red">{cycleFail} Fail</Tag>
                 {cycleWarn > 0 && <Tag color="orange">{cycleWarn} Warning</Tag>}
@@ -1034,13 +1034,13 @@ export default function ResultsPage() {
                 <Collapse
                   activeKey={webcamPanelOpen ? ['webcam'] : []}
                   onChange={(keys) => setWebcamPanelOpen(keys.includes('webcam'))}
-                  style={{ marginBottom: 12 }}
+                  style={{ marginBottom: 10 }}
                   items={[{
                     key: 'webcam',
                     label: <Space><VideoCameraOutlined /> {t('webcam.recordings')} ({recordings.length})</Space>,
                     children: (
                       <div>
-                        <Space style={{ marginBottom: 8 }}>
+                        <Space style={{ marginBottom: 6 }}>
                           {recordings.map((rec, i) => {
                             const m = rec.filename.match(/webcam_r(\d+)\.(?:webm|mp4)$/);
                             const recCycle = m ? parseInt(m[1]) : i + 1;
@@ -1084,7 +1084,7 @@ export default function ResultsPage() {
               bordered
               size="small"
               column={4}
-              style={{ marginBottom: 16 }}
+              style={{ marginBottom: 13 }}
             >
               <Descriptions.Item label={t('results.scenario')}>{detail.scenario_name}</Descriptions.Item>
               <Descriptions.Item label={t('scenario.device')}>{detail.device_serial || '-'}</Descriptions.Item>
@@ -1102,13 +1102,13 @@ export default function ResultsPage() {
                 </Space>
               </Descriptions.Item>
               <Descriptions.Item label={t('common.status')}>
-                <Tag color={statusColor(detail.status)} style={{ fontSize: 14 }}>
+                <Tag color={statusColor(detail.status)} style={{ fontSize: 11 }}>
                   {detail.status.toUpperCase()}
                 </Tag>
               </Descriptions.Item>
             </Descriptions>
 
-            <div style={{ display: 'flex', gap: 8, maxHeight: 'calc(90vh - 200px)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', gap: 6, maxHeight: 'calc(90vh - 200px)', overflow: 'hidden' }}>
               {/* 좌측: 웹캠 녹화 패널 (접힘/펼침) */}
               {recordings.length > 0 && (
                 <div style={{ width: webcamPanelOpen ? (webcamExpanded ? '60%' : 300) : 36, flexShrink: 0, transition: 'width 0.2s' }}>
@@ -1119,11 +1119,11 @@ export default function ResultsPage() {
                       extra={
                         <Space size={0}>
                           <Button type="text" size="small" icon={webcamExpanded ? <ShrinkOutlined /> : <ExpandOutlined />}
-                            onClick={() => setWebcamExpanded(!webcamExpanded)} style={{ fontSize: 11 }} />
-                          <Button type="text" size="small" onClick={() => { setWebcamPanelOpen(false); setWebcamExpanded(false); }} style={{ fontSize: 11 }}>✕</Button>
+                            onClick={() => setWebcamExpanded(!webcamExpanded)} style={{ fontSize: 9 }} />
+                          <Button type="text" size="small" onClick={() => { setWebcamPanelOpen(false); setWebcamExpanded(false); }} style={{ fontSize: 9 }}>✕</Button>
                         </Space>
                       }
-                      bodyStyle={{ padding: 6 }}
+                      bodyStyle={{ padding: 5 }}
                     >
                       <video
                         ref={detailVideoRef}
@@ -1133,7 +1133,7 @@ export default function ResultsPage() {
                         onTimeUpdate={handleVideoTimeUpdate}
                         onPause={handleVideoPauseOrEnd}
                         onEnded={handleVideoPauseOrEnd}
-                        style={{ width: '100%', borderRadius: 4, background: '#000', display: 'block', marginBottom: 6 }}
+                        style={{ width: '100%', borderRadius: 4, background: '#000', display: 'block', marginBottom: 5 }}
                       />
                       {recordings.length > 1 && (
                         <Select
@@ -1143,7 +1143,7 @@ export default function ResultsPage() {
                             const rec = recordings.find(r => (r.filename.includes(`webcam_r${v}.webm`) || r.filename.includes(`webcam_r${v}.mp4`)));
                             if (rec) { setActiveRecUrl(rec.url); setActiveRecRepeat(v); }
                           }}
-                          style={{ width: '100%', marginBottom: 6 }}
+                          style={{ width: '100%', marginBottom: 5 }}
                           options={recordings.map(r => {
                             const m = r.filename.match(/webcam_r(\d+)\.(?:webm|mp4)$/);
                             const ri = m ? parseInt(m[1]) : 1;
@@ -1151,14 +1151,14 @@ export default function ResultsPage() {
                           })}
                         />
                       )}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                         {recordings.map((rec) => {
                           const m = rec.filename.match(/webcam_r(\d+)\.(?:webm|mp4)$/);
                           const ri = m ? m[1] : '?';
                           const isActive = rec.url === activeRecUrl;
                           return (
                             <div key={rec.filename} style={{
-                              display: 'flex', alignItems: 'center', gap: 4, fontSize: 11,
+                              display: 'flex', alignItems: 'center', gap: 3, fontSize: 9,
                               padding: '2px 4px', borderRadius: 4,
                               background: isActive ? 'var(--accent-light, #e6f4ff)' : 'transparent',
                               border: isActive ? '1px solid var(--accent, #1677ff)' : '1px solid transparent',
@@ -1166,7 +1166,7 @@ export default function ResultsPage() {
                             }}
                               onClick={() => { setActiveRecUrl(rec.url); const recCycle = m ? parseInt(m[1]) : 1; setActiveRecRepeat(recCycle); }}
                             >
-                              <Tag color={isActive ? 'processing' : 'blue'} style={{ margin: 0, fontSize: 10 }}>R{ri}</Tag>
+                              <Tag color={isActive ? 'processing' : 'blue'} style={{ margin: 0, fontSize: 8 }}>R{ri}</Tag>
                               <span style={{ flex: 1, color: isActive ? 'var(--accent, #1677ff)' : '#888', fontWeight: isActive ? 600 : 400 }}>{(rec.size / 1024 / 1024).toFixed(1)}MB</span>
                               <Tooltip title={t('webcam.trimSave')}>
                                 <Button size="small" type="text" icon={<ScissorOutlined />} style={{ padding: '0 4px', height: 20 }}
@@ -1204,7 +1204,7 @@ export default function ResultsPage() {
                         type="text"
                         icon={<VideoCameraOutlined />}
                         onClick={() => setWebcamPanelOpen(true)}
-                        style={{ writingMode: 'vertical-rl', height: 'auto', padding: '8px 4px', fontSize: 12 }}
+                        style={{ writingMode: 'vertical-rl', height: 'auto', padding: '8px 4px', fontSize: 10 }}
                       >
                         {t('webcam.recordings')} ({recordings.length})
                       </Button>
@@ -1280,7 +1280,7 @@ export default function ResultsPage() {
       >
         {compareStep && (
           <>
-            <Space style={{ marginBottom: 16 }} wrap>
+            <Space style={{ marginBottom: 13 }} wrap>
               <Tag color={statusColor(compareStep.status)}>{compareStep.status.toUpperCase()}</Tag>
               {compareStep.compare_mode && compareStep.compare_mode !== 'full' && (
                 <Tag color="purple">
@@ -1323,7 +1323,7 @@ export default function ResultsPage() {
                       )}
                     </div>
                   ) : (
-                    <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>{t('common.noImage')}</div>
+                    <div style={{ textAlign: 'center', padding: 32, color: '#666' }}>{t('common.noImage')}</div>
                   )}
                 </Card>
               </Col>
@@ -1342,28 +1342,28 @@ export default function ResultsPage() {
                       style={{ width: '100%' }}
                     />
                   ) : (
-                    <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>{t('common.noImage')}</div>
+                    <div style={{ textAlign: 'center', padding: 32, color: '#666' }}>{t('common.noImage')}</div>
                   )}
                 </Card>
               </Col>
             </Row>
             {compareStep.compare_mode === 'full_exclude' && (
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 10 }}>
                 <Card size="small" title={t('results.excludeAreaCompare')}>
                   <Space wrap>
                     <Tag color="red">{t('results.excludeAreaApplied')}</Tag>
-                    <span style={{ fontSize: 13, color: '#ccc' }}>{compareStep.message}</span>
+                    <span style={{ fontSize: 10, color: '#ccc' }}>{compareStep.message}</span>
                   </Space>
-                  <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
+                  <div style={{ marginTop: 6, fontSize: 10, color: '#888' }}>
                     {t('results.excludeAreaDesc')}
                   </div>
                 </Card>
               </div>
             )}
             {compareStep.compare_mode === 'multi_crop' && compareStep.sub_results?.length > 0 && (
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 10 }}>
                 <Card size="small" title={t('results.cropResults', { count: String(compareStep.sub_results.length) })}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #303030' }}>
                         <th style={{ padding: '4px 8px', textAlign: 'left' }}>#</th>

@@ -67,7 +67,7 @@ export default function ChangelogPage() {
       style: 'purple', test: 'cyan', chore: 'default', perf: 'gold',
       ci: 'geekblue', build: 'lime',
     };
-    return <Tag color={colors[type] || 'default'} style={{ marginRight: 6 }}>{type}</Tag>;
+    return <Tag color={colors[type] || 'default'} style={{ marginRight: 5 }}>{type}</Tag>;
   };
 
   const formatDate = (iso: string) => {
@@ -88,7 +88,7 @@ export default function ChangelogPage() {
       key: 'hash',
       width: 90,
       render: (v: string) => (
-        <Typography.Text code copyable={{ text: v }} style={{ fontSize: 12 }}>{v}</Typography.Text>
+        <Typography.Text code copyable={{ text: v }} style={{ fontSize: 10 }}>{v}</Typography.Text>
       ),
     },
     {
@@ -114,32 +114,32 @@ export default function ChangelogPage() {
       dataIndex: 'date',
       key: 'date',
       width: 110,
-      render: (v: string) => <span style={{ color: '#888', fontSize: 12 }}>{formatDate(v)}</span>,
+      render: (v: string) => <span style={{ color: '#888', fontSize: 10 }}>{formatDate(v)}</span>,
     },
   ];
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <Typography.Title level={4} style={{ marginBottom: 16 }}>{t('changelog.title')}</Typography.Title>
+      <Typography.Title level={4} style={{ marginBottom: 13 }}>{t('changelog.title')}</Typography.Title>
 
-      <Space style={{ marginBottom: 16 }} wrap>
+      <Space style={{ marginBottom: 13 }} wrap>
         <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => load(true)}>
           {t('changelog.refresh')}
         </Button>
         <Tag icon={<BranchesOutlined />} color="processing">{branch}</Tag>
-        <span style={{ color: '#888', fontSize: 12 }}>{t('changelog.totalCommits')}: {commits.length}</span>
+        <span style={{ color: '#888', fontSize: 10 }}>{t('changelog.totalCommits')}: {commits.length}</span>
         {tags.length > 0 && (
           <>
-            <TagOutlined style={{ color: '#888', marginLeft: 8 }} />
+            <TagOutlined style={{ color: '#888', marginLeft: 6 }} />
             {tags.slice(0, 5).map(tag => (
               <Tag key={tag} color="gold">{tag}</Tag>
             ))}
-            {tags.length > 5 && <span style={{ color: '#888', fontSize: 12 }}>+{tags.length - 5}</span>}
+            {tags.length > 5 && <span style={{ color: '#888', fontSize: 10 }}>+{tags.length - 5}</span>}
           </>
         )}
       </Space>
 
-      <Card size="small" style={{ marginBottom: 16 }}>
+      <Card size="small" style={{ marginBottom: 13 }}>
         <Input.Search
           placeholder={t('changelog.search')}
           allowClear

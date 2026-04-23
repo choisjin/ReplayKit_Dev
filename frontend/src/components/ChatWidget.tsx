@@ -186,7 +186,7 @@ export default function ChatWidget({ open, onClose }: ChatWidgetProps) {
         justifyContent: 'space-between',
         alignItems: 'center',
       }}>
-        <Typography.Text strong style={{ color: '#fff', fontSize: 15 }}>
+        <Typography.Text strong style={{ color: '#fff', fontSize: 12 }}>
           {t('chat.title')}
         </Typography.Text>
         <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} style={{ color: '#fff' }} />
@@ -194,8 +194,8 @@ export default function ChatWidget({ open, onClose }: ChatWidgetProps) {
 
       {chatState === 'idle' || chatState === 'joining' ? (
         /* 이름/부서 입력 폼 */
-        <div style={{ padding: 24, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <Typography.Title level={5} style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ padding: 19, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <Typography.Title level={5} style={{ textAlign: 'center', marginBottom: 19 }}>
             {t('chat.enterInfo')}
           </Typography.Title>
           <Form form={form} layout="vertical">
@@ -213,18 +213,18 @@ export default function ChatWidget({ open, onClose }: ChatWidgetProps) {
       ) : (
         /* 채팅 영역 */
         <>
-          <div style={{ flex: 1, overflow: 'auto', padding: 12 }}>
+          <div style={{ flex: 1, overflow: 'auto', padding: 10 }}>
             {messages.map(msg => (
               <div
                 key={msg.id}
                 style={{
                   display: 'flex',
                   justifyContent: msg.from === 'me' ? 'flex-end' : msg.from === 'system' ? 'center' : 'flex-start',
-                  marginBottom: 8,
+                  marginBottom: 6,
                 }}
               >
                 {msg.from === 'system' ? (
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>{msg.content}</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 10 }}>{msg.content}</Typography.Text>
                 ) : (
                   <div style={{
                     maxWidth: '75%',
@@ -236,11 +236,11 @@ export default function ChatWidget({ open, onClose }: ChatWidgetProps) {
                     color: msg.from === 'me' ? '#fff' : undefined,
                   }}>
                     {msg.from === 'admin' && (
-                      <div style={{ fontSize: 11, color: isDark ? '#888' : '#666', marginBottom: 2 }}>{t('chat.admin')}</div>
+                      <div style={{ fontSize: 9, color: isDark ? '#888' : '#666', marginBottom: 2 }}>{t('chat.admin')}</div>
                     )}
-                    <div style={{ fontSize: 13 }}>{msg.content}</div>
+                    <div style={{ fontSize: 10 }}>{msg.content}</div>
                     <div style={{
-                      fontSize: 10,
+                      fontSize: 8,
                       color: msg.from === 'me' ? 'rgba(255,255,255,0.5)' : isDark ? '#666' : '#999',
                       marginTop: 2,
                       textAlign: 'right',
@@ -252,14 +252,14 @@ export default function ChatWidget({ open, onClose }: ChatWidgetProps) {
               </div>
             ))}
             {adminTyping && (
-              <div style={{ fontSize: 12, color: '#888', padding: '4px 0' }}>{t('chat.adminTyping')}</div>
+              <div style={{ fontSize: 10, color: '#888', padding: '4px 0' }}>{t('chat.adminTyping')}</div>
             )}
             <div ref={messagesEndRef} />
           </div>
 
           {/* 입력 영역 */}
           {chatState === 'connected' ? (
-            <div style={{ padding: '8px 12px', borderTop: `1px solid ${isDark ? '#303030' : '#d0d0d0'}`, display: 'flex', gap: 8 }}>
+            <div style={{ padding: '8px 12px', borderTop: `1px solid ${isDark ? '#303030' : '#d0d0d0'}`, display: 'flex', gap: 6 }}>
               <Input
                 value={inputVal}
                 onChange={e => {

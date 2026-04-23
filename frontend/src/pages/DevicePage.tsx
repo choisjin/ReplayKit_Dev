@@ -62,7 +62,7 @@ function SortableDeviceRow({ device, children }: { device: ManagedDevice; childr
         opacity: isDragging ? 0.5 : 1,
         display: 'flex',
         alignItems: 'center',
-        gap: 4,
+        gap: 3,
         padding: '6px 8px',
         borderBottom: '1px solid #f0f0f0',
         background: isDragging ? '#fafafa' : undefined,
@@ -71,7 +71,7 @@ function SortableDeviceRow({ device, children }: { device: ManagedDevice; childr
       <HolderOutlined
         {...attributes}
         {...listeners}
-        style={{ cursor: 'grab', color: '#bbb', flexShrink: 0, fontSize: 14 }}
+        style={{ cursor: 'grab', color: '#bbb', flexShrink: 0, fontSize: 11 }}
       />
       {children}
     </div>
@@ -875,7 +875,7 @@ export default function DevicePage() {
   };
 
   const renderDeviceRow = (d: ManagedDevice) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
       <Checkbox
         checked={selectedDeviceIds.has(d.id)}
         onChange={(e) => toggleDeviceSelection(d.id, e.target.checked)}
@@ -887,11 +887,11 @@ export default function DevicePage() {
       </Tag>
       <span style={{ fontWeight: 500, flexShrink: 0 }}>{d.id}</span>
       {d.protected && <Tag color="gold" style={{ flexShrink: 0 }}>SYSTEM</Tag>}
-      <span style={{ color: '#aaa', fontSize: 12, flexShrink: 0 }}>{d.address}</span>
+      <span style={{ color: '#aaa', fontSize: 10, flexShrink: 0 }}>{d.address}</span>
       {d.info?.module && <Tag color="cyan" style={{ flexShrink: 0 }}>{d.info.module}</Tag>}
       {d.info?.baudrate && <Tag style={{ flexShrink: 0 }}>{d.info.baudrate}</Tag>}
       {d.info?.resolution && <Tag style={{ flexShrink: 0 }}>{d.info.resolution.width}x{d.info.resolution.height}</Tag>}
-      <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexShrink: 0 }}>
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 3, flexShrink: 0 }}>
         {d.protected ? null : (
           <>
             {isDeviceConnected(d) ? (
@@ -912,8 +912,8 @@ export default function DevicePage() {
   // Render dynamic connect_fields inputs
   const renderConnectFields = (fields: ConnectField[], values: Record<string, any>, onChange: (vals: Record<string, any>) => void) => {
     return fields.map(f => (
-      <div key={f.name} style={{ marginBottom: 4 }}>
-        <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>{f.label}:</span>
+      <div key={f.name} style={{ marginBottom: 3 }}>
+        <span style={{ fontSize: 10, color: '#888', marginRight: 6 }}>{f.label}:</span>
         {f.type === 'select' && f.options ? (
           <Select
             style={{ width: '100%' }}
@@ -959,7 +959,7 @@ export default function DevicePage() {
 
   return (
     <div>
-      <Space style={{ marginBottom: 8 }} wrap>
+      <Space style={{ marginBottom: 6 }} wrap>
         <Button icon={<ReloadOutlined />} onClick={fetchDevices} loading={loading}>{t('common.refresh')}</Button>
         <Button icon={<ApiOutlined />} type="primary" onClick={handleConnectAll} loading={connectingAll}>{t('device.connectAll')}</Button>
         <Button icon={<LinkOutlined />} onClick={handleConnectSelected} loading={connectingAll} disabled={selectedDeviceIds.size === 0}>{t('device.connectSelected')} ({selectedDeviceIds.size})</Button>
@@ -988,9 +988,9 @@ export default function DevicePage() {
         }
       >
         {groupOrder.length === 0 ? (
-          <div style={{ color: '#999', textAlign: 'center', padding: 32 }}>{t('device.noDevicesRegistered')}</div>
+          <div style={{ color: '#999', textAlign: 'center', padding: 26 }}>{t('device.noDevicesRegistered')}</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {groupOrder.map(prefix => {
               const group = deviceGroups[prefix];
               if (!group || group.length === 0) return null;
@@ -1044,7 +1044,7 @@ export default function DevicePage() {
               label: <span><SearchOutlined /> {t('device.scan')}</span>,
               children: (
                 <div>
-                  <Space style={{ marginBottom: 8 }} wrap>
+                  <Space style={{ marginBottom: 6 }} wrap>
                     <Button
                       type={hasScanned ? 'default' : 'primary'}
                       icon={hasScanned ? <ReloadOutlined /> : <SearchOutlined />}
@@ -1092,7 +1092,7 @@ export default function DevicePage() {
                     if (scanItemCategory('adb') === modalCategory && scannedAdb.length > 0) {
                       scanTabs.push({
                         key: 'adb',
-                        label: <span>{t('device.detectedAdb')} <Tag style={{ marginLeft: 4 }}>{scannedAdb.length}</Tag></span>,
+                        label: <span>{t('device.detectedAdb')} <Tag style={{ marginLeft: 3 }}>{scannedAdb.length}</Tag></span>,
                         children: (
                           <List
                             size="small"
@@ -1113,14 +1113,14 @@ export default function DevicePage() {
                     if (scanItemCategory('serial') === modalCategory && scannedSerial.length > 0) {
                       scanTabs.push({
                         key: 'serial',
-                        label: <span>{t('device.detectedSerial')} <Tag style={{ marginLeft: 4 }}>{scannedSerial.length}</Tag></span>,
+                        label: <span>{t('device.detectedSerial')} <Tag style={{ marginLeft: 3 }}>{scannedSerial.length}</Tag></span>,
                         children: (
                           <>
                             {modalCategory === 'auxiliary' && (
-                              <Space style={{ marginBottom: 8, width: '100%' }} direction="vertical">
+                              <Space style={{ marginBottom: 6, width: '100%' }} direction="vertical">
                                 {modules.length > 0 && (
                                   <div>
-                                    <span style={{ marginRight: 8, color: '#888', fontSize: 12 }}>{`${t('device.module')}:`}</span>
+                                    <span style={{ marginRight: 6, color: '#888', fontSize: 10 }}>{`${t('device.module')}:`}</span>
                                     <Select
                                       allowClear
                                       placeholder={t('device.moduleSelect')}
@@ -1132,7 +1132,7 @@ export default function DevicePage() {
                                   </div>
                                 )}
                                 <div>
-                                  <span style={{ marginRight: 8, color: '#888', fontSize: 12 }}>Baudrate:</span>
+                                  <span style={{ marginRight: 6, color: '#888', fontSize: 10 }}>Baudrate:</span>
                                   <Select
                                     value={baudrate}
                                     onChange={setBaudrate}
@@ -1157,7 +1157,7 @@ export default function DevicePage() {
                     if (scanItemCategory('hkmc') === modalCategory && scannedHkmc.length > 0) {
                       scanTabs.push({
                         key: 'hkmc',
-                        label: <span>{t('device.detectedHkmc')} <Tag style={{ marginLeft: 4 }}>{scannedHkmc.length}</Tag></span>,
+                        label: <span>{t('device.detectedHkmc')} <Tag style={{ marginLeft: 3 }}>{scannedHkmc.length}</Tag></span>,
                         children: (
                           <List
                             size="small"
@@ -1178,7 +1178,7 @@ export default function DevicePage() {
                     if (scanItemCategory('isap') === modalCategory && scannedIsap.length > 0) {
                       scanTabs.push({
                         key: 'isap',
-                        label: <span>{t('device.detectedIsap')} <Tag style={{ marginLeft: 4 }}>{scannedIsap.length}</Tag></span>,
+                        label: <span>{t('device.detectedIsap')} <Tag style={{ marginLeft: 3 }}>{scannedIsap.length}</Tag></span>,
                         children: (
                           <List
                             size="small"
@@ -1199,7 +1199,7 @@ export default function DevicePage() {
                     if (scanItemCategory('icas') === modalCategory && scannedIcas.length > 0) {
                       scanTabs.push({
                         key: 'icas',
-                        label: <span>{t('device.detectedIcas')} <Tag style={{ marginLeft: 4 }}>{scannedIcas.length}</Tag></span>,
+                        label: <span>{t('device.detectedIcas')} <Tag style={{ marginLeft: 3 }}>{scannedIcas.length}</Tag></span>,
                         children: (
                           <List
                             size="small"
@@ -1228,12 +1228,12 @@ export default function DevicePage() {
                     if (scanItemCategory('bench') === modalCategory && scannedBench.length > 0) {
                       scanTabs.push({
                         key: 'bench',
-                        label: <span>{t('device.detectedBench')} <Tag style={{ marginLeft: 4 }}>{scannedBench.length}</Tag></span>,
+                        label: <span>{t('device.detectedBench')} <Tag style={{ marginLeft: 3 }}>{scannedBench.length}</Tag></span>,
                         children: (
                           <>
                             {modules.length > 0 && (
-                              <div style={{ marginBottom: 8 }}>
-                                <span style={{ marginRight: 8, color: '#888', fontSize: 12 }}>{`${t('device.module')}:`}</span>
+                              <div style={{ marginBottom: 6 }}>
+                                <span style={{ marginRight: 6, color: '#888', fontSize: 10 }}>{`${t('device.module')}:`}</span>
                                 <Select
                                   placeholder={t('device.moduleSelect')}
                                   value={scanSelectedModule}
@@ -1255,7 +1255,7 @@ export default function DevicePage() {
                                   {d.verified ? <Tag color="green">Bench</Tag> : <Tag color="default">Host</Tag>}
                                   <Tag color="blue">{d.ip}</Tag>
                                   <span style={{ color: '#888' }}>UDP: {d.port}</span>
-                                  {d.verified && <Tag color="green" style={{ marginLeft: 4 }}>응답확인</Tag>}
+                                  {d.verified && <Tag color="green" style={{ marginLeft: 3 }}>응답확인</Tag>}
                                 </List.Item>
                               )}
                             />
@@ -1267,11 +1267,11 @@ export default function DevicePage() {
                     if (scanItemCategory('vision_camera') === modalCategory && scannedVision.length > 0) {
                       scanTabs.push({
                         key: 'vision',
-                        label: <span>{t('device.detectedVision')} <Tag style={{ marginLeft: 4 }}>{scannedVision.length}</Tag></span>,
+                        label: <span>{t('device.detectedVision')} <Tag style={{ marginLeft: 3 }}>{scannedVision.length}</Tag></span>,
                         children: (
                           <>
                             {pcInterfaces.length > 0 && (
-                              <div style={{ marginBottom: 8, fontSize: 12, color: '#888' }}>
+                              <div style={{ marginBottom: 6, fontSize: 10, color: '#888' }}>
                                 {t('device.pcInterfaces')}: {pcInterfaces.map(i => `${i.ip}/${i.prefix} (${i.name})`).join(' | ')}
                               </div>
                             )}
@@ -1322,8 +1322,8 @@ export default function DevicePage() {
                                 ]}>
                                   <div>
                                     <Tag color="magenta">VisionCam</Tag>
-                                    {cam.model && <span style={{ marginRight: 8, fontWeight: 500 }}>{cam.model}</span>}
-                                    {cam.vendor && <span style={{ color: '#888', marginRight: 8 }}>{cam.vendor}</span>}
+                                    {cam.model && <span style={{ marginRight: 6, fontWeight: 500 }}>{cam.model}</span>}
+                                    {cam.vendor && <span style={{ color: '#888', marginRight: 6 }}>{cam.vendor}</span>}
                                     <br />
                                     {cam.mac && <Tag color="blue">MAC: {cam.mac}</Tag>}
                                     {cam.ip ? <Tag color="cyan">IP: {cam.ip}</Tag> : <Tag color="orange">IP: unknown</Tag>}
@@ -1340,7 +1340,7 @@ export default function DevicePage() {
                     if (scanItemCategory('webcam') === modalCategory && scannedWebcams.length > 0) {
                       scanTabs.push({
                         key: 'webcam',
-                        label: <span>{t('device.detectedWebcam')} <Tag style={{ marginLeft: 4 }}>{scannedWebcams.length}</Tag></span>,
+                        label: <span>{t('device.detectedWebcam')} <Tag style={{ marginLeft: 3 }}>{scannedWebcams.length}</Tag></span>,
                         children: (
                           <List
                             size="small"
@@ -1374,9 +1374,9 @@ export default function DevicePage() {
                                   <div>
                                     <Tag color="purple">{t('device.webcam')}</Tag>
                                     <strong>{w.label}</strong>
-                                    {w.width > 0 && <Tag style={{ marginLeft: 8 }}>{w.width}×{w.height}</Tag>}
-                                    {dup && <Tag color="default" style={{ marginLeft: 8 }}>{t('device.alreadyRegistered')}</Tag>}
-                                    {busy && <Tag color="orange" style={{ marginLeft: 8 }}>{t('device.webcamInUseByRecording')}</Tag>}
+                                    {w.width > 0 && <Tag style={{ marginLeft: 6 }}>{w.width}×{w.height}</Tag>}
+                                    {dup && <Tag color="default" style={{ marginLeft: 6 }}>{t('device.alreadyRegistered')}</Tag>}
+                                    {busy && <Tag color="orange" style={{ marginLeft: 6 }}>{t('device.webcamInUseByRecording')}</Tag>}
                                   </div>
                                 </List.Item>
                               );
@@ -1390,7 +1390,7 @@ export default function DevicePage() {
                       const dltModule = (scanBuiltin.dlt as any)?.module || 'DLTLogging';
                       scanTabs.push({
                         key: 'dlt',
-                        label: <span>{t('dlt.detectedDlt')} <Tag style={{ marginLeft: 4 }}>{scannedDlt.length}</Tag></span>,
+                        label: <span>{t('dlt.detectedDlt')} <Tag style={{ marginLeft: 3 }}>{scannedDlt.length}</Tag></span>,
                         children: (
                           <List
                             size="small"
@@ -1412,7 +1412,7 @@ export default function DevicePage() {
                                 <div>
                                   <Tag color="geekblue">DLT</Tag>
                                   <strong>{d.ip}</strong>:{d.port}
-                                  <Tag style={{ marginLeft: 8 }}>{dltModule}</Tag>
+                                  <Tag style={{ marginLeft: 6 }}>{dltModule}</Tag>
                                 </div>
                               </List.Item>
                             )}
@@ -1424,7 +1424,7 @@ export default function DevicePage() {
                     if (scanItemCategory('smartbench') === modalCategory && scannedSmartbench.length > 0) {
                       scanTabs.push({
                         key: 'smartbench',
-                        label: <span>SmartBench <Tag style={{ marginLeft: 4 }}>{scannedSmartbench.length}</Tag></span>,
+                        label: <span>SmartBench <Tag style={{ marginLeft: 3 }}>{scannedSmartbench.length}</Tag></span>,
                         children: (
                           <List
                             size="small"
@@ -1458,7 +1458,7 @@ export default function DevicePage() {
                     if (scanItemCategory('ssh') === modalCategory && scannedSsh.length > 0) {
                       scanTabs.push({
                         key: 'ssh',
-                        label: <span>{t('device.detectedSsh')} <Tag style={{ marginLeft: 4 }}>{scannedSsh.length}</Tag></span>,
+                        label: <span>{t('device.detectedSsh')} <Tag style={{ marginLeft: 3 }}>{scannedSsh.length}</Tag></span>,
                         children: (
                           <List
                             size="small"
@@ -1498,7 +1498,7 @@ export default function DevicePage() {
                       const moduleName = customEntry?.module || '';
                       scanTabs.push({
                         key: `custom_${gi}`,
-                        label: <span>{group.label} <Tag style={{ marginLeft: 4 }}>{group.hosts.length}</Tag></span>,
+                        label: <span>{group.label} <Tag style={{ marginLeft: 3 }}>{group.hosts.length}</Tag></span>,
                         children: (
                           <List
                             size="small"
@@ -1521,7 +1521,7 @@ export default function DevicePage() {
                                 <div>
                                   <Tag color="cyan">{group.label}</Tag>
                                   <strong>{h.ip}</strong>:{h.port}
-                                  {moduleName && <Tag style={{ marginLeft: 8 }}>{moduleName}</Tag>}
+                                  {moduleName && <Tag style={{ marginLeft: 6 }}>{moduleName}</Tag>}
                                 </div>
                               </List.Item>
                             )}
@@ -1533,14 +1533,14 @@ export default function DevicePage() {
                     if (scanTabs.length === 0 && !scanning) {
                       if (!hasScanned) {
                         return (
-                          <div style={{ color: '#888', textAlign: 'center', padding: 32 }}>
-                            <SearchOutlined style={{ fontSize: 28, marginBottom: 8 }} />
-                            <div style={{ fontSize: 14 }}>{t('device.clickToScan')}</div>
+                          <div style={{ color: '#888', textAlign: 'center', padding: 26 }}>
+                            <SearchOutlined style={{ fontSize: 22, marginBottom: 6 }} />
+                            <div style={{ fontSize: 11 }}>{t('device.clickToScan')}</div>
                           </div>
                         );
                       }
                       return (
-                        <div style={{ color: '#666', textAlign: 'center', padding: 24 }}>
+                        <div style={{ color: '#666', textAlign: 'center', padding: 19 }}>
                           {t('device.noDevicesFound')}
                         </div>
                       );
@@ -1629,7 +1629,7 @@ export default function DevicePage() {
                           onPressEnter={handleConnect}
                         />
                         <div>
-                          <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>Baudrate:</span>
+                          <span style={{ fontSize: 10, color: '#888', marginRight: 6 }}>Baudrate:</span>
                           <Select
                             value={baudrate}
                             onChange={setBaudrate}
@@ -1656,7 +1656,7 @@ export default function DevicePage() {
                     )}
 
                     {moduleConnType === 'none' && (
-                      <div style={{ color: '#888', fontSize: 12, padding: '8px 0' }}>
+                      <div style={{ color: '#888', fontSize: 10, padding: '8px 0' }}>
                         {t('device.noConnectionRequired')}
                       </div>
                     )}
@@ -1670,7 +1670,7 @@ export default function DevicePage() {
                           onPressEnter={handleConnect}
                         />
                         <div>
-                          <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>TCP Port:</span>
+                          <span style={{ fontSize: 10, color: '#888', marginRight: 6 }}>TCP Port:</span>
                           <InputNumber
                             value={hkmcPort}
                             onChange={(v) => setHkmcPort(v || 5000)}
@@ -1690,14 +1690,14 @@ export default function DevicePage() {
                           onPressEnter={handleConnect}
                         />
                         <div>
-                          <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>TCP Port:</span>
+                          <span style={{ fontSize: 10, color: '#888', marginRight: 6 }}>TCP Port:</span>
                           <InputNumber
                             value={hkmcPort}
                             onChange={(v) => setHkmcPort(v || 20000)}
                             min={1} max={65535}
                             style={{ width: 150 }}
                           />
-                          <span style={{ fontSize: 11, color: '#888', marginLeft: 8 }}>
+                          <span style={{ fontSize: 9, color: '#888', marginLeft: 6 }}>
                             20000=전석, 20003=클러스터, 20004=HUD
                           </span>
                         </div>
@@ -1713,19 +1713,19 @@ export default function DevicePage() {
                           onPressEnter={handleConnect}
                         />
                         <Space wrap>
-                          <span style={{ fontSize: 12, color: '#888' }}>SSH Port:</span>
+                          <span style={{ fontSize: 10, color: '#888' }}>SSH Port:</span>
                           <InputNumber
                             value={hkmcPort}
                             onChange={(v) => setHkmcPort(v || 22)}
                             min={1} max={65535}
                             style={{ width: 100 }}
                           />
-                          <span style={{ fontSize: 12, color: '#888' }}>User:</span>
+                          <span style={{ fontSize: 10, color: '#888' }}>User:</span>
                           <Input value={sshUser} onChange={(e) => setSshUser(e.target.value)} style={{ width: 120 }} placeholder="root" />
-                          <span style={{ fontSize: 12, color: '#888' }}>Password:</span>
+                          <span style={{ fontSize: 10, color: '#888' }}>Password:</span>
                           <Input.Password value={sshPass} onChange={(e) => setSshPass(e.target.value)} style={{ width: 160 }} placeholder="(blank if none)" />
                         </Space>
-                        <div style={{ fontSize: 11, color: '#888' }}>
+                        <div style={{ fontSize: 9, color: '#888' }}>
                           해상도는 1560x700(10") 또는 2240x1260(15") 중 선택 — 등록 후 수정 모달에서 변경 가능
                         </div>
                       </>
@@ -1764,7 +1764,7 @@ export default function DevicePage() {
                     {!selectedModule && connectType === 'webcam' && (
                       <>
                         <div>
-                          <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>{t('device.webcamIndex')}:</span>
+                          <span style={{ fontSize: 10, color: '#888', marginRight: 6 }}>{t('device.webcamIndex')}:</span>
                           <InputNumber
                             value={webcamIndex}
                             onChange={(v) => setWebcamIndex(v || 0)}
@@ -1772,9 +1772,9 @@ export default function DevicePage() {
                             style={{ width: 150 }}
                           />
                         </div>
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
                           <div style={{ flex: 1 }}>
-                            <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>{t('device.webcamWidth')}:</span>
+                            <span style={{ fontSize: 10, color: '#888', marginRight: 6 }}>{t('device.webcamWidth')}:</span>
                             <InputNumber
                               value={webcamWidth}
                               onChange={(v) => setWebcamWidth(v || 0)}
@@ -1784,7 +1784,7 @@ export default function DevicePage() {
                             />
                           </div>
                           <div style={{ flex: 1 }}>
-                            <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>{t('device.webcamHeight')}:</span>
+                            <span style={{ fontSize: 10, color: '#888', marginRight: 6 }}>{t('device.webcamHeight')}:</span>
                             <InputNumber
                               value={webcamHeight}
                               onChange={(v) => setWebcamHeight(v || 0)}
@@ -1794,7 +1794,7 @@ export default function DevicePage() {
                             />
                           </div>
                         </div>
-                        <div style={{ fontSize: 11, color: '#888' }}>
+                        <div style={{ fontSize: 9, color: '#888' }}>
                           {t('device.webcamHint')}
                         </div>
                       </>
@@ -1809,7 +1809,7 @@ export default function DevicePage() {
                           onPressEnter={handleConnect}
                         />
                         <div>
-                          <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>{t('device.sshPort')}:</span>
+                          <span style={{ fontSize: 10, color: '#888', marginRight: 6 }}>{t('device.sshPort')}:</span>
                           <InputNumber
                             value={sshPort}
                             onChange={(v) => setSshPort(v || 22)}
@@ -1846,7 +1846,7 @@ export default function DevicePage() {
                         />
                         {connectType === 'serial' && (
                           <div>
-                            <span style={{ fontSize: 12, color: '#888', marginRight: 8 }}>Baudrate:</span>
+                            <span style={{ fontSize: 10, color: '#888', marginRight: 6 }}>Baudrate:</span>
                             <Select
                               value={baudrate}
                               onChange={setBaudrate}
@@ -1895,8 +1895,8 @@ export default function DevicePage() {
         {editDevice && (
           <Space direction="vertical" style={{ width: '100%' }}>
             {/* 디바이스 정보 */}
-            <div style={{ background: '#fafafa', borderRadius: 6, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ display: 'flex', gap: 8, fontSize: 13, alignItems: 'center' }}>
+            <div style={{ background: '#fafafa', borderRadius: 6, padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div style={{ display: 'flex', gap: 6, fontSize: 10, alignItems: 'center' }}>
                 <span style={{ color: '#888', minWidth: 80 }}>Device ID:</span>
                 <Select
                   size="small"
@@ -1944,20 +1944,20 @@ export default function DevicePage() {
                     }
                   })()}
                 />
-                <span style={{ color: '#aaa', fontSize: 11, flexShrink: 0 }}>
+                <span style={{ color: '#aaa', fontSize: 9, flexShrink: 0 }}>
                   {editDeviceId !== editDevice.id ? `${editDevice.id} → ${editDeviceId}` : editDeviceId}
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
+              <div style={{ display: 'flex', gap: 6, fontSize: 10 }}>
                 <span style={{ color: '#888', minWidth: 80 }}>Type:</span>
                 <span>{editDevice.type}</span>
               </div>
-              <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
+              <div style={{ display: 'flex', gap: 6, fontSize: 10 }}>
                 <span style={{ color: '#888', minWidth: 80 }}>{`${t('common.address')}:`}</span>
                 <span>{editDevice.address || '-'}</span>
               </div>
               {editDevice.info?.resolution && (
-                <div style={{ display: 'flex', gap: 8, fontSize: 13 }}>
+                <div style={{ display: 'flex', gap: 6, fontSize: 10 }}>
                   <span style={{ color: '#888', minWidth: 80 }}>Resolution:</span>
                   <span>{editDevice.info.resolution.width}x{editDevice.info.resolution.height}</span>
                 </div>
@@ -1966,7 +1966,7 @@ export default function DevicePage() {
             {/* 수정 가능한 필드 */}
             {(editDevice.type === 'serial' || editDevice.info?.baudrate) && (
               <div>
-                <span style={{ fontSize: 12, color: '#888' }}>Baudrate:</span>
+                <span style={{ fontSize: 10, color: '#888' }}>Baudrate:</span>
                 <Select
                   value={editBaudrate}
                   onChange={setEditBaudrate}
@@ -1977,7 +1977,7 @@ export default function DevicePage() {
             )}
             {editDevice.category === 'auxiliary' && (
               <div>
-                <span style={{ fontSize: 12, color: '#888' }}>{`${t('device.module')}:`}</span>
+                <span style={{ fontSize: 10, color: '#888' }}>{`${t('device.module')}:`}</span>
                 <Select
                   allowClear
                   placeholder={t('device.moduleSelectPlaceholder')}
@@ -2027,7 +2027,7 @@ export default function DevicePage() {
             <div><strong>MAC:</strong> {forceIpModal.mac}</div>
             {forceIpModal.currentIp && <div><strong>{t('device.visionCurrentIp')}:</strong> {forceIpModal.currentIp}</div>}
             {pcInterfaces.length > 0 && (
-              <div style={{ fontSize: 12, color: '#888' }}>
+              <div style={{ fontSize: 10, color: '#888' }}>
                 {t('device.pcInterfaces')}: {pcInterfaces.map(i => `${i.ip}/${i.prefix}`).join(', ')}
               </div>
             )}
@@ -2209,13 +2209,13 @@ export default function DevicePage() {
           const renderSection = (title: string, rows: Row[], color: string) => (
             <tbody>
               <tr>
-                <td colSpan={7} style={{ padding: '8px 4px 4px', fontWeight: 600, fontSize: 12, color, borderTop: '1px solid #d9d9d9' }}>
+                <td colSpan={7} style={{ padding: '8px 4px 4px', fontWeight: 600, fontSize: 10, color, borderTop: '1px solid #d9d9d9' }}>
                   <Tag color={color === '#1677ff' ? 'blue' : 'default'}>{title}</Tag>
-                  <span style={{ color: '#888', fontWeight: 400, marginLeft: 4 }}>({rows.length})</span>
+                  <span style={{ color: '#888', fontWeight: 400, marginLeft: 3 }}>({rows.length})</span>
                 </td>
               </tr>
               {rows.length === 0 ? (
-                <tr><td colSpan={7} style={{ padding: '6px 8px', color: '#bbb', fontSize: 12 }}>—</td></tr>
+                <tr><td colSpan={7} style={{ padding: '6px 8px', color: '#bbb', fontSize: 10 }}>—</td></tr>
               ) : (
                 rows.map(r => renderRow(r))
               )}
@@ -2223,7 +2223,7 @@ export default function DevicePage() {
           );
 
           return (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #d9d9d9', textAlign: 'left' }}>
                   <th style={{ padding: '6px 4px', width: 40 }}></th>

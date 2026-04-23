@@ -139,7 +139,7 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
         <div
           onMouseDown={onMouseDown}
           style={{
-            display: 'flex', alignItems: 'center', gap: 6,
+            display: 'flex', alignItems: 'center', gap: 5,
             padding: '6px 10px',
             background: headerBg,
             borderRadius: '8px 8px 0 0',
@@ -148,11 +148,11 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
           }}
         >
           <VideoCameraOutlined style={{ color: '#1677ff' }} />
-          <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: titleColor }}>{t('webcam.title')}</span>
+          <span style={{ flex: 1, fontSize: 10, fontWeight: 500, color: titleColor }}>{t('webcam.title')}</span>
           {webcamRecording && (
             <span style={{
               background: '#ff4d4f', color: '#fff', padding: '0 6px',
-              borderRadius: 3, fontSize: 11, fontWeight: 'bold', lineHeight: '18px',
+              borderRadius: 3, fontSize: 9, fontWeight: 'bold', lineHeight: '18px',
               animation: 'blink 1s infinite',
             }}>● REC</span>
           )}
@@ -162,9 +162,9 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
             style={{ color: btnColor, width: 24, height: 24, padding: 0 }} />
         </div>
 
-        <div style={{ padding: 8, display: minimized ? 'none' : undefined }}>
+        <div style={{ padding: 6, display: minimized ? 'none' : undefined }}>
           {/* Preview (backend MJPEG polling) */}
-          <div style={{ position: 'relative', marginBottom: 8 }}>
+          <div style={{ position: 'relative', marginBottom: 6 }}>
             <img
               src={previewUrl}
               alt="webcam"
@@ -176,7 +176,7 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
               <span style={{
                 position: 'absolute', top: 6, right: 6,
                 background: 'rgba(255,0,0,0.85)', color: '#fff',
-                padding: '1px 6px', borderRadius: 4, fontSize: 11, fontWeight: 'bold',
+                padding: '1px 6px', borderRadius: 4, fontSize: 9, fontWeight: 'bold',
                 animation: 'blink 1s infinite',
               }}>● REC</span>
             )}
@@ -198,7 +198,7 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
           </div>
 
           {/* Controls */}
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 6 }}>
+          <div style={{ display: 'flex', gap: 3, alignItems: 'center', marginBottom: 5 }}>
             <Select
               size="small"
               value={webcamIndex}
@@ -233,8 +233,8 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
           {webcamSettingsOpen && (
             <div style={{ padding: '6px 8px', background: settingsBg, borderRadius: 6 }}>
               {webcamResolutions.length > 0 && (
-                <div style={{ marginBottom: 6 }}>
-                  <div style={{ fontSize: 11, marginBottom: 2, color: subColor }}>{t('webcam.resolutionSelect')}</div>
+                <div style={{ marginBottom: 5 }}>
+                  <div style={{ fontSize: 9, marginBottom: 2, color: subColor }}>{t('webcam.resolutionSelect')}</div>
                   <Select
                     size="small"
                     value={webcamResolution || undefined}
@@ -250,9 +250,9 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
                 </div>
               )}
               {/* 타임스탬프 설정 */}
-              <div style={{ marginBottom: 6 }}>
-                <div style={{ fontSize: 11, marginBottom: 2, color: subColor }}>{t('webcam.timestampPosition')}</div>
-                <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ marginBottom: 5 }}>
+                <div style={{ fontSize: 9, marginBottom: 2, color: subColor }}>{t('webcam.timestampPosition')}</div>
+                <div style={{ display: 'flex', gap: 3 }}>
                   <Select
                     size="small"
                     value={timestampPosition}
@@ -294,14 +294,14 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
               </div>
               {/* 노출 설정 — 자동/수동 토글 + 슬라이더 */}
               {webcamCapabilities.exposure ? (
-                <div style={{ marginBottom: 4 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginBottom: 2 }}>
+                <div style={{ marginBottom: 3 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 9, marginBottom: 2 }}>
                     <span style={{ color: labelColor }}>{t('webcam.exposure')}</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                       <Button size="small"
                         type={exposureAuto ? 'primary' : 'default'}
                         onClick={() => setExposureAutoMode(!exposureAuto)}
-                        style={{ height: 18, padding: '0 6px', fontSize: 10 }}>
+                        style={{ height: 18, padding: '0 6px', fontSize: 8 }}>
                         {exposureAuto ? t('webcam.exposureAuto') : t('webcam.exposureManual')}
                       </Button>
                       <span style={{ color: subColor, minWidth: 30, textAlign: 'right' }}>
@@ -320,7 +320,7 @@ export default function WebcamPip({ webcam, onClose, isDark }: WebcamPipProps) {
                   />
                 </div>
               ) : webcamResolutions.length === 0 ? (
-                <div style={{ color: subColor, fontSize: 11, textAlign: 'center', padding: 4 }}>{t('webcam.noSettings')}</div>
+                <div style={{ color: subColor, fontSize: 9, textAlign: 'center', padding: 3 }}>{t('webcam.noSettings')}</div>
               ) : null}
             </div>
           )}
