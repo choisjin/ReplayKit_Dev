@@ -999,6 +999,27 @@ class DeviceManager:
 
     async def refresh_auxiliary(self) -> None:
         """빠른 상태 확인만 수행 (네트워크 I/O 없음). 재연결은 백그라운드에서."""
+        # Serial/Module(COM 포트 기반) 디바이스의 물리적 연결 여부를 확인하기 위해
+        # 현재 시스템의 COM 포트 목록을 한 번만 스캔 (USB 제거 감지용)
+        available_com_ports: Optional[set[str]] = None
+        needs_com_scan = any(
+            (d.type in ("serial", "module"))
+            and d.id in self._ever_connected
+            and isinstance(d.address, str)
+            and d.address.upper().startswith("COM")
+            for d in self._devices.values()
+        )
+        if needs_com_scan:
+            loop = asyncio.get_event_loop()
+            try:
+                def _list_com_ports() -> set[str]:
+                    from serial.tools import list_ports
+                    return {p.device for p in list_ports.comports()}
+                available_com_ports = await loop.run_in_executor(None, _list_com_ports)
+            except Exception as e:
+                logger.debug("COM port scan failed: %s", e)
+                available_com_ports = None
+
         for dev in self._devices.values():
             # 사용자가 연결 끊기한 디바이스는 자동 상태 갱신 안 함
             if dev.id not in self._ever_connected:
@@ -1047,7 +1068,34 @@ class DeviceManager:
                 continue
             if dev.category != "auxiliary":
                 continue
-            # Serial/Module: 기존 상태 유지 (별도 프로브 없음)
+            # Serial/Module: COM 포트가 시스템에서 사라진 경우(USB 제거 등) disconnected로 전환
+            if dev.type in ("serial", "module"):
+                if available_com_ports is None:
+                    continue  # 스캔 실패 시 기존 상태 유지
+                address = dev.address
+                if not (isinstance(address, str) and address.upper().startswith("COM")):
+                    continue  # COM 포트 기반이 아닌 모듈(네트워크 모듈 등)은 제외
+                if address not in available_com_ports:
+                    if dev.status not in ("disconnected", "reconnecting"):
+                        logger.info(
+                            "Serial/Module %s: COM port %s no longer available, marking disconnected",
+                            dev.id, address,
+                        )
+                        # 스테일 시리얼 핸들 정리 (USB 제거 후에도 is_open이 True로 남는 경우 대비)
+                        try:
+                            self._close_serial_conn(dev.id)
+                        except Exception as e:
+                            logger.debug("Close stale serial conn %s failed: %s", dev.id, e)
+                        # 모듈 싱글톤도 정리해 재연결 시 새 인스턴스를 만들도록 유도
+                        module_name = dev.info.get("module", "")
+                        if module_name:
+                            try:
+                                from .module_service import _instances, _auto_connected
+                                _instances.pop(module_name, None)
+                                _auto_connected.discard(module_name)
+                            except Exception as e:
+                                logger.debug("Clear module instance %s failed: %s", module_name, e)
+                    dev.status = "disconnected"
 
     # 최대 연속 재연결 실패 횟수 — 초과 시 "error" 상태로 전환
     HKMC_MAX_RECONNECT_ATTEMPTS = 12  # 5초 × 12 = 60초간 실패하면 error
@@ -1271,6 +1319,20 @@ class DeviceManager:
         """Scan available serial ports."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, _scan_serial_ports)
+
+    def _com_port_exists(self, address: str) -> bool:
+        """지정 COM 포트가 시스템에 물리적으로 존재하는지 확인.
+        COM 주소가 아니면 True를 반환해 기존 로직 흐름 유지.
+        DLL 기반 모듈(CANAT 등)은 포트가 없어도 조용히 초기화되므로 이 가드로 차단.
+        """
+        if not isinstance(address, str) or not address.upper().startswith("COM"):
+            return True
+        try:
+            from serial.tools import list_ports
+            return any(p.device == address for p in list_ports.comports())
+        except Exception as e:
+            logger.debug("COM port existence check failed for %s: %s", address, e)
+            return True  # 스캔 실패 시 기존 연결 시도 흐름 유지
 
     async def scan_hkmc(self, ports: list[int] | None = None) -> list[dict]:
         """TCP 포트 스캔으로 LAN(192.168.*) 상의 HKMC 디바이스 탐지.
@@ -1745,6 +1807,12 @@ class DeviceManager:
                 module_name = dev.info.get("module", "")
                 if not module_name:
                     continue
+                # 시리얼 기반 모듈: COM 포트 존재 여부 선검증 (DLL 모듈 오탐 차단)
+                if dev.info.get("connect_type") == "serial":
+                    if not await loop.run_in_executor(None, self._com_port_exists, dev.address):
+                        dev.status = "disconnected"
+                        logger.warning("Module %s skipped: COM port %s not present", dev.id, dev.address)
+                        continue
                 try:
                     from .module_service import _get_instance, _is_connected
                     from ..routers.device import _build_constructor_kwargs
@@ -1811,6 +1879,13 @@ class DeviceManager:
 
         if dev.type == "serial":
             module_name = dev.info.get("module", "")
+
+            # COM 포트 존재 여부 선검증 — DLL 기반 모듈(CANAT 등)은 포트가 없어도
+            # init()이 조용히 성공하고 hdll이 설정되므로 _is_connected가 오탐하는 문제 차단
+            if not await loop.run_in_executor(None, self._com_port_exists, dev.address):
+                dev.status = "disconnected"
+                logger.info("Serial connect skipped: %s — COM port %s not present", dev.id, dev.address)
+                return f"Serial connect failed: {dev.id} — COM port {dev.address} not available"
 
             # DLL 기반 모듈(CANAT 등)은 자체적으로 COM 포트를 관리하므로
             # pyserial로 포트를 열면 충돌 발생 — 모듈 init만 수행
@@ -1972,6 +2047,12 @@ class DeviceManager:
             module_name = dev.info.get("module", "")
             if not module_name:
                 return f"Module {dev.id}: no module configured"
+            # 시리얼 기반 모듈: COM 포트 존재 여부 선검증 (DLL 모듈 오탐 차단)
+            if dev.info.get("connect_type") == "serial":
+                if not await loop.run_in_executor(None, self._com_port_exists, dev.address):
+                    dev.status = "disconnected"
+                    logger.info("Module connect skipped: %s — COM port %s not present", dev.id, dev.address)
+                    return f"Module connect failed: {dev.id} — COM port {dev.address} not available"
             try:
                 from .module_service import _get_instance, _is_connected
                 from ..routers.device import _build_constructor_kwargs
