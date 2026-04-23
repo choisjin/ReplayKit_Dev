@@ -531,10 +531,11 @@ class ICASAgentService:
         key_code = int(info["key"])
         klass = info.get("class", "short")
 
-        # press
+        # press / release — Short class는 release 시 key=0x00, state=0x00 (ref RemoteController:525)
+        # Long class는 key_code 유지, state만 0x00 + tail 변경 (ref line 562)
         press = (self._hkey_short_frame(key_code, 0x01) if klass == "short"
                  else self._hkey_long_frame(key_code, 0x01))
-        release = (self._hkey_short_frame(key_code, 0x00) if klass == "short"
+        release = (self._hkey_short_frame(0x00, 0x00) if klass == "short"
                    else self._hkey_long_frame(key_code, 0x00))
 
         hold_s = 1.0 if sub_cmd == LONG_KEY else 0.1
@@ -552,7 +553,8 @@ class ICASAgentService:
         klass = "long" if key_data in (0x38, 0x66) else "short"
         press = (self._hkey_short_frame(key_data, 0x01) if klass == "short"
                  else self._hkey_long_frame(key_data, 0x01))
-        release = (self._hkey_short_frame(key_data, 0x00) if klass == "short"
+        # Short release는 key=0, state=0 (send_key_by_name과 동일 규칙)
+        release = (self._hkey_short_frame(0x00, 0x00) if klass == "short"
                    else self._hkey_long_frame(key_data, 0x00))
         hold_s = 1.0 if sub_cmd == LONG_KEY else 0.1
         self._ksend_many([press], interval_s=0)
@@ -581,52 +583,62 @@ class ICASAgentService:
         from PIL import Image, ImageFile
         ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-        try:
-            from scp import SCPClient
-        except ImportError as e:
-            raise RuntimeError("scp module required: pip install scp") from e
-
         tmp_dir = tempfile.mkdtemp(prefix="icas_cap_")
         try:
-            # 공유 SSH 세션에서 dump + SCP pull 을 일괄 수행 (매 프레임마다 재인증 방지).
-            # transport 오류 시 1회 재연결 후 재시도.
+            # 공유 SSH 세션에서 dump + SFTP pull 을 일괄 수행 (매 프레임마다 재인증 방지).
+            # 최적화:
+            #   - dump 2개를 `&` + `wait`로 병렬 실행 + 단일 exec_command → SSH 왕복 1회
+            #   - SCPClient(get당 새 subsystem) → SFTP(subsystem 1회로 2파일 get)
             def _do_capture(ssh) -> list[str]:
-                # LayerManagerControl은 exec_command(비대화형)로도 동일 효과. 환경변수 포함 단일 라인으로 호출.
-                dump_cmds = [
-                    "export XDG_RUNTIME_DIR=/run/platform/weston && "
-                    "LayerManagerControl dump screen 0 to /tmp/screen1.png",
-                    "export XDG_RUNTIME_DIR=/run/platform/weston && "
-                    "LayerManagerControl dump screen 2 to /tmp/screen2.png",
-                ]
-                for c in dump_cmds:
-                    stdin, stdout, stderr = ssh.exec_command(c, timeout=10)
-                    try:
-                        stdin.close()
-                    except Exception:
-                        pass
-                    # 덤프 완료 대기 — exit status로 동기화 (sleep 기반 race 제거) + 채널 즉시 해제
-                    try:
-                        stdout.channel.settimeout(10)
-                        stdout.channel.recv_exit_status()
-                    except Exception:
-                        pass
-                    finally:
-                        for f in (stdout, stderr):
-                            try:
-                                f.close()
-                            except Exception:
-                                pass
+                parallel_cmd = (
+                    "export XDG_RUNTIME_DIR=/run/platform/weston; "
+                    "LayerManagerControl dump screen 0 to /tmp/screen1.png & "
+                    "LayerManagerControl dump screen 2 to /tmp/screen2.png & "
+                    "wait"
+                )
+                stdin, stdout, stderr = ssh.exec_command(parallel_cmd, timeout=15)
+                try:
+                    stdin.close()
+                except Exception:
+                    pass
+                try:
+                    stdout.channel.settimeout(15)
+                    stdout.channel.recv_exit_status()
+                except Exception:
+                    pass
+                finally:
+                    for f in (stdout, stderr):
+                        try:
+                            f.close()
+                        except Exception:
+                            pass
+
                 files: list[str] = []
-                with SCPClient(ssh.get_transport()) as scp:
+                # SFTP — 단일 subsystem 채널에서 2파일 연속 get
+                try:
+                    sftp = ssh.open_sftp()
+                except Exception as ee:
+                    logger.debug("ICAS HU open_sftp failed: %s", ee)
+                    return files
+                try:
                     for remote, fname in (("/tmp/screen1.png", "screen1.png"),
                                           ("/tmp/screen2.png", "screen2.png")):
                         local = os.path.join(tmp_dir, fname)
                         try:
-                            scp.get(remote, local)
+                            st = sftp.stat(remote)
+                            if st.st_size <= 0:
+                                continue
+                            sftp.get(remote, local)
                             if os.path.exists(local) and os.path.getsize(local) > 0:
                                 files.append(local)
-                        except Exception as ee:
-                            logger.debug("ICAS HU scp %s failed: %s", remote, ee)
+                        except IOError as ee:
+                            # 파일 없음/권한 — 다른 화면만 있어도 진행
+                            logger.debug("ICAS HU sftp %s failed: %s", remote, ee)
+                finally:
+                    try:
+                        sftp.close()
+                    except Exception:
+                        pass
                 return files
 
             local_files: list[str] = []
