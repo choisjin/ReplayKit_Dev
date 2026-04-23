@@ -1530,8 +1530,13 @@ class PlaybackService:
                             if is_isap:
                                 await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, direction)
                             else:
+                                # screen_type 기반 monitor 자동 보정을 비활성화한다.
+                                # RRC_RADIO/RRC_MEDIA 등 source 계열 키는 monitor=0x01(LEFT)
+                                # 명시 시 IVI 가 글로벌 라우팅으로 폴백해 front_center 에서
+                                # 처리되는 문제를 유발한다. monitor=0x00(NONE) 으로 두면
+                                # IVI 가 현재 포커스(rear_left 등)를 그대로 따라간다.
                                 monitor = params.get("monitor", 0x00)
-                                await svc.async_send_key_by_name(key_name, sub_cmd, monitor, direction, screen_type)
+                                await svc.async_send_key_by_name(key_name, sub_cmd, monitor, direction)
                         else:
                             if is_isap:
                                 await svc.async_send_key(
