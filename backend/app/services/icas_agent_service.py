@@ -691,36 +691,86 @@ class ICASAgentService:
                     allow_agent=False, look_for_keys=False,
                 )
                 try:
-                    # screenshot 명령 실행 + 완료 대기
+                    # screenshot 바이너리는 login shell의 PATH/env에 의존하므로
+                    # get_pty=True + `bash -l -c` 로 interactive 로그인과 동일한 환경을 재현.
+                    # 기존 stale bmp 제거 후 실행 → 파일 생성 여부로 성공 판정.
+                    cmd = (
+                        "bash -l -c 'cd /tmp && rm -f /tmp/screenshot.bmp && "
+                        f"screenshot -display={display_number}'"
+                    )
                     stdin, stdout, stderr = ps_ssh.exec_command(
-                        f"cd /tmp && screenshot -display={display_number}",
-                        timeout=15,
+                        cmd, timeout=30, get_pty=True,
                     )
                     try:
                         stdin.close()
                     except Exception:
                         pass
+                    out_text = ""
+                    err_text = ""
+                    exit_status = -1
                     try:
-                        stdout.channel.settimeout(15)
-                        stdout.channel.recv_exit_status()
+                        stdout.channel.settimeout(30)
+                        # PTY 모드에서는 stdout에 stdout+stderr가 병합되지만 상관없음
+                        deadline = time.time() + 30.0
+                        while time.time() < deadline:
+                            if stdout.channel.exit_status_ready():
+                                break
+                            if stdout.channel.recv_ready():
+                                try:
+                                    out_text += stdout.channel.recv(4096).decode("utf-8", errors="replace")
+                                except Exception:
+                                    pass
+                            elif stdout.channel.recv_stderr_ready():
+                                try:
+                                    err_text += stdout.channel.recv_stderr(4096).decode("utf-8", errors="replace")
+                                except Exception:
+                                    pass
+                            else:
+                                time.sleep(0.1)
+                        # 남은 버퍼 드레인
+                        while stdout.channel.recv_ready():
+                            try:
+                                out_text += stdout.channel.recv(4096).decode("utf-8", errors="replace")
+                            except Exception:
+                                break
+                        while stdout.channel.recv_stderr_ready():
+                            try:
+                                err_text += stdout.channel.recv_stderr(4096).decode("utf-8", errors="replace")
+                            except Exception:
+                                break
+                        exit_status = stdout.channel.recv_exit_status()
                     except Exception:
                         pass
-                    for f in (stdout, stderr):
-                        try:
-                            f.close()
-                        except Exception:
-                            pass
+                    finally:
+                        for f in (stdout, stderr):
+                            try:
+                                f.close()
+                            except Exception:
+                                pass
 
-                    # SFTP로 private_server:/tmp/screenshot.bmp → 로컬 pull
+                    # SFTP로 파일 생성 여부 폴링 → private_server:/tmp/screenshot.bmp → 로컬 pull
                     with ps_ssh.open_sftp() as sftp:
-                        try:
-                            st = sftp.stat("/tmp/screenshot.bmp")
-                            if st.st_size <= 0:
-                                raise RuntimeError("screenshot.bmp is empty on private_server")
-                        except IOError as ie:
+                        st = None
+                        file_deadline = time.time() + 5.0
+                        while time.time() < file_deadline:
+                            try:
+                                candidate = sftp.stat("/tmp/screenshot.bmp")
+                                if candidate.st_size > 0:
+                                    st = candidate
+                                    break
+                            except IOError:
+                                pass
+                            time.sleep(0.3)
+                        if st is None:
+                            # 진단 정보 포함 — stdout/stderr 앞부분 노출
+                            snippet = (out_text + err_text).strip().replace("\r", " ").replace("\n", " | ")
+                            if len(snippet) > 240:
+                                snippet = snippet[:240] + "..."
                             raise RuntimeError(
-                                f"screenshot.bmp not found on private_server (display={display_number}): {ie}"
-                            ) from ie
+                                f"screenshot.bmp not produced on private_server "
+                                f"(display={display_number}, exit_status={exit_status}, "
+                                f"output={snippet!r})"
+                            )
                         sftp.get("/tmp/screenshot.bmp", local_bmp)
                         try:
                             sftp.remove("/tmp/screenshot.bmp")
