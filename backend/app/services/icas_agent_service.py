@@ -239,21 +239,45 @@ class ICASAgentService:
     # ------------------------------------------------------------------
     # Low-level helpers
     # ------------------------------------------------------------------
-    def _exec_on_shared(self, commands: list[str], interval_s: float = 0.0) -> None:
-        """공유 SSH 세션에서 exec_command들을 순차 실행. transport 에러 시 1회 재연결하여 재시도."""
-        def _run(ssh, cmd_list: list[str]) -> None:
+    def _exec_on_shared(self, commands: list[str], interval_s: float = 0.0,
+                        per_cmd_timeout: float = 5.0) -> None:
+        """공유 SSH 세션에서 exec_command들을 순차 실행.
+
+        각 명령은 exit_status를 기다려 채널을 즉시 해제함 (sshd MaxSessions=10 한도 보호).
+        ksend는 즉시 반환되므로 wait 비용이 무시할 수준. transport 에러 시 세션 리셋 후 1회 재시도.
+        """
+        def _run_one(ssh, c: str) -> None:
+            stdin, stdout, stderr = ssh.exec_command(c, timeout=per_cmd_timeout)
+            try:
+                stdin.close()
+            except Exception:
+                pass
+            # exit_status 대기 → 채널 즉시 클로즈 (sshd 세션 누수 방지)
+            try:
+                stdout.channel.settimeout(per_cmd_timeout)
+                stdout.channel.recv_exit_status()
+            except Exception:
+                pass
+            finally:
+                for f in (stdout, stderr):
+                    try:
+                        f.close()
+                    except Exception:
+                        pass
+
+        def _run_all(ssh, cmd_list: list[str]) -> None:
             for i, c in enumerate(cmd_list):
-                ssh.exec_command(c, timeout=10)
+                _run_one(ssh, c)
                 if interval_s > 0 and i < len(cmd_list) - 1:
                     time.sleep(interval_s)
 
         with self._ssh_lock:
             try:
                 ssh = self._get_shared_ssh()
-                _run(ssh, commands)
+                _run_all(ssh, commands)
                 return
             except Exception as e:
-                # transport 끊김/EOF 등 → 세션 리셋 후 1회 재시도
+                # transport 끊김/EOF/채널 한도 초과 등 → 세션 리셋 후 1회 재시도
                 logger.warning("ICAS shared SSH exec failed, retrying: %s", e)
                 if self._ssh_client is not None:
                     try:
@@ -261,9 +285,8 @@ class ICASAgentService:
                     except Exception:
                         pass
                     self._ssh_client = None
-            # retry
             ssh = self._get_shared_ssh()
-            _run(ssh, commands)
+            _run_all(ssh, commands)
 
     def _ksend(self, data_bytes: str) -> None:
         """ksend 명령 1회 송신 — 공유 SSH 세션 사용."""
@@ -461,11 +484,22 @@ class ICASAgentService:
                 ]
                 for c in dump_cmds:
                     stdin, stdout, stderr = ssh.exec_command(c, timeout=10)
-                    # 덤프 완료 대기 — exit status로 동기화 (sleep 기반 race 제거)
                     try:
+                        stdin.close()
+                    except Exception:
+                        pass
+                    # 덤프 완료 대기 — exit status로 동기화 (sleep 기반 race 제거) + 채널 즉시 해제
+                    try:
+                        stdout.channel.settimeout(10)
                         stdout.channel.recv_exit_status()
                     except Exception:
                         pass
+                    finally:
+                        for f in (stdout, stderr):
+                            try:
+                                f.close()
+                            except Exception:
+                                pass
                 files: list[str] = []
                 with SCPClient(ssh.get_transport()) as scp:
                     for remote, fname in (("/tmp/screen1.png", "screen1.png"),
@@ -582,8 +616,23 @@ class ICASAgentService:
                 def _do_pull(ssh) -> None:
                     with SCPClient(ssh.get_transport()) as scp:
                         scp.get("/tmp/screenshot.bmp", local_bmp)
+                    # rm 채널도 exit_status 대기 + close (sshd 세션 누수 방지)
                     try:
-                        ssh.exec_command("rm -f /tmp/screenshot.bmp", timeout=5)
+                        stdin, stdout, stderr = ssh.exec_command("rm -f /tmp/screenshot.bmp", timeout=5)
+                        try:
+                            stdin.close()
+                        except Exception:
+                            pass
+                        try:
+                            stdout.channel.settimeout(5)
+                            stdout.channel.recv_exit_status()
+                        except Exception:
+                            pass
+                        for f in (stdout, stderr):
+                            try:
+                                f.close()
+                            except Exception:
+                                pass
                     except Exception:
                         pass
 
