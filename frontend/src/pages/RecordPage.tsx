@@ -3441,13 +3441,23 @@ export default function RecordPage() {
                       {groups.map((group) => {
                         const keys = byGroup[group];
                         if (!keys || keys.length === 0) return null;
+                        // RRC 그룹은 rear_left/rear_right 에서만 활성화 — front_center/cluster
+                        // 에서는 IVI 가 source 계열 키(RADIO/MEDIA)를 글로벌 라우팅으로 폴백해
+                        // 엉뚱한 화면에서 동작하므로 사용자 오조작을 차단한다.
+                        const isRearOnly = group === 'RRC' || group === 'CCRC';
+                        const rearActive = screenType === 'rear_left' || screenType === 'rear_right';
+                        const groupDisabled = isRearOnly && !rearActive;
                         return (
                           <details key={group} style={{ marginBottom: 2 }}>
-                            <summary style={{ fontSize: 10, color: subTextColor, cursor: 'pointer', userSelect: 'none' }}>{group} <span style={{ color: '#888' }}>({keys.length})</span></summary>
+                            <summary style={{ fontSize: 10, color: subTextColor, cursor: 'pointer', userSelect: 'none' }}>
+                              {group} <span style={{ color: '#888' }}>({keys.length})</span>
+                              {groupDisabled && <span style={{ color: '#faad14', marginLeft: 4 }}>· rear 전용</span>}
+                            </summary>
                             <div style={{ padding: '2px 0 2px 4px' }}>
                               {keys.map(k => (
                                 <Button key={k.name} size="small"
                                   className="hk-btn"
+                                  disabled={groupDisabled}
                                   style={{ fontSize: 9, padding: '0 6px', height: 22, margin: '0 2px 2px 0', touchAction: 'none' }}
                                   onPointerDown={(e) => {
                                     // 좌클릭/터치만 처리 (우클릭/가운데 클릭 무시)
