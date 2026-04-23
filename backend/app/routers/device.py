@@ -112,8 +112,9 @@ _DEFAULT_DEVICE_CATALOG: dict = {
     # name은 UI 표시용 + 모델에서 참조하는 식별자.
     "agents": [
         {"name": "ADB",          "type": "adb",           "enabled": True},
-        {"name": "HKMC Agent",   "type": "hkmc_agent",       "enabled": True},
+        {"name": "HKMC Agent",   "type": "hkmc_agent",    "enabled": True},
         {"name": "iSAP Agent",   "type": "isap_agent",    "enabled": True},
+        {"name": "ICAS Agent",   "type": "icas_agent",    "enabled": True},
         {"name": "VisionCamera", "type": "vision_camera", "enabled": True},
         {"name": "Webcam",       "type": "webcam",        "enabled": True},
     ],
@@ -185,7 +186,7 @@ def _build_constructor_kwargs(dev) -> dict | None:
 
 
 class ConnectRequest(BaseModel):
-    type: str  # "adb" | "serial" | "module" | "hkmc_agent" | "isap_agent" | "vision_camera" | "webcam" | "ssh"
+    type: str  # "adb" | "serial" | "module" | "hkmc_agent" | "isap_agent" | "icas_agent" | "vision_camera" | "webcam" | "ssh"
     category: str = ""  # "primary" | "auxiliary" — auto-detected if empty
     address: str = ""  # COM port for serial, IP for socket/HKMC/SSH, etc.
     baudrate: Optional[int] = 115200
@@ -474,6 +475,33 @@ async def connect_device(req: ConnectRequest):
             dev = await dm.add_isap_agent_device(req.address, req.port, device_id=custom_id, name=req.name or "", device_model=req.device_model or "")
             return {
                 "result": f"iSAP registered: {dev.name} (ID: {dev.id})",
+                "primary": _with_protected_flag(dm.list_primary()),
+                "auxiliary": _with_protected_flag(dm.list_auxiliary()),
+            }
+        except RuntimeError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    elif req.type == "icas_agent":
+        if not req.address:
+            raise HTTPException(status_code=400, detail="ICAS Agent requires address (host)")
+        ef = req.extra_fields or {}
+        try:
+            dev = await dm.add_icas_agent_device(
+                host=req.address,
+                port=int(req.port or 22),
+                device_id=custom_id,
+                name=req.name or "",
+                device_model=req.device_model or "",
+                username=ef.get("username", "root") or "root",
+                password=ef.get("password", "") or "",
+                resolution=ef.get("resolution", "1560x700") or "1560x700",
+            )
+            # 등록 직후 실제 SSH 연결 시도
+            try:
+                connect_msg = await dm.connect_device_by_id(dev.id)
+            except Exception as e:
+                connect_msg = f"registered but connect failed: {e}"
+            return {
+                "result": f"ICAS registered: {dev.name} (ID: {dev.id}) — {connect_msg}",
                 "primary": _with_protected_flag(dm.list_primary()),
                 "auxiliary": _with_protected_flag(dm.list_auxiliary()),
             }

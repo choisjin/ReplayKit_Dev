@@ -15,6 +15,7 @@ from typing import Optional
 from .adb_service import ADBService
 from .hkmc6th_service import HKMC6thService
 from .isap_agent_service import ISAPAgentService
+from .icas_agent_service import ICASAgentService
 from .ssh_service import SSHConnection
 
 logger = logging.getLogger(__name__)
@@ -600,6 +601,8 @@ class DeviceManager:
         self._hkmc_reconnect_attempts: dict[str, int] = {}  # device_id -> 연속 재연결 실패 횟수
         self._isap_conns: dict[str, ISAPAgentService] = {}  # device_id -> ISAPAgentService
         self._isap_reconnect_attempts: dict[str, int] = {}
+        self._icas_conns: dict[str, ICASAgentService] = {}  # device_id -> ICASAgentService
+        self._icas_reconnect_attempts: dict[str, int] = {}
         self._adb_reconnect_attempts: dict[str, int] = {}  # device_id -> 연속 재연결 실패 횟수
         # 디바이스별 재연결 락: playback의 _ensure_device_connected와 백그라운드 monitor 루프가
         # 같은 디바이스를 동시에 재연결하지 못하도록 직렬화. race condition 제거용.
@@ -694,6 +697,8 @@ class DeviceManager:
             prefix = "HKMC"
         elif dev_type == "isap_agent":
             prefix = "iSAP"
+        elif dev_type == "icas_agent":
+            prefix = "ICAS"
         elif dev_type == "vision_camera":
             prefix = "VisionCam"
         elif dev_type == "webcam":
@@ -716,7 +721,7 @@ class DeviceManager:
         aux = [
             d.to_dict()
             for d in self._devices.values()
-            if d.category == "auxiliary" or d.type in ("adb", "hkmc_agent", "isap_agent", "vision_camera", "webcam", "ssh")
+            if d.category == "auxiliary" or d.type in ("adb", "hkmc_agent", "isap_agent", "icas_agent", "vision_camera", "webcam", "ssh")
         ]
         try:
             _AUX_DEVICES_FILE.write_text(json.dumps(aux, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -852,6 +857,45 @@ class DeviceManager:
             return self._isap_conns.get(dev.id)
         return None
 
+    async def add_icas_agent_device(self, host: str, port: int = 22, device_id: str = "",
+                                    name: str = "", device_model: str = "",
+                                    username: str = "root", password: str = "",
+                                    resolution: str = "1560x700") -> ManagedDevice:
+        """ICAS Agent 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행)."""
+        final_id = device_id or self._generate_device_id("icas_agent", device_model=device_model)
+        display_name = name or f"ICAS ({host}:{port})"
+        info: dict = {
+            "port": int(port),
+            "username": username,
+            "password": password,
+            "resolution": resolution,
+        }
+        if device_model:
+            info["device_model"] = device_model
+
+        dev = ManagedDevice(
+            id=final_id,
+            type="icas_agent",
+            category="primary",
+            address=host,
+            status="disconnected",
+            name=display_name,
+            info=info,
+        )
+        self._devices[final_id] = dev
+        self._save_auxiliary_devices()
+        return dev
+
+    def get_icas_service(self, device_id: str) -> Optional[ICASAgentService]:
+        """Get ICASAgentService instance for a device. Returns None if not found."""
+        svc = self._icas_conns.get(device_id)
+        if svc:
+            return svc
+        dev = self.get_device(device_id)
+        if dev and dev.type == "icas_agent":
+            return self._icas_conns.get(dev.id)
+        return None
+
     async def add_vision_camera_device(self, mac: str, model: str = "", serial: str = "",
                                        ip: str = "", subnetmask: str = "255.255.0.0",
                                        device_id: str = "", name: str = "") -> ManagedDevice:
@@ -937,6 +981,13 @@ class DeviceManager:
             if dev.type == "isap_agent":
                 isap = self._isap_conns.get(dev.id)
                 if isap and isap.is_connected:
+                    dev.status = "connected"
+                elif dev.status != "reconnecting":
+                    dev.status = "disconnected"
+                continue
+            if dev.type == "icas_agent":
+                icas = self._icas_conns.get(dev.id)
+                if icas and icas.is_connected:
                     dev.status = "connected"
                 elif dev.status != "reconnecting":
                     dev.status = "disconnected"
@@ -1817,6 +1868,35 @@ class DeviceManager:
                 dev.status = "disconnected"
                 return f"iSAP connect failed: {dev.id} — {e}"
 
+        elif dev.type == "icas_agent":
+            port = int(dev.info.get("port", 22) or 22)
+            username = dev.info.get("username", "root") or "root"
+            password = dev.info.get("password", "") or ""
+            resolution = dev.info.get("resolution", "1560x700") or "1560x700"
+            try:
+                svc = ICASAgentService(
+                    dev.address, port=port, device_id=dev.id,
+                    username=username, password=password, resolution=resolution,
+                    key_overrides=dev.info.get("icas_keys"),
+                )
+                ok = await svc.async_connect()
+                if ok:
+                    self._icas_conns[dev.id] = svc
+                    dev.status = "connected"
+                    _mark_connected()
+                    dev.info["agent_version"] = svc.agent_version
+                    dev.info["screens"] = svc.get_info()["screens"]
+                    dev.info["resolution_wh"] = dev.info["screens"].get(
+                        svc.default_screen, {"width": 1560, "height": 700}
+                    )
+                    return f"ICAS connected: {dev.id} ({dev.address}:{port})"
+                else:
+                    dev.status = "disconnected"
+                    return f"ICAS connect failed: {dev.id}"
+            except Exception as e:
+                dev.status = "disconnected"
+                return f"ICAS connect failed: {dev.id} — {e}"
+
         elif dev.type == "module":
             module_name = dev.info.get("module", "")
             if not module_name:
@@ -1984,6 +2064,16 @@ class DeviceManager:
 
         elif dev.type == "isap_agent":
             svc = self._isap_conns.pop(device_id, None)
+            if svc:
+                try:
+                    svc.disconnect()
+                except Exception:
+                    pass
+            dev.status = "disconnected"
+            return f"Disconnected: {dev.id}"
+
+        elif dev.type == "icas_agent":
+            svc = self._icas_conns.pop(device_id, None)
             if svc:
                 try:
                     svc.disconnect()

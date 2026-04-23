@@ -634,6 +634,15 @@ class PlaybackService:
                         Path(actual_path).write_bytes(img_bytes)
                     else:
                         raise RuntimeError(f"HKMC device {ss_device['id']} not connected")
+                elif ss_device["type"] == "icas_agent":
+                    icas_svc = self.dm.get_icas_service(ss_device["id"])
+                    if icas_svc:
+                        img_bytes = await icas_svc.async_screencap_bytes(
+                            screen_type=ss_device.get("screen_type", "HU"), fmt="png"
+                        )
+                        Path(actual_path).write_bytes(img_bytes)
+                    else:
+                        raise RuntimeError(f"ICAS device {ss_device['id']} not connected")
                 elif ss_device["type"] == "vision_camera":
                     cam = self.dm.get_vision_camera(ss_device["id"])
                     if cam:
@@ -1150,6 +1159,46 @@ class PlaybackService:
                             return
                 dev.status = "disconnected"
 
+        elif dev.type == "icas_agent":
+            icas = self.dm.get_icas_service(device_id)
+            if icas and icas.is_connected:
+                return
+            from .icas_agent_service import ICASAgentService
+            lock = self.dm.get_reconnect_lock(device_id)
+            async with lock:
+                icas = self.dm.get_icas_service(device_id)
+                if icas and icas.is_connected:
+                    return
+                for attempt in range(1, max_retries + 1):
+                    if self._should_stop:
+                        return
+                    logger.info("Playback: ICAS reconnect %s attempt %d/%d", device_id, attempt, max_retries)
+                    try:
+                        svc = ICASAgentService(
+                            dev.address,
+                            port=int(dev.info.get("port", 22) or 22),
+                            device_id=dev.id,
+                            username=dev.info.get("username", "root") or "root",
+                            password=dev.info.get("password", "") or "",
+                            resolution=dev.info.get("resolution", "1560x700") or "1560x700",
+                            key_overrides=dev.info.get("icas_keys"),
+                        )
+                        ok = await svc.async_connect()
+                        if ok:
+                            self.dm._icas_conns[dev.id] = svc
+                            self.dm._icas_reconnect_attempts.pop(dev.id, None)
+                            dev.status = "connected"
+                            dev.info["agent_version"] = svc.agent_version
+                            dev.info["screens"] = svc.get_info()["screens"]
+                            logger.info("Playback: ICAS reconnected %s", device_id)
+                            return
+                    except Exception as e:
+                        logger.debug("Playback: ICAS reconnect %s failed: %s", device_id, e)
+                    if attempt < max_retries:
+                        if await self._interruptible_sleep(retry_interval):
+                            return
+                dev.status = "disconnected"
+
         elif dev.type == "adb":
             # 먼저 현재 상태 확인
             try:
@@ -1206,24 +1255,30 @@ class PlaybackService:
         return self._resolve_alias(step.device_id, self._device_map)
 
     def _is_hkmc_device(self, device_id: Optional[str]) -> bool:
-        """디바이스가 HKMC/iSAP 에이전트 TCP 프로토콜 타입인지 확인."""
+        """디바이스가 HKMC/iSAP/ICAS 에이전트 타입인지 확인 (touch/swipe/key 라우팅용)."""
         if not device_id:
             return False
         dev = self.dm.get_device(device_id)
-        return dev is not None and dev.type in ("hkmc_agent", "isap_agent")
+        return dev is not None and dev.type in ("hkmc_agent", "isap_agent", "icas_agent")
 
     def _get_agent_service(self, device_id: Optional[str]):
-        """Return (svc, is_isap) for hkmc6th 또는 isap_agent device, or (None, False)."""
+        """Return (svc, kind) where kind ∈ {"hkmc", "isap", "icas", None}.
+
+        기존 호출부는 `svc, is_isap = ...` 형태인데 ICAS 지원을 위해 kind 문자열을
+        반환하도록 확장. 기존 is_isap 사용처는 `kind == "isap"`와 동치.
+        """
         if not device_id:
-            return None, False
+            return None, None
         dev = self.dm.get_device(device_id)
         if not dev:
-            return None, False
+            return None, None
         if dev.type == "isap_agent":
-            return self.dm.get_isap_service(device_id), True
+            return self.dm.get_isap_service(device_id), "isap"
         if dev.type == "hkmc_agent":
-            return self.dm.get_hkmc_service(device_id), False
-        return None, False
+            return self.dm.get_hkmc_service(device_id), "hkmc"
+        if dev.type == "icas_agent":
+            return self.dm.get_icas_service(device_id), "icas"
+        return None, None
 
     def _resolve_screenshot_device(self, step: Step) -> Optional[dict]:
         """Resolve which device to take screenshots from.
@@ -1255,6 +1310,9 @@ class PlaybackService:
                 if ss_dev.type == "isap_agent":
                     screen_type = step.screen_type or step.params.get("screen_type", "front_center")
                     return {"type": "isap_agent", "id": ss_dev.id, "screen_type": screen_type}
+                if ss_dev.type == "icas_agent":
+                    screen_type = step.screen_type or step.params.get("screen_type", "HU")
+                    return {"type": "icas_agent", "id": ss_dev.id, "screen_type": screen_type}
                 if ss_dev.type == "vision_camera":
                     return {"type": "vision_camera", "id": ss_dev.id}
                 if ss_dev.type == "webcam":
@@ -1278,6 +1336,9 @@ class PlaybackService:
             elif dev and dev.type == "isap_agent":
                 screen_type = step.screen_type or step.params.get("screen_type", "front_center")
                 return {"type": "isap_agent", "id": dev.id, "screen_type": screen_type}
+            elif dev and dev.type == "icas_agent":
+                screen_type = step.screen_type or step.params.get("screen_type", "HU")
+                return {"type": "icas_agent", "id": dev.id, "screen_type": screen_type}
             elif dev and dev.type == "vision_camera":
                 return {"type": "vision_camera", "id": dev.id}
             elif dev and dev.type == "webcam":
@@ -1405,14 +1466,18 @@ class PlaybackService:
             )
         elif step.type in (StepType.HKMC_TOUCH, StepType.HKMC_SWIPE, StepType.HKMC_KEY) or (step.type == StepType.REPEAT_TAP and self._is_hkmc_device(real_id)):
             if not real_id:
-                raise ValueError("HKMC/iSAP step requires device_id")
+                raise ValueError("HKMC/iSAP/ICAS step requires device_id")
             # 액션 실행 중 연결 끊김 시 재연결 후 재시도 (최대 2회)
             for _hkmc_attempt in range(2):
-                svc, is_isap = self._get_agent_service(real_id)
+                svc, kind = self._get_agent_service(real_id)
+                is_isap = kind == "isap"
+                is_icas = kind == "icas"
                 if not svc or not svc.is_connected:
-                    raise ValueError(f"HKMC/iSAP device {real_id} not connected")
+                    raise ValueError(f"Agent device {real_id} not connected")
                 try:
-                    screen_type = step.screen_type or params.get("screen_type", "front_center")
+                    # ICAS 기본 화면은 HU, HKMC/iSAP은 front_center
+                    default_screen = "HU" if is_icas else "front_center"
+                    screen_type = step.screen_type or params.get("screen_type", default_screen)
                     if step.type == StepType.REPEAT_TAP:
                         await svc.async_repeat_tap(params["x"], params["y"],
                                                    int(params.get("count", 5)),
@@ -1420,9 +1485,10 @@ class PlaybackService:
                     elif step.type == StepType.HKMC_TOUCH:
                         await svc.async_tap(params["x"], params["y"], screen_type)
                     elif step.type == StepType.HKMC_SWIPE:
-                        if is_isap:
+                        if is_isap or is_icas:
+                            # ICAS/iSAP: duration_ms 포함 시그니처
                             await svc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"],
-                                                  screen_type, int(params.get("duration_ms", 0)))
+                                                  screen_type, int(params.get("duration_ms", 300)))
                         else:
                             await svc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"], screen_type)
                     elif step.type == StepType.HKMC_KEY:
@@ -1430,16 +1496,17 @@ class PlaybackService:
                         direction = params.get("direction")
                         if key_name:
                             sub_cmd = params.get("sub_cmd", 0x43)
-                            if is_isap:
+                            if is_isap or is_icas:
+                                # iSAP/ICAS: (key_name, sub_cmd, screen_type, direction)
                                 await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, direction)
                             else:
                                 monitor = params.get("monitor", 0x00)
                                 await svc.async_send_key_by_name(key_name, sub_cmd, monitor, direction, screen_type)
                         else:
-                            if is_isap:
+                            if is_isap or is_icas:
                                 await svc.async_send_key(
-                                    params["cmd"], params["sub_cmd"], params["key_data"],
-                                    screen_type, direction,
+                                    params.get("cmd", 0), params["sub_cmd"], params["key_data"],
+                                    screen_type if is_isap else 0x00, direction,
                                 )
                             else:
                                 await svc.async_send_key(
@@ -1449,7 +1516,7 @@ class PlaybackService:
                     break  # 성공 시 루프 탈출
                 except (ConnectionError, OSError) as ce:
                     if _hkmc_attempt == 0:
-                        logger.warning("HKMC/iSAP action failed (connection lost), reconnecting: %s", ce)
+                        logger.warning("Agent action failed (connection lost), reconnecting: %s", ce)
                         await self._ensure_device_connected(real_id, max_retries=2, retry_interval=2.0)
                     else:
                         raise  # 재시도 후에도 실패 → 상위 except에서 "error" 처리
@@ -1468,13 +1535,14 @@ class PlaybackService:
                 candidate_ids.append(step.device_id)
 
             svc = None
-            is_isap = False
+            kind = None
             used_id = real_id
             for cand in candidate_ids:
-                svc, is_isap = self._get_agent_service(cand)
+                svc, kind = self._get_agent_service(cand)
                 if svc and svc.is_connected:
                     used_id = cand
                     break
+            is_isap = kind == "isap"
 
             if not svc or not svc.is_connected:
                 # 재연결 시도: 후보 중 하나라도 디바이스로 인식되면 ensure 호출
@@ -1482,9 +1550,10 @@ class PlaybackService:
                     if self.dm.get_device(cand):
                         logger.info("all_random: device %s not connected, trying reconnect", cand)
                         await self._ensure_device_connected(cand, max_retries=2, retry_interval=2.0)
-                        svc, is_isap = self._get_agent_service(cand)
+                        svc, kind = self._get_agent_service(cand)
                         if svc and svc.is_connected:
                             used_id = cand
+                            is_isap = kind == "isap"
                             break
                 # 여전히 안 되면 진단성 있는 에러 메시지
                 if not svc or not svc.is_connected:

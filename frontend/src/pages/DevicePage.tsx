@@ -230,7 +230,7 @@ export default function DevicePage() {
   const [forceIpSubnet, setForceIpSubnet] = useState('255.255.255.0');
   const [forceIpGateway, setForceIpGateway] = useState('0.0.0.0');
   const [forceIpLoading, setForceIpLoading] = useState(false);
-  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc_agent' | 'isap_agent' | 'vision_camera' | 'webcam' | 'ssh'>('adb');
+  const [connectType, setConnectType] = useState<'adb' | 'serial' | 'module' | 'hkmc_agent' | 'isap_agent' | 'icas_agent' | 'vision_camera' | 'webcam' | 'ssh'>('adb');
   const [connectAddress, setConnectAddress] = useState('');
   const [baudrate, setBaudrate] = useState(115200);
   const [connecting, setConnecting] = useState(false);
@@ -608,8 +608,15 @@ export default function DevicePage() {
           extra[f.name] = extraFieldValues[f.name] ?? f.default ?? '';
         }
       }
-      const tcpPort = (devType === 'hkmc_agent' || devType === 'isap_agent') ? hkmcPort : undefined;
-      const model = (devType === 'adb' || devType === 'hkmc_agent' || devType === 'isap_agent') ? (deviceModel || undefined) : undefined;
+      const tcpPort = (devType === 'hkmc_agent' || devType === 'isap_agent' || devType === 'icas_agent') ? hkmcPort : undefined;
+      const model = (devType === 'adb' || devType === 'hkmc_agent' || devType === 'isap_agent' || devType === 'icas_agent') ? (deviceModel || undefined) : undefined;
+      // ICAS Agent는 SSH 자격증명이 필요 — extra_fields로 전달
+      if (devType === 'icas_agent') {
+        extra = extra || {};
+        extra.username = (sshUser && sshUser.trim()) || 'root';
+        extra.password = sshPass || '';
+        extra.resolution = '1560x700';
+      }
       const result = await connectDevice(devType, connectAddress.trim(), baudrate, '', modalCategory, selectedModule, moduleConnType, extra, '', tcpPort, model);
       message.success(result);
       setConnectAddress('');
@@ -1573,6 +1580,7 @@ export default function DevicePage() {
                         <Option value="adb">ADB (WiFi / TCP)</Option>
                         {modalCategory === 'primary' && <Option value="hkmc_agent">HKMC Agent (TCP)</Option>}
                         {modalCategory === 'primary' && <Option value="isap_agent">iSAP Agent (TCP)</Option>}
+                        {modalCategory === 'primary' && <Option value="icas_agent">ICAS Agent (SSH)</Option>}
                         {modalCategory === 'primary' && <Option value="vision_camera">Vision Camera</Option>}
                         {modalCategory === 'primary' && <Option value="webcam">{t('device.webcam')}</Option>}
                         <Option value="serial">{t('device.serialPort')}</Option>
@@ -1660,6 +1668,33 @@ export default function DevicePage() {
                           <span style={{ fontSize: 11, color: '#888', marginLeft: 8 }}>
                             20000=전석, 20003=클러스터, 20004=HUD
                           </span>
+                        </div>
+                      </>
+                    )}
+
+                    {!selectedModule && connectType === 'icas_agent' && (
+                      <>
+                        <Input
+                          placeholder="ICAS IP (예: 192.168.1.4)"
+                          value={connectAddress}
+                          onChange={(e) => setConnectAddress(e.target.value)}
+                          onPressEnter={handleConnect}
+                        />
+                        <Space wrap>
+                          <span style={{ fontSize: 12, color: '#888' }}>SSH Port:</span>
+                          <InputNumber
+                            value={hkmcPort}
+                            onChange={(v) => setHkmcPort(v || 22)}
+                            min={1} max={65535}
+                            style={{ width: 100 }}
+                          />
+                          <span style={{ fontSize: 12, color: '#888' }}>User:</span>
+                          <Input value={sshUser} onChange={(e) => setSshUser(e.target.value)} style={{ width: 120 }} placeholder="root" />
+                          <span style={{ fontSize: 12, color: '#888' }}>Password:</span>
+                          <Input.Password value={sshPass} onChange={(e) => setSshPass(e.target.value)} style={{ width: 160 }} placeholder="(blank if none)" />
+                        </Space>
+                        <div style={{ fontSize: 11, color: '#888' }}>
+                          해상도는 1560x700(10") 또는 2240x1260(15") 중 선택 — 등록 후 수정 모달에서 변경 가능
                         </div>
                       </>
                     )}

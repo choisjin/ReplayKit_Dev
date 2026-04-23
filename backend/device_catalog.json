@@ -136,7 +136,8 @@
       "models": [
         {
           "value": "ICAS EU",
-          "enabled": true
+          "enabled": true,
+          "agent": "ICAS Agent"
         }
       ]
     }
@@ -176,6 +177,11 @@
     {
       "name": "iSAP Agent",
       "type": "isap_agent",
+      "enabled": true
+    },
+    {
+      "name": "ICAS Agent",
+      "type": "icas_agent",
       "enabled": true
     },
     {

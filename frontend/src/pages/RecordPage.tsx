@@ -1299,6 +1299,11 @@ export default function RecordPage() {
       return;
     }
     setTestingStepIndex(stepIdx);
+    // 진행 중인 addStep이 있으면 완료 대기 (step_index 불일치 에러 회피)
+    const _startMs = Date.now();
+    while (pendingStepsRef.current > 0 && Date.now() - _startMs < 3000) {
+      await new Promise(r => setTimeout(r, 20));
+    }
     // 라이브 스크린 미러와 test-step이 동일 HKMC 에이전트의 _capture_lock을 두고 경쟁하면
     // 백엔드가 오래된 캡처 버퍼를 반환할 수 있다. 테스트 동안 스트림을 일시정지한다.
     pauseScreenStream();
@@ -2177,6 +2182,14 @@ export default function RecordPage() {
   // syncFrontendStepsToBackend가 recording/editingExisting 분기를 일원화 처리한다.
   const ensureSavedForImageOp = async (): Promise<boolean> => {
     if (!scenarioName.trim()) return true;
+    // 진행 중인 addStep이 있으면 완료 대기 — backend scenario.steps가 아직 갱신되지
+    // 않은 상태에서 step_index 기반 API(capture/save/remove 등)가 호출되면
+    // "Invalid step index" 에러가 발생함.
+    const maxWaitMs = 3000;
+    const startMs = Date.now();
+    while (pendingStepsRef.current > 0 && Date.now() - startMs < maxWaitMs) {
+      await new Promise(r => setTimeout(r, 20));
+    }
     // 변경사항 없고 녹화도 아니면 스킵 (최적화)
     if (!recording && !isDirty()) return true;
     return await syncFrontendStepsToBackend();
