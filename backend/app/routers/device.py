@@ -34,6 +34,7 @@ _DEFAULT_SCAN_SETTINGS = {
         "serial":         {"enabled": True,  "module": "SerialLogging","category": "auxiliary"},
         "hkmc":           {"enabled": True,  "module": "",             "category": "primary",   "ports": [6655, 5000]},
         "isap":           {"enabled": False, "module": "",             "category": "primary",   "ports": [20000]},
+        "icas":           {"enabled": True,  "module": "",             "category": "primary",   "port": 22},
         "dlt":            {"enabled": True,  "module": "DLTLogging",   "category": "auxiliary", "ports": [3490]},
         "bench":          {"enabled": True,  "module": "WoohyunBench", "category": "auxiliary", "ports": [25000]},
         "vision_camera":  {"enabled": False, "module": "VisionCamera", "category": "primary"},
@@ -52,17 +53,21 @@ def _load_scan_settings() -> dict:
         try:
             data = _json.loads(_SCAN_SETTINGS_FILE.read_text(encoding="utf-8"))
             # 레거시 모듈 이름 마이그레이션: CCIC_BENCH → WoohyunBench
-            builtin = data.get("builtin", {})
+            builtin = data.setdefault("builtin", {})
             for key, entry in builtin.items():
                 if isinstance(entry, dict) and entry.get("module") == "CCIC_BENCH":
                     entry["module"] = "WoohyunBench"
             for entry in data.get("custom", []) or []:
                 if isinstance(entry, dict) and entry.get("module") == "CCIC_BENCH":
                     entry["module"] = "WoohyunBench"
+            # 새로 추가된 기본 스캔 항목 자동 주입 (누락 키만 보충 — 사용자 수정값 유지)
+            for key, default_entry in _DEFAULT_SCAN_SETTINGS["builtin"].items():
+                if key not in builtin:
+                    builtin[key] = dict(default_entry)
             return data
         except Exception:
             pass
-    return dict(_DEFAULT_SCAN_SETTINGS)
+    return _json.loads(_json.dumps(_DEFAULT_SCAN_SETTINGS))  # deep copy
 
 
 def _save_scan_settings(settings: dict) -> None:
@@ -337,6 +342,13 @@ async def scan_ports():
         ssh_entry = builtin.get("ssh", {}) if isinstance(builtin.get("ssh"), dict) else {}
         ssh_port = int(ssh_entry.get("port", 22))
         tasks["ssh_hosts"] = asyncio.ensure_future(dm.scan_ssh(ssh_port))
+    if _enabled("icas"):
+        icas_entry = builtin.get("icas", {}) if isinstance(builtin.get("icas"), dict) else {}
+        try:
+            icas_port = int(icas_entry.get("port", 22))
+        except (TypeError, ValueError):
+            icas_port = 22
+        tasks["icas_hosts"] = asyncio.ensure_future(dm.scan_icas(icas_port))
 
     # 커스텀 TCP/UDP 포트 스캔
     custom_tasks: list[tuple[str, asyncio.Task]] = []
@@ -367,6 +379,7 @@ async def scan_ports():
         "vision_cameras": [],
         "webcams": [],
         "isap_hosts": [],
+        "icas_hosts": [],
         "dlt_devices": [],
         "smartbench_devices": [],
         "ssh_hosts": [],

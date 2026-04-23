@@ -216,6 +216,7 @@ export default function DevicePage() {
   const [scannedSerial, setScannedSerial] = useState<SerialPort[]>([]);
   const [scannedHkmc, setScannedHkmc] = useState<{ ip: string; port: number; raw: string }[]>([]);
   const [scannedIsap, setScannedIsap] = useState<{ ip: string; port: number }[]>([]);
+  const [scannedIcas, setScannedIcas] = useState<{ ip: string; port: number }[]>([]);
   const [scannedBench, setScannedBench] = useState<{ ip: string; port: number; verified?: boolean }[]>([]);
   const [scannedVision, setScannedVision] = useState<{ id: string; mac: string; model: string; serial: string; vendor: string; tl_type: string; ip: string; subnet?: string; gateway?: string }[]>([]);
   const [scannedWebcams, setScannedWebcams] = useState<{ index: number; label: string; width: number; height: number; already_registered?: boolean; in_use_by_recording?: boolean }[]>([]);
@@ -363,7 +364,7 @@ export default function DevicePage() {
 
   // key → category 해석 (값 없으면 기본 정책 적용)
   const _defaultCategoryForKey = (key: string): ScanCategory => {
-    const primaryKeys = new Set(['adb', 'hkmc', 'isap', 'vision_camera', 'webcam']);
+    const primaryKeys = new Set(['adb', 'hkmc', 'isap', 'icas', 'vision_camera', 'webcam']);
     return primaryKeys.has(key) ? 'primary' : 'auxiliary';
   };
   const scanItemCategory = (key: string): ScanCategory =>
@@ -474,6 +475,7 @@ export default function DevicePage() {
     setScannedSerial([]);
     setScannedHkmc([]);
     setScannedIsap([]);
+    setScannedIcas([]);
     setScannedBench([]);
     setScannedVision([]);
     setScannedWebcams([]);
@@ -495,6 +497,7 @@ export default function DevicePage() {
       setScannedSerial(res.data.serial_ports || []);
       setScannedHkmc(res.data.hkmc_devices || []);
       setScannedIsap(res.data.isap_hosts || []);
+      setScannedIcas(res.data.icas_hosts || []);
       setScannedBench(res.data.bench_devices || []);
       setScannedVision(res.data.vision_cameras || []);
       setScannedWebcams(res.data.webcams || []);
@@ -1186,6 +1189,35 @@ export default function DevicePage() {
                                 <Button size="small" type="primary" loading={connecting} disabled={primaryProjectModelMissing} title={primaryProjectModelMissing ? '프로젝트·모델을 먼저 선택하세요' : undefined} onClick={() => handleAddIsap(d.ip, d.port)}>{t('common.add')}</Button>
                               ]}>
                                 <Tag color="geekblue">iSAP</Tag> <Tag color="blue">{d.ip}</Tag> <span style={{ color: '#888' }}>TCP: {d.port}</span>
+                              </List.Item>
+                            )}
+                          />
+                        ),
+                      });
+                    }
+
+                    if (scanItemCategory('icas') === modalCategory && scannedIcas.length > 0) {
+                      scanTabs.push({
+                        key: 'icas',
+                        label: <span>{t('device.detectedIcas')} <Tag style={{ marginLeft: 4 }}>{scannedIcas.length}</Tag></span>,
+                        children: (
+                          <List
+                            size="small"
+                            dataSource={scannedIcas}
+                            pagination={scannedIcas.length > PAGE_SIZE ? { pageSize: PAGE_SIZE, size: 'small' } : false}
+                            renderItem={(h) => (
+                              <List.Item actions={[
+                                <Button size="small" type="primary" onClick={() => {
+                                  setConnectType('icas_agent');
+                                  setConnectAddress(h.ip);
+                                  setHkmcPort(h.port);
+                                  if (modalCategory === 'primary') {
+                                    setDeviceProject('ICAS');
+                                  }
+                                  setModalTabKey('manual');
+                                }}>{t('common.connect')}</Button>
+                              ]}>
+                                <Tag color="purple">ICAS</Tag> <Tag color="blue">{h.ip}</Tag> <span style={{ color: '#888' }}>SSH: {h.port}</span>
                               </List.Item>
                             )}
                           />
@@ -2015,113 +2047,141 @@ export default function DevicePage() {
         cancelText={t('common.cancel')}
         width={620}
       >
-        {/* 기본 + 커스텀 통합 테이블 */}
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: '2px solid #d9d9d9', textAlign: 'left' }}>
-              <th style={{ padding: '6px 4px', width: 40 }}></th>
-              <th style={{ padding: '6px 4px' }}>{t('common.name')}</th>
-              <th style={{ padding: '6px 4px', width: 80 }}>Protocol</th>
-              <th style={{ padding: '6px 4px', width: 100 }}>Category</th>
-              <th style={{ padding: '6px 4px', width: 90 }}>Port</th>
-              <th style={{ padding: '6px 4px', width: 140 }}>Module</th>
-              <th style={{ padding: '6px 4px', width: 40 }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* 기본 스캔 항목 */}
-            {[
-              { key: 'adb', label: 'ADB', proto: 'USB/WiFi', editablePorts: false },
-              { key: 'serial', label: 'Serial', proto: 'COM', editablePorts: false },
-              { key: 'hkmc', label: 'HKMC', proto: 'TCP', editablePorts: true },
-              { key: 'isap', label: 'iSAP Agent', proto: 'TCP', editablePorts: true },
-              { key: 'dlt', label: 'DLT', proto: 'TCP', editablePorts: true },
-              { key: 'bench', label: 'WoohyunBench', proto: 'UDP', editablePorts: true },
-              { key: 'vision_camera', label: 'Vision Camera', proto: 'GigE', editablePorts: false },
-              { key: 'webcam', label: 'Webcam', proto: 'USB', editablePorts: false },
-              { key: 'ssh', label: 'SSH', proto: 'TCP', editablePorts: false },
-              { key: 'smartbench', label: 'SmartBench', proto: 'TCP', editablePorts: false },
-            ].map(item => {
-              const v = scanBuiltin[item.key] || { enabled: true, module: '' };
-              const portsStr = v.ports && v.ports.length > 0 ? v.ports.join(',') : '';
-              const portLabel = item.key === 'ssh'
-                ? String(v.port ?? 22)
-                : (item.editablePorts ? portsStr : '-');
-              return (
-                <tr key={item.key} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                  <td style={{ padding: '4px' }}>
-                    <Checkbox checked={v.enabled !== false}
-                      onChange={e => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, enabled: e.target.checked } })} />
-                  </td>
-                  <td style={{ padding: '4px' }}>{item.label}</td>
-                  <td style={{ padding: '4px' }}><Tag>{item.proto}</Tag></td>
-                  <td style={{ padding: '4px' }}>
-                    <Select size="small"
-                      value={(v.category as ScanCategory) || _defaultCategoryForKey(item.key)}
-                      onChange={(cat) => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, category: cat } })}
-                      style={{ width: '100%' }}
-                      options={[
-                        { label: '주', value: 'primary' },
-                        { label: '보조', value: 'auxiliary' },
-                      ]}
+        {(() => {
+          // 스캔 설정 UI — 주/보조를 두 섹션으로 명확히 구분, 각 섹션은 연결방식→이름 순으로 정렬
+          const builtinItems = [
+            { key: 'adb',            label: 'ADB',            proto: 'USB/WiFi', editablePorts: false },
+            { key: 'serial',         label: 'Serial',         proto: 'COM',      editablePorts: false },
+            { key: 'hkmc',           label: 'HKMC',           proto: 'TCP',      editablePorts: true  },
+            { key: 'isap',           label: 'iSAP Agent',     proto: 'TCP',      editablePorts: true  },
+            { key: 'icas',           label: 'ICAS Agent',     proto: 'SSH',      editablePorts: false },
+            { key: 'dlt',            label: 'DLT',            proto: 'TCP',      editablePorts: true  },
+            { key: 'bench',          label: 'WoohyunBench',   proto: 'UDP',      editablePorts: true  },
+            { key: 'vision_camera',  label: 'Vision Camera',  proto: 'GigE',     editablePorts: false },
+            { key: 'webcam',         label: 'Webcam',         proto: 'USB',      editablePorts: false },
+            { key: 'ssh',            label: 'SSH',            proto: 'TCP',      editablePorts: false },
+            { key: 'smartbench',     label: 'SmartBench',     proto: 'TCP',      editablePorts: false },
+          ];
+          type BuiltinItem = typeof builtinItems[number];
+          type CustomItem = { label: string; type: string; port: number; module?: string; enabled?: boolean; category?: ScanCategory; __idx: number; __kind: 'custom' };
+          type BuiltinRow = BuiltinItem & { __kind: 'builtin' };
+          type Row = BuiltinRow | CustomItem;
+
+          const resolvedCategory = (r: Row): ScanCategory => {
+            if (r.__kind === 'builtin') {
+              const v = scanBuiltin[r.key] || {};
+              return (v.category as ScanCategory) || _defaultCategoryForKey(r.key);
+            }
+            return (r.category as ScanCategory) || 'auxiliary';
+          };
+          const protoOf = (r: Row): string =>
+            r.__kind === 'builtin' ? r.proto : r.type.toUpperCase();
+          const labelOf = (r: Row): string => r.label;
+
+          const allRows: Row[] = [
+            ...builtinItems.map<BuiltinRow>(b => ({ ...b, __kind: 'builtin' as const })),
+            ...scanCustom.map<CustomItem>((c, idx) => ({ ...c, __kind: 'custom' as const, __idx: idx })),
+          ];
+          const sortRows = (rows: Row[]) =>
+            rows.slice().sort((a, b) => {
+              const p = protoOf(a).localeCompare(protoOf(b));
+              if (p !== 0) return p;
+              return labelOf(a).localeCompare(labelOf(b));
+            });
+          const primaryRows = sortRows(allRows.filter(r => resolvedCategory(r) === 'primary'));
+          const auxiliaryRows = sortRows(allRows.filter(r => resolvedCategory(r) === 'auxiliary'));
+
+          const renderBuiltinRow = (item: BuiltinItem) => {
+            const v = scanBuiltin[item.key] || { enabled: true, module: '' };
+            const portsStr = v.ports && v.ports.length > 0 ? v.ports.join(',') : '';
+            const portLabel = (item.key === 'ssh' || item.key === 'icas')
+              ? String(v.port ?? 22)
+              : (item.editablePorts ? portsStr : '-');
+            return (
+              <tr key={`b_${item.key}`} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <td style={{ padding: '4px' }}>
+                  <Checkbox checked={v.enabled !== false}
+                    onChange={e => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, enabled: e.target.checked } })} />
+                </td>
+                <td style={{ padding: '4px' }}>{item.label}</td>
+                <td style={{ padding: '4px' }}><Tag>{item.proto}</Tag></td>
+                <td style={{ padding: '4px' }}>
+                  <Select size="small"
+                    value={(v.category as ScanCategory) || _defaultCategoryForKey(item.key)}
+                    onChange={(cat) => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, category: cat } })}
+                    style={{ width: '100%' }}
+                    options={[
+                      { label: '주', value: 'primary' },
+                      { label: '보조', value: 'auxiliary' },
+                    ]}
+                  />
+                </td>
+                <td style={{ padding: '4px' }}>
+                  {item.editablePorts ? (
+                    <Input
+                      size="small"
+                      value={portsStr}
+                      placeholder={t('device.portsPlaceholder')}
+                      onChange={e => {
+                        const ports = e.target.value
+                          .split(/[,\s]+/)
+                          .map(p => parseInt(p.trim(), 10))
+                          .filter(p => !isNaN(p) && p > 0 && p < 65536);
+                        setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, ports } });
+                      }}
                     />
-                  </td>
-                  <td style={{ padding: '4px' }}>
-                    {item.editablePorts ? (
+                  ) : item.key === 'smartbench' ? (
+                    <Space.Compact size="small" style={{ width: '100%' }}>
                       <Input
                         size="small"
-                        value={portsStr}
-                        placeholder={t('device.portsPlaceholder')}
-                        onChange={e => {
-                          const ports = e.target.value
-                            .split(/[,\s]+/)
-                            .map(p => parseInt(p.trim(), 10))
-                            .filter(p => !isNaN(p) && p > 0 && p < 65536);
-                          setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, ports } });
-                        }}
+                        value={v.host ?? '192.167.0.5'}
+                        placeholder="host"
+                        style={{ flex: 1 }}
+                        onChange={e => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, host: e.target.value } })}
                       />
-                    ) : item.key === 'smartbench' ? (
-                      <Space.Compact size="small" style={{ width: '100%' }}>
-                        <Input
-                          size="small"
-                          value={v.host ?? '192.167.0.5'}
-                          placeholder="host"
-                          style={{ flex: 1 }}
-                          onChange={e => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, host: e.target.value } })}
-                        />
-                        <InputNumber
-                          size="small"
-                          min={1} max={65535}
-                          value={v.port ?? 8000}
-                          placeholder="port"
-                          style={{ width: 80 }}
-                          onChange={p => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, port: p ?? 8000 } })}
-                        />
-                      </Space.Compact>
-                    ) : portLabel}
-                  </td>
-                  <td style={{ padding: '4px' }}>
-                    <Select size="small" allowClear placeholder="-" value={v.module || undefined}
-                      onChange={val => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, module: val || '' } })}
-                      style={{ width: '100%' }} options={visibleModules.map(m => ({ label: m.label, value: m.name }))} />
-                  </td>
-                  <td></td>
-                </tr>
-              );
-            })}
-            {/* 커스텀 스캔 항목 */}
-            {scanCustom.map((entry, idx) => (
+                      <InputNumber
+                        size="small"
+                        min={1} max={65535}
+                        value={v.port ?? 8000}
+                        placeholder="port"
+                        style={{ width: 80 }}
+                        onChange={p => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, port: p ?? 8000 } })}
+                      />
+                    </Space.Compact>
+                  ) : (item.key === 'ssh' || item.key === 'icas') ? (
+                    <InputNumber
+                      size="small"
+                      min={1} max={65535}
+                      value={v.port ?? 22}
+                      style={{ width: '100%' }}
+                      onChange={p => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, port: p ?? 22 } })}
+                    />
+                  ) : portLabel}
+                </td>
+                <td style={{ padding: '4px' }}>
+                  <Select size="small" allowClear placeholder="-" value={v.module || undefined}
+                    onChange={val => setScanBuiltin({ ...scanBuiltin, [item.key]: { ...v, module: val || '' } })}
+                    style={{ width: '100%' }} options={visibleModules.map(m => ({ label: m.label, value: m.name }))} />
+                </td>
+                <td></td>
+              </tr>
+            );
+          };
+
+          const renderCustomRow = (entry: CustomItem) => {
+            const idx = entry.__idx;
+            return (
               <tr key={`c_${idx}`} style={{ borderBottom: '1px solid #f0f0f0' }}>
                 <td style={{ padding: '4px' }}>
-                  <Checkbox checked={entry.enabled}
-                    onChange={e => { const n = [...scanCustom]; n[idx] = { ...entry, enabled: e.target.checked }; setScanCustom(n); }} />
+                  <Checkbox checked={entry.enabled !== false}
+                    onChange={e => { const n = [...scanCustom]; n[idx] = { ...scanCustom[idx], enabled: e.target.checked }; setScanCustom(n); }} />
                 </td>
                 <td style={{ padding: '4px' }}>{entry.label}</td>
                 <td style={{ padding: '4px' }}><Tag color={entry.type === 'udp' ? 'orange' : 'blue'}>{entry.type.toUpperCase()}</Tag></td>
                 <td style={{ padding: '4px' }}>
                   <Select size="small"
                     value={(entry.category as ScanCategory) || 'auxiliary'}
-                    onChange={(cat) => { const n = [...scanCustom]; n[idx] = { ...entry, category: cat }; setScanCustom(n); }}
+                    onChange={(cat) => { const n = [...scanCustom]; n[idx] = { ...scanCustom[idx], category: cat }; setScanCustom(n); }}
                     style={{ width: '100%' }}
                     options={[
                       { label: '주', value: 'primary' },
@@ -2132,7 +2192,7 @@ export default function DevicePage() {
                 <td style={{ padding: '4px' }}>{entry.port}</td>
                 <td style={{ padding: '4px' }}>
                   <Select size="small" allowClear placeholder="-" value={entry.module || undefined}
-                    onChange={val => { const n = [...scanCustom]; n[idx] = { ...entry, module: val || '' }; setScanCustom(n); }}
+                    onChange={val => { const n = [...scanCustom]; n[idx] = { ...scanCustom[idx], module: val || '' }; setScanCustom(n); }}
                     style={{ width: '100%' }} options={visibleModules.map(m => ({ label: m.label, value: m.name }))} />
                 </td>
                 <td style={{ padding: '4px' }}>
@@ -2140,38 +2200,77 @@ export default function DevicePage() {
                     onClick={() => setScanCustom(scanCustom.filter((_, i) => i !== idx))} />
                 </td>
               </tr>
-            ))}
-            {/* 추가 행 */}
-            <tr style={{ borderTop: '1px solid #d9d9d9' }}>
-              <td></td>
-              <td style={{ padding: '4px' }}>
-                <Input size="small" placeholder={t('device.customLabel')} value={newCustomLabel}
-                  onChange={e => setNewCustomLabel(e.target.value)} />
-              </td>
-              <td style={{ padding: '4px' }}>
-                <Select size="small" value={newCustomType} onChange={setNewCustomType} style={{ width: '100%' }}
-                  options={[{ label: 'TCP', value: 'tcp' }, { label: 'UDP', value: 'udp' }]} />
-              </td>
-              <td style={{ padding: '4px' }}>
-                <Select size="small" value={newCustomCategory} onChange={setNewCustomCategory} style={{ width: '100%' }}
-                  options={[{ label: '주', value: 'primary' }, { label: '보조', value: 'auxiliary' }]} />
-              </td>
-              <td style={{ padding: '4px' }}>
-                <InputNumber size="small" placeholder="Port" value={newCustomPort}
-                  onChange={v => setNewCustomPort(v)} min={1} max={65535} style={{ width: '100%' }} />
-              </td>
-              <td style={{ padding: '4px' }}>
-                <Select size="small" allowClear placeholder="Module" value={newCustomModule || undefined}
-                  onChange={v => setNewCustomModule(v || '')} style={{ width: '100%' }}
-                  options={visibleModules.map(m => ({ label: m.label, value: m.name }))} />
-              </td>
-              <td style={{ padding: '4px' }}>
-                <Button size="small" type="primary" icon={<PlusOutlined />}
-                  onClick={addCustomScan} disabled={!newCustomPort} />
-              </td>
-            </tr>
-          </tbody>
-        </table>
+            );
+          };
+
+          const renderRow = (r: Row) =>
+            r.__kind === 'builtin' ? renderBuiltinRow(r) : renderCustomRow(r);
+
+          const renderSection = (title: string, rows: Row[], color: string) => (
+            <tbody>
+              <tr>
+                <td colSpan={7} style={{ padding: '8px 4px 4px', fontWeight: 600, fontSize: 12, color, borderTop: '1px solid #d9d9d9' }}>
+                  <Tag color={color === '#1677ff' ? 'blue' : 'default'}>{title}</Tag>
+                  <span style={{ color: '#888', fontWeight: 400, marginLeft: 4 }}>({rows.length})</span>
+                </td>
+              </tr>
+              {rows.length === 0 ? (
+                <tr><td colSpan={7} style={{ padding: '6px 8px', color: '#bbb', fontSize: 12 }}>—</td></tr>
+              ) : (
+                rows.map(r => renderRow(r))
+              )}
+            </tbody>
+          );
+
+          return (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #d9d9d9', textAlign: 'left' }}>
+                  <th style={{ padding: '6px 4px', width: 40 }}></th>
+                  <th style={{ padding: '6px 4px' }}>{t('common.name')}</th>
+                  <th style={{ padding: '6px 4px', width: 80 }}>Protocol</th>
+                  <th style={{ padding: '6px 4px', width: 100 }}>Category</th>
+                  <th style={{ padding: '6px 4px', width: 110 }}>Port</th>
+                  <th style={{ padding: '6px 4px', width: 140 }}>Module</th>
+                  <th style={{ padding: '6px 4px', width: 40 }}></th>
+                </tr>
+              </thead>
+              {renderSection('주 디바이스', primaryRows, '#1677ff')}
+              {renderSection('보조 디바이스', auxiliaryRows, '#666')}
+              <tbody>
+                {/* 추가 행 */}
+                <tr style={{ borderTop: '2px solid #d9d9d9' }}>
+                  <td></td>
+                  <td style={{ padding: '4px' }}>
+                    <Input size="small" placeholder={t('device.customLabel')} value={newCustomLabel}
+                      onChange={e => setNewCustomLabel(e.target.value)} />
+                  </td>
+                  <td style={{ padding: '4px' }}>
+                    <Select size="small" value={newCustomType} onChange={setNewCustomType} style={{ width: '100%' }}
+                      options={[{ label: 'TCP', value: 'tcp' }, { label: 'UDP', value: 'udp' }]} />
+                  </td>
+                  <td style={{ padding: '4px' }}>
+                    <Select size="small" value={newCustomCategory} onChange={setNewCustomCategory} style={{ width: '100%' }}
+                      options={[{ label: '주', value: 'primary' }, { label: '보조', value: 'auxiliary' }]} />
+                  </td>
+                  <td style={{ padding: '4px' }}>
+                    <InputNumber size="small" placeholder="Port" value={newCustomPort}
+                      onChange={v => setNewCustomPort(v)} min={1} max={65535} style={{ width: '100%' }} />
+                  </td>
+                  <td style={{ padding: '4px' }}>
+                    <Select size="small" allowClear placeholder="Module" value={newCustomModule || undefined}
+                      onChange={v => setNewCustomModule(v || '')} style={{ width: '100%' }}
+                      options={visibleModules.map(m => ({ label: m.label, value: m.name }))} />
+                  </td>
+                  <td style={{ padding: '4px' }}>
+                    <Button size="small" type="primary" icon={<PlusOutlined />}
+                      onClick={addCustomScan} disabled={!newCustomPort} />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          );
+        })()}
       </Modal>
     </div>
   );
