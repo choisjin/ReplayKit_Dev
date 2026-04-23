@@ -18,6 +18,24 @@ START_2 = 0xAA
 SENDER_ID = 100
 DEFAULT_UDP_PORT = 25000
 
+# CAN FD 전송 패킷 헤더 (cmd1=0x04, cmd2=0x30) — 레거시 UDP_CANFD_SEND() 기준
+CANFD_SEND_PACKET_HEADER = [START_1, START_2, SENDER_ID, 0x00, 0x04, 0x30]
+
+
+def get_dlc_from_payload_size(payload_size: int) -> int:
+    """CAN FD 실제 페이로드 바이트 수 → DLC(0~15) 매핑.
+
+    CAN 2.0은 0~8 그대로, CAN FD는 12/16/20/24/32/48/64 가 유효한 크기.
+    매핑에 없는 값은 8로 폴백 (안전한 기본 프레임 크기).
+    """
+    _map = {
+        0: 0, 1: 1, 2: 2, 3: 3,
+        4: 4, 5: 5, 6: 6, 7: 7,
+        8: 8, 12: 9, 16: 10, 20: 11,
+        24: 12, 32: 13, 48: 14, 64: 15,
+    }
+    return _map.get(payload_size, 8)
+
 
 class WoohyunBench:
     """CCIC 우현벤치 UDP 제어 플러그인."""
@@ -162,6 +180,101 @@ class WoohyunBench:
 
         logger.warning("WoohyunBench: no matching response within %ds", recv_timeout)
         return True
+
+    # ------------------------------------------------------------------
+    # CAN FD — 레거시 UDP_CANFD_SEND() 동일
+    # ------------------------------------------------------------------
+
+    def _canfd_send(self, canid: int, payload: list | bytearray, fd_mode: bool = True) -> bool:
+        """CAN FD 프레임을 UDP로 전송 (fire-and-forget, 응답 수신 없음).
+
+        패킷 구조:
+          [0x55, 0xAA, sender, seq,
+           0x04, 0x30,                       # cmd1, cmd2 (CAN FD send)
+           len_hi, len_lo,                   # payload+header 전체 길이
+           can_id(4B, big-endian),
+           can_frame(1B: FD플래그 0x80 | DLC),
+           reserved(1B, 0x00),
+           payload...]
+
+        Args:
+            canid:    CAN ID (int).
+            payload:  전송할 데이터 바이트 배열 (0~64 바이트, CAN FD 유효 크기).
+            fd_mode:  True이면 FD 플래그(0x80) + DLC 매핑 적용, False면 클래식 CAN.
+
+        Returns:
+            True=송신 성공 (서버 응답 확인 없음), False=소켓 오류.
+        """
+        if not self._sock:
+            raise RuntimeError("Not connected — call Connect() first")
+
+        payload = list(payload)
+        dlc = get_dlc_from_payload_size(len(payload)) if fd_mode else len(payload)
+
+        # CAN ID → 4바이트 big-endian
+        can_id_bytes = [
+            (canid >> 24) & 0xFF,
+            (canid >> 16) & 0xFF,
+            (canid >>  8) & 0xFF,
+             canid        & 0xFF,
+        ]
+
+        # CAN 프레임 바이트: FD 플래그(0x80) | DLC
+        can_frame = (0x80 if fd_mode else 0x00) | dlc
+
+        data = can_id_bytes + [can_frame, 0x00] + payload
+
+        packet = CANFD_SEND_PACKET_HEADER + [
+            (len(data) >> 8) & 0xFF,
+             len(data)       & 0xFF,
+        ] + data
+
+        encoded = bytearray(packet)
+        hex_str = " ".join(f"0x{b:02X}" for b in packet)
+
+        try:
+            self._sock.sendto(encoded, (self._host, self._udp_port))
+        except Exception as e:
+            logger.error("WoohyunBench CANFD send failed: %s", e)
+            return False
+
+        logger.info("WoohyunBench CANFD TX (ID=0x%X, DLC=%d): %s", canid, dlc, hex_str)
+        return True
+
+    # ------------------------------------------------------------------
+    # Door Control — 레거시 DRIVER_DOOR() 동일
+    # ------------------------------------------------------------------
+
+    def DRIVER_DOOR(self, open_close: int = 1) -> str:
+        """운전석 도어 열림/닫힘 CAN FD 명령 전송. 레거시 DRIVER_DOOR() 동일.
+
+        CAN FD ID 0x411 (ICU_02) payload를 200ms 간격으로 **5회 반복** 송신
+        (차량 ICU 수신 주기 200ms에 맞춤). payload[3]이 1=OPEN, 0=CLOSE.
+
+        Args:
+            open_close: 1=OPEN, 0=CLOSE.
+
+        Returns:
+            "DRIVER_DOOR OPEN: OK" / "DRIVER_DOOR CLOSE: OK" 등 결과 문자열.
+            소켓 오류로 송신이 하나라도 실패하면 "FAIL"로 마킹.
+        """
+        if open_close:
+            payload = [0, 0, 0, 1, 0, 0, 0, 0]  # open
+            status = "OPEN"
+        else:
+            payload = [0, 0, 0, 0, 0, 0, 0, 0]  # close
+            status = "CLOSE"
+
+        all_ok = True
+        for _ in range(5):
+            ok = self._canfd_send(0x411, payload)
+            if not ok:
+                all_ok = False
+                break
+            time.sleep(0.2)  # ICU_02 200ms 주기
+
+        logger.info("WoohyunBench DRIVER_DOOR %s: %s", status, "OK" if all_ok else "FAIL")
+        return f"DRIVER_DOOR {status}: {'OK' if all_ok else 'FAIL'}"
 
     # ------------------------------------------------------------------
     # Power Control — 레거시 WOOHYUN_* 함수 동일
