@@ -1198,6 +1198,88 @@ async def list_hkmc_keys(device_id: Optional[str] = None):
     }
 
 
+@router.get("/icas-keys")
+async def list_icas_keys(device_id: Optional[str] = None):
+    """List ICAS hardware keys (merged with per-device override).
+
+    device_id가 지정되면 해당 디바이스의 info["icas_keys"] 오버라이드를
+    spec default에 병합하여 반환한다. class(short|long)/key/visible 필드 병합.
+    """
+    from ..services.icas_agent_service import ICAS_KEYS, SHORT_KEY, LONG_KEY, PRESS_KEY, RELEASE_KEY
+    overrides: dict[str, dict] = {}
+    if device_id:
+        dev = dm.get_device(device_id)
+        if dev:
+            overrides = dev.info.get("icas_keys") or {}
+    keys = []
+    for name, info in ICAS_KEYS.items():
+        ov = overrides.get(name, {})
+        group = "ICAS"  # ICAS는 단일 그룹 — 프리셋 확장 시 세분화
+        klass = ov.get("class", info.get("class", "short"))
+        key_code = ov.get("key", info["key"])
+        visible = ov.get("visible", True)
+        # hkmc/isap 구조와 호환: cmd=0(더미), is_dial=False
+        keys.append({
+            "name": name,
+            "group": group,
+            "cmd": 0,
+            "key": key_code,
+            "class": klass,
+            "is_dial": False,
+            "visible": visible,
+        })
+    return {
+        "keys": keys,
+        "sub_commands": {
+            "SHORT_KEY": SHORT_KEY,
+            "LONG_KEY": LONG_KEY,
+            "PRESS_KEY": PRESS_KEY,
+            "RELEASE_KEY": RELEASE_KEY,
+        },
+    }
+
+
+class UpdateIcasKeysRequest(BaseModel):
+    device_id: str
+    keys: dict[str, dict]  # name → {class?, key?, visible?}
+
+
+@router.post("/icas-keys")
+async def update_icas_keys(req: UpdateIcasKeysRequest):
+    """Save per-device ICAS key overrides."""
+    from ..services.icas_agent_service import ICAS_KEYS
+    dev = dm.get_device(req.device_id)
+    if not dev:
+        raise HTTPException(status_code=404, detail=f"Device {req.device_id} not found")
+    if dev.type != "icas_agent":
+        raise HTTPException(status_code=400, detail=f"Device {req.device_id} is not an ICAS agent")
+    clean: dict[str, dict] = {}
+    for name, ov in (req.keys or {}).items():
+        if name not in ICAS_KEYS:
+            continue
+        entry: dict = {}
+        if "class" in ov and ov["class"] in ("short", "long"):
+            entry["class"] = ov["class"]
+        if "key" in ov and ov["key"] is not None:
+            try:
+                entry["key"] = int(ov["key"])
+            except (TypeError, ValueError):
+                pass
+        if "visible" in ov and ov["visible"] is not None:
+            entry["visible"] = bool(ov["visible"])
+        if entry:
+            clean[name] = entry
+    if clean:
+        dev.info["icas_keys"] = clean
+    else:
+        dev.info.pop("icas_keys", None)
+    svc = dm.get_icas_service(req.device_id)
+    if svc:
+        svc.set_key_overrides(dev.info.get("icas_keys"))
+    dm._save_auxiliary_devices()
+    return {"status": "ok", "device_id": req.device_id, "count": len(clean)}
+
+
 class UpdateHkmcKeysRequest(BaseModel):
     device_id: str
     keys: dict[str, dict]  # name → {cmd?, key?, dial?, visible?}

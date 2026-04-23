@@ -735,6 +735,13 @@ export default function RecordPage() {
         setHkmcKeys(res.data.keys || []);
         setHkmcSubCommands(res.data.sub_commands || {});
       }).catch(() => {});
+    } else if (dev?.type === 'icas_agent') {
+      deviceApi.listIcasKeys(dev.id).then(res => {
+        setHkmcKeys(res.data.keys || []);
+        setHkmcSubCommands(res.data.sub_commands || {});
+      }).catch(() => {});
+    } else {
+      setHkmcKeys([]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screenshotDeviceId, primaryDevices]);
@@ -3348,7 +3355,7 @@ export default function RecordPage() {
               <>
               <div style={{
                 position: 'relative', display: 'inline-block', maxWidth: '100%',
-                maxHeight: (viewCropEnabled || (isScreenHkmc && hkmcKeys.length > 0)) ? 'calc(100% - 120px)' : '100%',
+                maxHeight: (viewCropEnabled || ((isScreenHkmc || isScreenICAS) && hkmcKeys.length > 0)) ? 'calc(100% - 120px)' : '100%',
               }}>
                 {(() => {
                   // 뷰포트 크롭
@@ -3421,10 +3428,10 @@ export default function RecordPage() {
                     ? `${lastGesture} → ${recording ? t('record.gestureRecord') : t('record.directExec')}`
                     : t('record.gestureHint', { device: screenshotDeviceId || screenDevice?.id || '' })}
                 </div>
-                {isScreenHkmc && hkmcKeys.length > 0 && testingStepIndex == null && (() => {
+                {(isScreenHkmc || isScreenICAS) && hkmcKeys.length > 0 && testingStepIndex == null && (() => {
                   // visible=false 키는 숨김. 그룹별로 details로 묶어 표시.
-                  // 그룹 순서: HKMC + iSAP 통합 순서
-                  const GROUP_ORDER = ['MKBD', 'MKBD2', 'CCP', 'RRC', 'SWRC', 'SWRC2', 'MIRROR', 'CCRC', 'OVERHEAD', 'TRIP', 'GRIP', 'OPTICAL', 'RHEOSTAT'];
+                  // 그룹 순서: HKMC + iSAP + ICAS 통합 순서
+                  const GROUP_ORDER = ['MKBD', 'MKBD2', 'CCP', 'RRC', 'SWRC', 'SWRC2', 'MIRROR', 'CCRC', 'OVERHEAD', 'TRIP', 'GRIP', 'OPTICAL', 'RHEOSTAT', 'ICAS'];
                   const visibleKeys = hkmcKeys.filter(k => k.visible !== false);
                   const byGroup: Record<string, HkmcKeyInfo[]> = {};
                   visibleKeys.forEach(k => {

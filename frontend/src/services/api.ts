@@ -24,6 +24,10 @@ export const deviceApi = {
     api.get('/device/isap-keys', { params: deviceId ? { device_id: deviceId } : {} }),
   updateIsapKeys: (deviceId: string, keys: Record<string, { cmd?: number; key?: number; dial?: boolean; visible?: boolean }>) =>
     api.post('/device/isap-keys', { device_id: deviceId, keys }),
+  listIcasKeys: (deviceId?: string) =>
+    api.get('/device/icas-keys', { params: deviceId ? { device_id: deviceId } : {} }),
+  updateIcasKeys: (deviceId: string, keys: Record<string, { class?: 'short' | 'long'; key?: number; visible?: boolean }>) =>
+    api.post('/device/icas-keys', { device_id: deviceId, keys }),
   disconnect: (deviceId: string) => api.post('/device/disconnect', { address: deviceId }),
   updateDevice: (device_id: string, updates: Record<string, any>) =>
     api.post('/device/update', { device_id, ...updates }),
