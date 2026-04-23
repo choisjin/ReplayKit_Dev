@@ -868,11 +868,18 @@ class DeviceManager:
         """ICAS Agent 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행)."""
         final_id = device_id or self._generate_device_id("icas_agent", device_model=device_model)
         display_name = name or f"ICAS ({host}:{port})"
+        # "WxH" 문자열을 dict으로 파싱 (프론트엔드 deviceRes 호환). 파싱 실패 시 기본값.
+        try:
+            rw_s, rh_s = str(resolution).upper().split("X")
+            res_dict = {"width": int(rw_s), "height": int(rh_s)}
+        except Exception:
+            res_dict = {"width": 1560, "height": 700}
         info: dict = {
             "port": int(port),
             "username": username,
             "password": password,
-            "resolution": resolution,
+            "resolution": res_dict,         # dict form — HKMC/iSAP/ADB와 동일한 스키마
+            "resolution_str": str(resolution),  # ICAS 서비스 생성자용 원본 문자열
             "private_server_ip": private_server_ip,
             "private_server_password": private_server_password,
             "iid_display": str(iid_display),
@@ -1884,11 +1891,20 @@ class DeviceManager:
             port = int(dev.info.get("port", 22) or 22)
             username = dev.info.get("username", "root") or "root"
             password = dev.info.get("password", "") or ""
-            resolution = dev.info.get("resolution", "1560x700") or "1560x700"
+            # resolution_str(원본 "WxH") 우선, 없으면 resolution(dict) → "WxH" 복원, 모두 없으면 기본값
+            res_str = dev.info.get("resolution_str")
+            if not res_str:
+                res_val = dev.info.get("resolution")
+                if isinstance(res_val, dict) and "width" in res_val and "height" in res_val:
+                    res_str = f"{res_val['width']}x{res_val['height']}"
+                elif isinstance(res_val, str):
+                    res_str = res_val
+                else:
+                    res_str = "1560x700"
             try:
                 svc = ICASAgentService(
                     dev.address, port=port, device_id=dev.id,
-                    username=username, password=password, resolution=resolution,
+                    username=username, password=password, resolution=res_str,
                     private_server_ip=dev.info.get("private_server_ip", "192.168.0.2") or "192.168.0.2",
                     private_server_password=dev.info.get("private_server_password", "") or "",
                     iid_display=dev.info.get("iid_display", "10") or "10",
@@ -1902,9 +1918,11 @@ class DeviceManager:
                     _mark_connected()
                     dev.info["agent_version"] = svc.agent_version
                     dev.info["screens"] = svc.get_info()["screens"]
-                    dev.info["resolution_wh"] = dev.info["screens"].get(
+                    # 프론트엔드용 dict 정규화 (HKMC/iSAP와 동일 스키마)
+                    dev.info["resolution"] = dev.info["screens"].get(
                         svc.default_screen, {"width": 1560, "height": 700}
                     )
+                    dev.info["resolution_str"] = res_str
                     return f"ICAS connected: {dev.id} ({dev.address}:{port})"
                 else:
                     dev.status = "disconnected"

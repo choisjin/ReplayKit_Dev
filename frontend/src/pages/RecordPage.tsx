@@ -601,13 +601,30 @@ export default function RecordPage() {
   const hasMultiDisplay = isScreenAdb && adbDisplays.length > 1;
   // 멀티 디스플레이: 선택된 디스플레이 해상도 사용
   const selectedDisplay = hasMultiDisplay ? adbDisplays.find(d => String(d.id) === screenType) : null;
-  // HKMC: screens[screenType]에서 해상도 읽기, ADB 멀티: selectedDisplay, 기본: resolution
+  // HKMC/ICAS: screens[screenType]에서 해상도 읽기, ADB 멀티: selectedDisplay, 기본: resolution
   const hkmcScreen = isScreenHkmc ? screenDevice?.info?.screens?.[screenType] : null;
+  const icasScreen = isScreenICAS ? screenDevice?.info?.screens?.[screenType] : null;
+  const fallbackRes = (() => {
+    const r = screenDevice?.info?.resolution;
+    if (r && typeof r === 'object' && typeof r.width === 'number' && typeof r.height === 'number') {
+      return { width: r.width, height: r.height };
+    }
+    // ICAS 구버전 호환: info.resolution가 "1560x700" 문자열로 저장된 경우 파싱
+    if (typeof r === 'string') {
+      const m = r.toUpperCase().split('X');
+      const w = parseInt(m[0], 10);
+      const h = parseInt(m[1], 10);
+      if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) return { width: w, height: h };
+    }
+    return { width: 1080, height: 1920 };
+  })();
   const deviceRes = selectedDisplay?.width
     ? { width: selectedDisplay.width, height: selectedDisplay.height }
     : hkmcScreen?.width
       ? { width: hkmcScreen.width, height: hkmcScreen.height }
-      : screenDevice?.info?.resolution ?? { width: 1080, height: 1920 };
+      : icasScreen?.width
+        ? { width: icasScreen.width, height: icasScreen.height }
+        : fallbackRes;
 
   // 모듈이 매칭된 디바이스 목록 (dropdown의 옵션)
   // - 보조 디바이스: info.module이 설정된 것
@@ -847,6 +864,15 @@ export default function RecordPage() {
     const targetDev = primaryDevices.find(d => d.id === targetDevice);
     if (targetDev?.type === 'vision_camera' || targetDev?.type === 'webcam') {
       return;
+    }
+
+    // 좌표값 NaN/undefined 방어 — deviceRes 미설정/canvas 크기 0인 상황에서
+    // null 좌표가 backend로 전송되는 것을 차단
+    for (const k of ['x', 'y', 'x1', 'y1', 'x2', 'y2']) {
+      if (k in params && !Number.isFinite(params[k])) {
+        message.error(t('record.inputFailed') + ` (invalid ${k})`);
+        return;
+      }
     }
 
     const resolvedAction = resolveAction(action, targetDevice);
