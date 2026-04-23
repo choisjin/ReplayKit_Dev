@@ -573,6 +573,15 @@ class PlaybackService:
             # 2) 이미지 비교 전: 기대이미지가 있을 때만 스크린샷 캡처
             has_expected = step.expected_image or (step.compare_mode == CompareMode.MULTI_CROP and step.expected_images)
             ss_device = self._resolve_screenshot_device(step) if has_expected else None
+            # screenshot_device_id 가 명시됐는데 해당 디바이스를 못 찾은 경우
+            # (_resolve_screenshot_device 가 None 반환) — 임의 폴백 대신 명확한 에러 반환.
+            if has_expected and ss_device is None and step.screenshot_device_id:
+                step_result.status = "error"
+                step_result.message = (
+                    f"Screenshot device '{step.screenshot_device_id}' not found — "
+                    f"cannot capture for comparison"
+                )
+                return step_result
             if ss_device:
                 await self._ensure_device_connected(ss_device["id"])
             t4 = time.time()
@@ -1322,10 +1331,23 @@ class PlaybackService:
             return None
 
         # screenshot_device_id가 저장되어 있으면 해당 디바이스 우선 사용
-        # device_map을 통해 실제 디바이스 ID로 매핑
+        # device_map을 통해 실제 디바이스 ID로 매핑. 매핑 후 못 찾으면 원본 id 로도 재시도.
         if step.screenshot_device_id:
             resolved_ss_id = self._resolve_alias(step.screenshot_device_id, self._device_map)
             ss_dev = self.dm.get_device(resolved_ss_id)
+            if not ss_dev and resolved_ss_id != step.screenshot_device_id:
+                # device_map 이 오래되어 존재하지 않는 address 로 매핑된 경우, 원본 id 로 재조회
+                ss_dev = self.dm.get_device(step.screenshot_device_id)
+                if ss_dev:
+                    logger.warning(
+                        "[SCREENSHOT RESOLVE] step=%s device_map(%s)->%s stale; fell back to original id",
+                        step.id, step.screenshot_device_id, resolved_ss_id,
+                    )
+            logger.info(
+                "[SCREENSHOT RESOLVE] step=%s screenshot_device_id=%s resolved=%s found=%s type=%s",
+                step.id, step.screenshot_device_id, resolved_ss_id,
+                bool(ss_dev), ss_dev.type if ss_dev else None,
+            )
             if ss_dev:
                 if ss_dev.type == "hkmc_agent":
                     screen_type = step.screen_type or step.params.get("screen_type", "front_center")
@@ -1346,6 +1368,14 @@ class PlaybackService:
                     if adb_screen:
                         result["screen_type"] = adb_screen
                     return result
+            # 명시적 screenshot_device_id 가 주어졌는데 디바이스를 못 찾으면, primary[0] 으로
+            # 임의 폴백하지 말고 명확히 실패시킨다 — WAIT 스텝 같이 device_id 가 없는 스텝이
+            # 엉뚱한 디바이스(주로 인덱스 0 의 ADB)에서 캡처되어 비교가 틀어지는 버그 방지.
+            logger.error(
+                "[SCREENSHOT RESOLVE] step=%s screenshot_device_id=%s resolved=%s: device not found — aborting capture",
+                step.id, step.screenshot_device_id, resolved_ss_id,
+            )
+            return None
 
         real_id = self._resolve_real_device_id(step)
         if real_id:
@@ -1383,6 +1413,11 @@ class PlaybackService:
         primary = self.dm.list_primary()
         if primary:
             dev = primary[0]
+            logger.warning(
+                "[SCREENSHOT RESOLVE] step=%s no screenshot_device_id / device_id — falling back to primary[0]=%s (type=%s). "
+                "기대이미지 비교가 의도와 다른 디바이스에서 수행될 수 있음.",
+                step.id, dev.id, dev.type,
+            )
             if dev.type == "hkmc_agent":
                 screen_type = step.screen_type or step.params.get("screen_type", "front_center")
                 return {"type": "hkmc_agent", "id": dev.id, "screen_type": screen_type}
@@ -1498,7 +1533,10 @@ class PlaybackService:
         elif step.type in (StepType.HKMC_TOUCH, StepType.HKMC_SWIPE, StepType.HKMC_KEY) or (step.type == StepType.REPEAT_TAP and self._is_hkmc_device(real_id)):
             if not real_id:
                 raise ValueError("HKMC/iSAP step requires device_id")
-            # 액션 실행 중 연결 끊김 시 재연결 후 재시도 (최대 2회)
+            # 액션 실행 중 연결 끊김 시 재연결 후 재시도 (최대 2회).
+            # 사전 체크 단계에서 disconnected 인 경우에도 먼저 재연결을 시도하고,
+            # 여전히 안 되면 에러. (이전에는 사전 체크 실패 시 즉시 raise 되어
+            # 재연결 retry 가 사실상 동작하지 않았음 — HKMC 스텝 테스트 실패 원인.)
             for _hkmc_attempt in range(2):
                 svc, kind = self._get_agent_service(real_id)
                 if kind == "icas":
@@ -1507,6 +1545,15 @@ class PlaybackService:
                     )
                 is_isap = kind == "isap"
                 if not svc or not svc.is_connected:
+                    if _hkmc_attempt == 0:
+                        logger.warning(
+                            "HKMC/iSAP device %s not connected on pre-check, forcing reconnect",
+                            real_id,
+                        )
+                        await self._ensure_device_connected(
+                            real_id, max_retries=3, retry_interval=2.0,
+                        )
+                        continue  # 재시도
                     raise ValueError(f"HKMC/iSAP device {real_id} not connected")
                 try:
                     screen_type = step.screen_type or params.get("screen_type", "front_center")
@@ -1565,6 +1612,15 @@ class PlaybackService:
                         f"ICAS step on non-ICAS device {real_id} (kind={kind})"
                     )
                 if not svc or not svc.is_connected:
+                    if _icas_attempt == 0:
+                        logger.warning(
+                            "ICAS device %s not connected on pre-check, forcing reconnect",
+                            real_id,
+                        )
+                        await self._ensure_device_connected(
+                            real_id, max_retries=3, retry_interval=2.0,
+                        )
+                        continue
                     raise ValueError(f"ICAS device {real_id} not connected")
                 try:
                     screen_type = step.screen_type or params.get("screen_type", "HU")
