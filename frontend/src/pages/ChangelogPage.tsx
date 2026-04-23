@@ -88,7 +88,7 @@ export default function ChangelogPage() {
       key: 'hash',
       width: 90,
       render: (v: string) => (
-        <Typography.Text code copyable={{ text: v }} style={{ fontSize: 10 }}>{v}</Typography.Text>
+        <Typography.Text code copyable={{ text: v }} style={{ fontSize: 11 }}>{v}</Typography.Text>
       ),
     },
     {
@@ -114,7 +114,7 @@ export default function ChangelogPage() {
       dataIndex: 'date',
       key: 'date',
       width: 110,
-      render: (v: string) => <span style={{ color: '#888', fontSize: 10 }}>{formatDate(v)}</span>,
+      render: (v: string) => <span style={{ color: '#888', fontSize: 11 }}>{formatDate(v)}</span>,
     },
   ];
 
@@ -127,14 +127,14 @@ export default function ChangelogPage() {
           {t('changelog.refresh')}
         </Button>
         <Tag icon={<BranchesOutlined />} color="processing">{branch}</Tag>
-        <span style={{ color: '#888', fontSize: 10 }}>{t('changelog.totalCommits')}: {commits.length}</span>
+        <span style={{ color: '#888', fontSize: 11 }}>{t('changelog.totalCommits')}: {commits.length}</span>
         {tags.length > 0 && (
           <>
             <TagOutlined style={{ color: '#888', marginLeft: 6 }} />
             {tags.slice(0, 5).map(tag => (
               <Tag key={tag} color="gold">{tag}</Tag>
             ))}
-            {tags.length > 5 && <span style={{ color: '#888', fontSize: 10 }}>+{tags.length - 5}</span>}
+            {tags.length > 5 && <span style={{ color: '#888', fontSize: 11 }}>+{tags.length - 5}</span>}
           </>
         )}
       </Space>

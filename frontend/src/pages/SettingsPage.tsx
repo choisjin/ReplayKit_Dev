@@ -69,7 +69,7 @@ export default function SettingsPage() {
               ]}
             />
           </Space>
-          <Text type="secondary" style={{ fontSize: 10, marginTop: 3, display: 'block' }}>
+          <Text type="secondary" style={{ fontSize: 11, marginTop: 3, display: 'block' }}>
             {t('settings.languageDesc')}
           </Text>
         </Card>
@@ -107,7 +107,7 @@ export default function SettingsPage() {
             />
             <Button type="primary" onClick={handleExcelDirSave}>{t('common.save')}</Button>
           </Space.Compact>
-          <Text type="secondary" style={{ fontSize: 10, marginTop: 3, display: 'block' }}>
+          <Text type="secondary" style={{ fontSize: 11, marginTop: 3, display: 'block' }}>
             {t('settings.excelDirDesc')}
           </Text>
         </Card>
@@ -132,7 +132,7 @@ export default function SettingsPage() {
             />
             <Button type="primary" onClick={handleExportDirSave}>{t('common.save')}</Button>
           </Space.Compact>
-          <Text type="secondary" style={{ fontSize: 10, marginTop: 3, display: 'block' }}>
+          <Text type="secondary" style={{ fontSize: 11, marginTop: 3, display: 'block' }}>
             {t('settings.exportDirDesc')}
           </Text>
         </Card>
@@ -172,13 +172,13 @@ export default function SettingsPage() {
               {t('common.save')}
             </Button>
           </Space.Compact>
-          <Text type="secondary" style={{ fontSize: 10, marginTop: 3, display: 'block' }}>
+          <Text type="secondary" style={{ fontSize: 11, marginTop: 3, display: 'block' }}>
             {t('settings.monitorServerDesc')}
           </Text>
         </Card>
 
         <Card title={t('settings.thresholdTitle')} size="small">
-          <Text type="secondary" style={{ fontSize: 10, marginBottom: 10, display: 'block' }}>
+          <Text type="secondary" style={{ fontSize: 11, marginBottom: 10, display: 'block' }}>
             {t('settings.thresholdDesc')}
           </Text>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -197,7 +197,7 @@ export default function SettingsPage() {
                   onChange={(v) => updateSettings({ [key]: v ?? 0.95 })}
                   style={{ width: 80 }}
                 />
-                <span style={{ color: '#888', fontSize: 10 }}>{Math.round((settings[key] ?? 0.95) * 100)}%</span>
+                <span style={{ color: '#888', fontSize: 11 }}>{Math.round((settings[key] ?? 0.95) * 100)}%</span>
               </Space>
             ))}
           </div>

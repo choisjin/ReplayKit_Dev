@@ -186,7 +186,7 @@ export default function ChatWidget({ open, onClose }: ChatWidgetProps) {
         justifyContent: 'space-between',
         alignItems: 'center',
       }}>
-        <Typography.Text strong style={{ color: '#fff', fontSize: 12 }}>
+        <Typography.Text strong style={{ color: '#fff', fontSize: 13 }}>
           {t('chat.title')}
         </Typography.Text>
         <Button type="text" size="small" icon={<CloseOutlined />} onClick={onClose} style={{ color: '#fff' }} />
@@ -224,7 +224,7 @@ export default function ChatWidget({ open, onClose }: ChatWidgetProps) {
                 }}
               >
                 {msg.from === 'system' ? (
-                  <Typography.Text type="secondary" style={{ fontSize: 10 }}>{msg.content}</Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 11 }}>{msg.content}</Typography.Text>
                 ) : (
                   <div style={{
                     maxWidth: '75%',
@@ -236,11 +236,11 @@ export default function ChatWidget({ open, onClose }: ChatWidgetProps) {
                     color: msg.from === 'me' ? '#fff' : undefined,
                   }}>
                     {msg.from === 'admin' && (
-                      <div style={{ fontSize: 9, color: isDark ? '#888' : '#666', marginBottom: 2 }}>{t('chat.admin')}</div>
+                      <div style={{ fontSize: 10, color: isDark ? '#888' : '#666', marginBottom: 2 }}>{t('chat.admin')}</div>
                     )}
-                    <div style={{ fontSize: 10 }}>{msg.content}</div>
+                    <div style={{ fontSize: 11 }}>{msg.content}</div>
                     <div style={{
-                      fontSize: 8,
+                      fontSize: 9,
                       color: msg.from === 'me' ? 'rgba(255,255,255,0.5)' : isDark ? '#666' : '#999',
                       marginTop: 2,
                       textAlign: 'right',
@@ -252,7 +252,7 @@ export default function ChatWidget({ open, onClose }: ChatWidgetProps) {
               </div>
             ))}
             {adminTyping && (
-              <div style={{ fontSize: 10, color: '#888', padding: '4px 0' }}>{t('chat.adminTyping')}</div>
+              <div style={{ fontSize: 11, color: '#888', padding: '4px 0' }}>{t('chat.adminTyping')}</div>
             )}
             <div ref={messagesEndRef} />
           </div>

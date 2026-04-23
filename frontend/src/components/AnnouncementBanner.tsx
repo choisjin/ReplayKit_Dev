@@ -80,7 +80,7 @@ export default function AnnouncementBanner() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Space size={8}>
               <strong>{topAnn.title}</strong>
-              <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 10 }}>
+              <span style={{ color: 'rgba(255,255,255,0.65)', fontSize: 11 }}>
                 {topAnn.content.length > 80 ? topAnn.content.slice(0, 80) + '...' : topAnn.content}
               </span>
               {visibleAnnouncements.length > 1 && (
@@ -126,7 +126,7 @@ export default function AnnouncementBanner() {
                   <Tag color={priorityColor[ann.priority]}>{priorityLabel[ann.priority]}</Tag>
                   <Typography.Title level={5} style={{ margin: 0 }}>{ann.title}</Typography.Title>
                 </Space>
-                <Typography.Text type="secondary" style={{ fontSize: 10 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                   {new Date(ann.created_at).toLocaleString('ko-KR')}
                 </Typography.Text>
               </div>

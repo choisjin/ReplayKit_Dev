@@ -249,7 +249,7 @@ const DLTViewer: React.FC<DLTViewerProps> = ({ sessions, onClose, mode = 'modal'
           label: (
             <span>
               <span style={{ fontFamily: 'monospace' }}>{s.session_id}</span>
-              <span style={{ color: '#888', marginLeft: 3, fontSize: 9 }}>
+              <span style={{ color: '#888', marginLeft: 3, fontSize: 10 }}>
                 ({(logsBySession[s.session_id] || []).length})
               </span>
             </span>
@@ -311,7 +311,7 @@ const DLTViewer: React.FC<DLTViewerProps> = ({ sessions, onClose, mode = 'modal'
           background: logBg,
           color: logColor,
           fontFamily: 'Consolas, "Courier New", monospace',
-          fontSize: 10,
+          fontSize: 11,
           padding: '6px 8px',
           whiteSpace: 'pre',
           lineHeight: 1.4,

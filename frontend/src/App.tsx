@@ -368,7 +368,7 @@ function AppContent() {
                   Modal.info({
                     title: '문의 안내',
                     content: (
-                      <div style={{ fontSize: 11, lineHeight: 1.8 }}>
+                      <div style={{ fontSize: 12, lineHeight: 1.8 }}>
                         요청사항 및 문의사항은 제목에<br />
                         <b style={{ color: '#1677ff' }}>[ReplayKit]</b> 붙여 이슈 등록 해주세요!
                       </div>
@@ -385,14 +385,14 @@ function AppContent() {
             <div style={{ padding: siderCollapsed ? '8px 4px' : '8px 16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
               {diskInfoList.map((di) => (
               <Tooltip key={di.drive} title={`${di.drive} — ${di.free_gb} GB 사용가능 / ${di.total_gb} GB`} placement="right">
-                <div style={{ fontSize: 10, color: '#888', marginBottom: diskInfoList.length > 1 ? 6 : 0 }}>
+                <div style={{ fontSize: 11, color: '#888', marginBottom: diskInfoList.length > 1 ? 6 : 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                     {!siderCollapsed && <span style={{ whiteSpace: 'nowrap', minWidth: 24 }}><DatabaseOutlined /> {di.drive.replace(':', '')}</span>}
                     <div style={{ flex: 1, background: '#333', borderRadius: 4, height: 6, overflow: 'hidden' }}>
                       <div style={{ background: di.used_percent > 90 ? '#ff4d4f' : di.used_percent > 70 ? '#faad14' : '#52c41a', width: `${di.used_percent}%`, height: '100%' }} />
                     </div>
                   </div>
-                  <div style={{ marginTop: 2, fontSize: 10, textAlign: 'center' }}>
+                  <div style={{ marginTop: 2, fontSize: 11, textAlign: 'center' }}>
                     {siderCollapsed ? `${di.free_gb}G` : `${di.free_gb} GB 사용가능`}
                   </div>
                 </div>
@@ -423,8 +423,8 @@ function AppContent() {
                 justifyContent: 'center', alignItems: 'center',
                 height: 'calc(100vh - 48px)', gap: 19,
               }}>
-                <Spin indicator={<LoadingOutlined style={{ fontSize: 38 }} spin />} />
-                <div style={{ color: '#888', fontSize: 13 }}>
+                <Spin indicator={<LoadingOutlined style={{ fontSize: 39 }} spin />} />
+                <div style={{ color: '#888', fontSize: 14 }}>
                   {t('common.backendConnecting')}
                 </div>
               </div>
@@ -446,7 +446,7 @@ function AppContent() {
             <select
               value={logSource}
               onChange={(e) => { const s = e.target.value as 'launcher' | 'backend'; setLogSource(s); setLogSelectedDate(''); loadLog('', s); }}
-              style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: '1px solid #d9d9d9' }}
+              style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, border: '1px solid #d9d9d9' }}
             >
               <option value="backend">Backend</option>
               <option value="launcher">Launcher</option>
@@ -455,7 +455,7 @@ function AppContent() {
               <select
                 value={logSelectedDate}
                 onChange={(e) => { setLogSelectedDate(e.target.value); loadLog(e.target.value); }}
-                style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, border: '1px solid #d9d9d9' }}
+                style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, border: '1px solid #d9d9d9' }}
               >
                 {logDates.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
@@ -468,7 +468,7 @@ function AppContent() {
         width={800}
       >
         <div style={{ maxHeight: 500, overflow: 'auto', background: isDark ? '#1e1e2e' : '#f5f5f5', borderRadius: 6, padding: 10 }}>
-          <pre style={{ margin: 0, fontSize: 9, fontFamily: 'Consolas, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: isDark ? '#cdd6f4' : '#333' }}>
+          <pre style={{ margin: 0, fontSize: 10, fontFamily: 'Consolas, monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: isDark ? '#cdd6f4' : '#333' }}>
             {launcherLog.length > 0 ? launcherLog.join('\n') : 'No logs'}
           </pre>
         </div>

@@ -731,7 +731,7 @@ export default function ScenarioPage() {
             content: (
               <div>
                 <p>{ps.data.warning}</p>
-                <p style={{ color: '#888', fontSize: 10 }}>{t('scenario.sleepBlockDesc')}</p>
+                <p style={{ color: '#888', fontSize: 11 }}>{t('scenario.sleepBlockDesc')}</p>
               </div>
             ),
             okText: t('scenario.sleepBlock'),
@@ -904,7 +904,7 @@ export default function ScenarioPage() {
                   <div key={i} style={{ padding: '4px 0', color: '#ff4d4f' }}>• {e}</div>
                 ))}
               </div>
-              <div style={{ color: '#888', fontSize: 10 }}>{t('scenario.preflightSwapHint')}</div>
+              <div style={{ color: '#888', fontSize: 11 }}>{t('scenario.preflightSwapHint')}</div>
             </div>
           ),
           okText: t('scenario.changeDeviceMap'),
@@ -1179,7 +1179,7 @@ export default function ScenarioPage() {
                   <div key={i} style={{ padding: '4px 0', color: '#ff4d4f' }}>• {e}</div>
                 ))}
               </div>
-              <div style={{ color: '#888', fontSize: 10 }}>{t('scenario.preflightSwapHint')}</div>
+              <div style={{ color: '#888', fontSize: 11 }}>{t('scenario.preflightSwapHint')}</div>
             </div>
           ),
           okText: t('scenario.changeDeviceMap'),
@@ -1291,7 +1291,7 @@ export default function ScenarioPage() {
         return url ? <Image src={url} alt="expected" style={{ maxHeight: 60, maxWidth: 60 }} /> : '-';
       },
     },
-    { title: t('scenario.parameters'), dataIndex: 'params', key: 'params', render: (p: any) => <code style={{ fontSize: 9 }}>{JSON.stringify(p)}</code> },
+    { title: t('scenario.parameters'), dataIndex: 'params', key: 'params', render: (p: any) => <code style={{ fontSize: 10 }}>{JSON.stringify(p)}</code> },
     { title: t('scenario.delay'), dataIndex: 'delay_after_ms', key: 'delay', width: 80, render: (v: number) => `${v}ms` },
   ];
 
@@ -1300,9 +1300,9 @@ export default function ScenarioPage() {
   const failCount = stepResults.filter((r) => r.status === 'fail').length;
   const errorCount = stepResults.filter((r) => r.status === 'error').length;
 
-  const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 9, color: '#888' }}>{ko}</span></div>;
+  const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 10, color: '#888' }}>{ko}</span></div>;
   const makeStepResultColumns = (totalRepeat: number) => [
-    { title: _colTitle('Time Stamp', t('scenario.colTimestamp')), dataIndex: 'timestamp', key: 'timestamp', align: 'center' as const, render: (v: string | null) => <span style={{ fontSize: 10, lineHeight: 1.4 }}>{v ? formatTime(v, lang) : '-'}</span> },
+    { title: _colTitle('Time Stamp', t('scenario.colTimestamp')), dataIndex: 'timestamp', key: 'timestamp', align: 'center' as const, render: (v: string | null) => <span style={{ fontSize: 11, lineHeight: 1.4 }}>{v ? formatTime(v, lang) : '-'}</span> },
     { title: _colTitle('Repeat', t('scenario.colCurrentTotal')), dataIndex: 'repeat_index', key: 'repeat', align: 'center' as const, render: (v: number) => `${v}/${totalRepeat}` },
     { title: _colTitle('Step', t('scenario.colOrder')), dataIndex: 'step_id', key: 'step_id', align: 'center' as const },
     { title: _colTitle('Device', t('scenario.colDevice')), dataIndex: 'device_id', key: 'device_id', align: 'center' as const, render: (v: string) => v ? <Tag color={v.startsWith('Android') ? 'green' : v.startsWith('Serial') ? 'purple' : 'geekblue'} style={{ margin: 0 }}>{v}</Tag> : '-' },
@@ -1428,7 +1428,7 @@ export default function ScenarioPage() {
               <Button size="small" onClick={() => setSelectedGroup('__groups__')}>{t('common.back')}</Button>
               <FolderOutlined style={{ color: '#1677ff' }} />
               <span style={{ fontWeight: 600 }}>{selectedGroup}</span>
-              <span style={{ color: '#888', fontSize: 10 }}>({(groups[selectedGroup] || []).length})</span>
+              <span style={{ color: '#888', fontSize: 11 }}>({(groups[selectedGroup] || []).length})</span>
               <span style={{ flex: 1 }} />
               <InputNumber
                 min={1} max={999} size="small"
@@ -1437,7 +1437,7 @@ export default function ScenarioPage() {
                 style={{ width: 60 }}
                 disabled={playing}
               />
-              <span style={{ fontSize: 10, color: '#888' }}>{t('scenario.times')}</span>
+              <span style={{ fontSize: 11, color: '#888' }}>{t('scenario.times')}</span>
               {playing && playingGroupName === selectedGroup ? (
                 <Button danger size="small" icon={<StopOutlined />} onClick={stopPlayback}>{t('scenario.stop')}</Button>
               ) : (
@@ -1472,7 +1472,7 @@ export default function ScenarioPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
                     <Tag color={playing && currentGroupScenario === m.name ? 'processing' : undefined} style={{ margin: 0 }}>{idx + 1}</Tag>
                     <span style={{ flex: 1, fontWeight: (selectedName === m.name || (playing && currentGroupScenario === m.name)) ? 600 : 400, color: playing && currentGroupScenario === m.name ? '#1677ff' : undefined }}>{m.name}</span>
-                    {playing && currentGroupScenario === m.name && <Tag color="blue" style={{ margin: 0, fontSize: 9 }}>▶</Tag>}
+                    {playing && currentGroupScenario === m.name && <Tag color="blue" style={{ margin: 0, fontSize: 10 }}>▶</Tag>}
                   </div>
                 </List.Item>
               )}
@@ -1659,7 +1659,7 @@ export default function ScenarioPage() {
                 ) : (
                   <>
                     <InputNumber min={1} max={999} size="small" value={getRepeatCount(selectedName!)} onChange={(v) => setRepeatCount(selectedName!, v || 1)} style={{ width: 60 }} disabled={playing} />
-                    <span style={{ fontSize: 10, fontWeight: 400 }}>{t('scenario.times')}</span>
+                    <span style={{ fontSize: 11, fontWeight: 400 }}>{t('scenario.times')}</span>
                     <Button type="primary" size="small" icon={<PlayCircleOutlined />} loading={playing && playingName === selectedName} disabled={playing} onClick={() => playScenario(selectedName!)}>{t('scenario.play')}</Button>
                   </>
                 )}
@@ -1840,7 +1840,7 @@ export default function ScenarioPage() {
                       const jump = field === 'pass' ? passGoto : failGoto;
                       const targetSteps = jump && jump.scenario >= 0 ? (scenarioStepsCache[members[jump.scenario]?.name] || []) : [];
                       return (
-                        <div key={field} style={{ display: 'flex', gap: 3, alignItems: 'center', fontSize: 10, flexWrap: 'wrap' }}>
+                        <div key={field} style={{ display: 'flex', gap: 3, alignItems: 'center', fontSize: 11, flexWrap: 'wrap' }}>
                           <span style={{ color: jumpColor, minWidth: 32 }}>{jumpLabel}</span>
                           <Select
                             size="small"
@@ -1884,14 +1884,14 @@ export default function ScenarioPage() {
                         {/* 시나리오 헤더 */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
                           <Tag color="blue" style={{ minWidth: 24, textAlign: 'center' }}>{idx + 1}</Tag>
-                          <Button size="small" type="text" style={{ padding: '0 2px', fontSize: 9, color: '#888' }}
+                          <Button size="small" type="text" style={{ padding: '0 2px', fontSize: 10, color: '#888' }}
                             icon={isExpanded ? <DownOutlined /> : <RightOutlined />}
                             onClick={() => { toggleExpandEntry(entryKey); if (!isExpanded && steps.length === 0) fetchScenarioStepsCache([entry.name]); }}
                           />
                           <span style={{ flex: 1, fontWeight: 500 }}>{entry.name}</span>
                           {!scenarios.includes(entry.name) && <Tag color="red">{t('scenario.missing')}</Tag>}
-                          {hasAnyJump && <BranchesOutlined style={{ color: '#722ed1', fontSize: 10 }} />}
-                          <span style={{ color: '#888', fontSize: 9 }}>{steps.length} {t('scenario.steps')}</span>
+                          {hasAnyJump && <BranchesOutlined style={{ color: '#722ed1', fontSize: 11 }} />}
+                          <span style={{ color: '#888', fontSize: 10 }}>{steps.length} {t('scenario.steps')}</span>
                           <Button size="small" type="text" icon={<ArrowUpOutlined />}
                             disabled={idx === 0}
                             onClick={() => moveInGroup(gName, members, idx, -1)}
@@ -1908,18 +1908,18 @@ export default function ScenarioPage() {
                         {/* 펼쳐진 스텝 목록 */}
                         {isExpanded && (
                           <div style={{ paddingLeft: 29, marginTop: 5, borderLeft: '2px solid #303030', marginLeft: 14 }}>
-                            <div style={{ fontSize: 9, color: '#888', marginBottom: 3 }}>{t('scenario.stepConditionalJump')}:</div>
-                            {steps.length === 0 && <div style={{ color: '#666', fontSize: 10, padding: 3 }}>{t('scenario.stepsLoading')}</div>}
+                            <div style={{ fontSize: 10, color: '#888', marginBottom: 3 }}>{t('scenario.stepConditionalJump')}:</div>
+                            {steps.length === 0 && <div style={{ color: '#666', fontSize: 11, padding: 3 }}>{t('scenario.stepsLoading')}</div>}
                             {steps.map((step: any, si: number) => {
                               const sid = step.id;
                               const sj = stepJumps[String(sid)] || { on_pass_goto: null, on_fail_goto: null };
                               const hasSJ = sj.on_pass_goto != null || sj.on_fail_goto != null;
                               return (
                                 <div key={si} style={{ marginBottom: 3, padding: '3px 0', borderBottom: '1px solid #222' }}>
-                                  <div style={{ fontSize: 10, display: 'flex', alignItems: 'center', gap: 3 }}>
-                                    <Tag style={{ fontSize: 9, margin: 0, minWidth: 20, textAlign: 'center' }}>{sid}</Tag>
+                                  <div style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                    <Tag style={{ fontSize: 10, margin: 0, minWidth: 20, textAlign: 'center' }}>{sid}</Tag>
                                     <span style={{ flex: 1, color: hasSJ ? '#d89614' : '#ccc' }}>{formatStepLabel(step, si)}</span>
-                                    {hasSJ && <BranchesOutlined style={{ color: '#d89614', fontSize: 9 }} />}
+                                    {hasSJ && <BranchesOutlined style={{ color: '#d89614', fontSize: 10 }} />}
                                   </div>
                                   <div style={{ paddingLeft: 22, display: 'flex', flexDirection: 'column', gap: 2, marginTop: 2 }}>
                                     {renderJumpRow('P→', '#52c41a', sj.on_pass_goto, sj.on_fail_goto,
@@ -1927,7 +1927,7 @@ export default function ScenarioPage() {
                                     {renderJumpRow('F→', '#ff4d4f', sj.on_pass_goto, sj.on_fail_goto,
                                       (pg, fg) => updateGroupStepJumps(gName, idx, sid, pg, fg), 'fail')}
                                     {hasSJ && (
-                                      <Button size="small" type="link" danger style={{ fontSize: 9, padding: 0, alignSelf: 'flex-start' }}
+                                      <Button size="small" type="link" danger style={{ fontSize: 10, padding: 0, alignSelf: 'flex-start' }}
                                         icon={<ClearOutlined />}
                                         onClick={() => updateGroupStepJumps(gName, idx, sid, null, null)}
                                       >{t('scenario.reset')}</Button>
@@ -2019,7 +2019,7 @@ export default function ScenarioPage() {
             const isFail = compareStep.status === 'fail';
             return (
               <div style={{
-                marginBottom: 10, padding: '8px 10px', borderRadius: 4, fontSize: 10, fontFamily: 'monospace',
+                marginBottom: 10, padding: '8px 10px', borderRadius: 4, fontSize: 11, fontFamily: 'monospace',
                 background: isFail ? '#2a1215' : '#122010',
                 border: `1px solid ${isFail ? '#5c2024' : '#274916'}`,
                 color: isFail ? '#ff7875' : '#95de64',
@@ -2033,11 +2033,11 @@ export default function ScenarioPage() {
             return (
               <>
                 <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Tag color={statusColor(compareStep.status)} style={{ fontSize: 11 }}>{compareStep.status.toUpperCase()}</Tag>
+                  <Tag color={statusColor(compareStep.status)} style={{ fontSize: 12 }}>{compareStep.status.toUpperCase()}</Tag>
                   <span style={{ color: '#888', marginLeft: 'auto' }}>Duration: {formatDuration(compareStep.execution_time_ms)}</span>
                 </div>
                 {compareStep.command && (
-                  <div style={{ marginBottom: 6, padding: '6px 10px', background: '#1a1a2e', borderRadius: 4, fontFamily: 'monospace', fontSize: 10 }}>
+                  <div style={{ marginBottom: 6, padding: '6px 10px', background: '#1a1a2e', borderRadius: 4, fontFamily: 'monospace', fontSize: 11 }}>
                     <span style={{ color: '#888' }}>$ </span><span style={{ color: '#e0e0e0' }}>{compareStep.command}</span>
                   </div>
                 )}
@@ -2063,7 +2063,7 @@ export default function ScenarioPage() {
               {/* 모듈 결과 메시지 (이미지 비교와 함께) */}
               {_msg && compareStep.command && compareStep.command.includes('::') && (
                 <div style={{ marginBottom: 6 }}>
-                  <div style={{ marginBottom: 3, padding: '6px 10px', background: '#1a1a2e', borderRadius: 4, fontFamily: 'monospace', fontSize: 10 }}>
+                  <div style={{ marginBottom: 3, padding: '6px 10px', background: '#1a1a2e', borderRadius: 4, fontFamily: 'monospace', fontSize: 11 }}>
                     <span style={{ color: '#888' }}>$ </span><span style={{ color: '#e0e0e0' }}>{compareStep.command}</span>
                   </div>
                   {renderModuleMessage()}
@@ -2258,7 +2258,7 @@ export default function ScenarioPage() {
             beforeUpload={(file) => { handleImportFile(file); return false; }}
             showUploadList={false}
           >
-            <p style={{ fontSize: 32, color: '#999' }}><UploadOutlined /></p>
+            <p style={{ fontSize: 33, color: '#999' }}><UploadOutlined /></p>
             <p>{t('scenario.importDragText')}</p>
           </Upload.Dragger>
         ) : (
@@ -2379,7 +2379,7 @@ export default function ScenarioPage() {
         destroyOnClose
         width={420}
       >
-        <div style={{ marginBottom: 6, color: '#888', fontSize: 10 }}>
+        <div style={{ marginBottom: 6, color: '#888', fontSize: 11 }}>
           {t('webcam.pickDeviceHint')}
         </div>
         <Radio.Group
@@ -2389,7 +2389,7 @@ export default function ScenarioPage() {
         >
           {webcamPickerDevices.map(d => (
             <Radio key={d.index} value={d.index}>
-              <span style={{ fontSize: 10 }}>
+              <span style={{ fontSize: 11 }}>
                 <Tag color="blue" style={{ marginRight: 3 }}>#{d.index}</Tag>
                 {d.label}
               </span>

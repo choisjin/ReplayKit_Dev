@@ -663,7 +663,7 @@ export default function ResultsPage() {
       title: t('results.execTime'),
       key: 'time',
       width: 200,
-      render: (_: any, g: ResultGroup) => <span style={{ fontSize: 10, lineHeight: 1.4 }}>{formatTime(g.timestamp)}</span>,
+      render: (_: any, g: ResultGroup) => <span style={{ fontSize: 11, lineHeight: 1.4 }}>{formatTime(g.timestamp)}</span>,
       sorter: (a: ResultGroup, b: ResultGroup) => (a.timestamp || '').localeCompare(b.timestamp || ''),
       defaultSortOrder: 'descend' as const,
     },
@@ -748,7 +748,7 @@ export default function ResultsPage() {
     },
   ];
 
-  const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 9, color: '#888' }}>{ko}</span></div>;
+  const _colTitle = (en: string, ko: string) => <div style={{ textAlign: 'center' }}>{en}<br /><span style={{ fontSize: 10, color: '#888' }}>{ko}</span></div>;
   // 필터용: 현재 표시 데이터에서 고유값 추출
   const _allSteps: StepResultDetail[] = detail?.step_results || (groupDetail ? groupDetail.flatMap(d => d.step_results || []) : []);
   const _uniqueStatuses = [...new Set(_allSteps.map(s => s.status).filter(Boolean))].sort();
@@ -761,7 +761,7 @@ export default function ResultsPage() {
       dataIndex: 'timestamp',
       key: 'timestamp',
       align: 'center' as const,
-      render: (v: string | null) => <span style={{ fontSize: 10, lineHeight: 1.4 }}>{v ? formatTime(v) : '-'}</span>,
+      render: (v: string | null) => <span style={{ fontSize: 11, lineHeight: 1.4 }}>{v ? formatTime(v) : '-'}</span>,
       _hide: false,
     },
     {
@@ -807,7 +807,7 @@ export default function ResultsPage() {
         if (isModuleStep && r.message) {
           if (r.message.match(/\[BG_TASK:/)) return <span>{v} <Tag color="processing">BG</Tag></span>;
           if (r.message.startsWith('⏳')) return <span>{v} <Tag color="processing">⏳</Tag></span>;
-          return <Tooltip title={<pre style={{ margin: 0, fontSize: 9, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto' }}>{r.message}</pre>}><span>{v}</span></Tooltip>;
+          return <Tooltip title={<pre style={{ margin: 0, fontSize: 10, whiteSpace: 'pre-wrap', maxHeight: 200, overflow: 'auto' }}>{r.message}</pre>}><span>{v}</span></Tooltip>;
         }
         return <span style={{ textAlign: 'left', display: 'block' }}>{v || r.message || '-'}</span>;
       },
@@ -1102,7 +1102,7 @@ export default function ResultsPage() {
                 </Space>
               </Descriptions.Item>
               <Descriptions.Item label={t('common.status')}>
-                <Tag color={statusColor(detail.status)} style={{ fontSize: 11 }}>
+                <Tag color={statusColor(detail.status)} style={{ fontSize: 12 }}>
                   {detail.status.toUpperCase()}
                 </Tag>
               </Descriptions.Item>
@@ -1119,8 +1119,8 @@ export default function ResultsPage() {
                       extra={
                         <Space size={0}>
                           <Button type="text" size="small" icon={webcamExpanded ? <ShrinkOutlined /> : <ExpandOutlined />}
-                            onClick={() => setWebcamExpanded(!webcamExpanded)} style={{ fontSize: 9 }} />
-                          <Button type="text" size="small" onClick={() => { setWebcamPanelOpen(false); setWebcamExpanded(false); }} style={{ fontSize: 9 }}>✕</Button>
+                            onClick={() => setWebcamExpanded(!webcamExpanded)} style={{ fontSize: 10 }} />
+                          <Button type="text" size="small" onClick={() => { setWebcamPanelOpen(false); setWebcamExpanded(false); }} style={{ fontSize: 10 }}>✕</Button>
                         </Space>
                       }
                       bodyStyle={{ padding: 5 }}
@@ -1158,7 +1158,7 @@ export default function ResultsPage() {
                           const isActive = rec.url === activeRecUrl;
                           return (
                             <div key={rec.filename} style={{
-                              display: 'flex', alignItems: 'center', gap: 3, fontSize: 9,
+                              display: 'flex', alignItems: 'center', gap: 3, fontSize: 10,
                               padding: '2px 4px', borderRadius: 4,
                               background: isActive ? 'var(--accent-light, #e6f4ff)' : 'transparent',
                               border: isActive ? '1px solid var(--accent, #1677ff)' : '1px solid transparent',
@@ -1166,7 +1166,7 @@ export default function ResultsPage() {
                             }}
                               onClick={() => { setActiveRecUrl(rec.url); const recCycle = m ? parseInt(m[1]) : 1; setActiveRecRepeat(recCycle); }}
                             >
-                              <Tag color={isActive ? 'processing' : 'blue'} style={{ margin: 0, fontSize: 8 }}>R{ri}</Tag>
+                              <Tag color={isActive ? 'processing' : 'blue'} style={{ margin: 0, fontSize: 9 }}>R{ri}</Tag>
                               <span style={{ flex: 1, color: isActive ? 'var(--accent, #1677ff)' : '#888', fontWeight: isActive ? 600 : 400 }}>{(rec.size / 1024 / 1024).toFixed(1)}MB</span>
                               <Tooltip title={t('webcam.trimSave')}>
                                 <Button size="small" type="text" icon={<ScissorOutlined />} style={{ padding: '0 4px', height: 20 }}
@@ -1204,7 +1204,7 @@ export default function ResultsPage() {
                         type="text"
                         icon={<VideoCameraOutlined />}
                         onClick={() => setWebcamPanelOpen(true)}
-                        style={{ writingMode: 'vertical-rl', height: 'auto', padding: '8px 4px', fontSize: 10 }}
+                        style={{ writingMode: 'vertical-rl', height: 'auto', padding: '8px 4px', fontSize: 11 }}
                       >
                         {t('webcam.recordings')} ({recordings.length})
                       </Button>
@@ -1352,9 +1352,9 @@ export default function ResultsPage() {
                 <Card size="small" title={t('results.excludeAreaCompare')}>
                   <Space wrap>
                     <Tag color="red">{t('results.excludeAreaApplied')}</Tag>
-                    <span style={{ fontSize: 10, color: '#ccc' }}>{compareStep.message}</span>
+                    <span style={{ fontSize: 11, color: '#ccc' }}>{compareStep.message}</span>
                   </Space>
-                  <div style={{ marginTop: 6, fontSize: 10, color: '#888' }}>
+                  <div style={{ marginTop: 6, fontSize: 11, color: '#888' }}>
                     {t('results.excludeAreaDesc')}
                   </div>
                 </Card>
@@ -1363,7 +1363,7 @@ export default function ResultsPage() {
             {compareStep.compare_mode === 'multi_crop' && compareStep.sub_results?.length > 0 && (
               <div style={{ marginTop: 10 }}>
                 <Card size="small" title={t('results.cropResults', { count: String(compareStep.sub_results.length) })}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                     <thead>
                       <tr style={{ borderBottom: '1px solid #303030' }}>
                         <th style={{ padding: '4px 8px', textAlign: 'left' }}>#</th>

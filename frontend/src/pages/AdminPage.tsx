@@ -234,7 +234,7 @@ export default function AdminPage() {
                         style={{ width: 220 }}
                         onChange={(e) => updateModel(idx, mi, { value: e.target.value })}
                       />
-                      <Typography.Text type="secondary" style={{ fontSize: 10 }}>에이전트</Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>에이전트</Typography.Text>
                       <Select
                         size="small"
                         allowClear
@@ -256,7 +256,7 @@ export default function AdminPage() {
 
       {/* 에이전트 관리 */}
       <Card size="small" title="에이전트 (주 디바이스 조작 방식)"
-        extra={<Typography.Text type="secondary" style={{ fontSize: 10 }}>
+        extra={<Typography.Text type="secondary" style={{ fontSize: 11 }}>
           체크 해제하면 모델의 에이전트 선택지에서 제외됩니다. type(내부 매핑)은 고정.
         </Typography.Text>}>
         {catalog.agents.length === 0 ? (
@@ -269,16 +269,16 @@ export default function AdminPage() {
                   checked={a.enabled !== false}
                   onChange={(e) => updateAgent(i, { enabled: e.target.checked })}
                 />
-                <Typography.Text type="secondary" style={{ fontSize: 10, minWidth: 42 }}>이름</Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 11, minWidth: 42 }}>이름</Typography.Text>
                 <Input
                   size="small"
                   value={a.name}
                   style={{ width: 200 }}
                   onChange={(e) => updateAgent(i, { name: e.target.value })}
                 />
-                <Typography.Text type="secondary" style={{ fontSize: 10, minWidth: 42 }}>type</Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 11, minWidth: 42 }}>type</Typography.Text>
                 <Tag color="blue" style={{ fontFamily: 'monospace' }}>{a.type}</Tag>
-                <Typography.Text type="secondary" style={{ fontSize: 9 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 10 }}>
                   {a.type === 'adb' && '— Android/IVI tap·swipe·key·screencap'}
                   {a.type === 'hkmc_agent' && '— HKMC 차량 IVI TCP 프로토콜'}
                   {a.type === 'isap_agent' && '— iSAP Agent TCP 프로토콜'}
@@ -294,7 +294,7 @@ export default function AdminPage() {
 
       {/* 모듈 표시 여부 */}
       <Card size="small" title="모듈 표시 여부"
-        extra={<Typography.Text type="secondary" style={{ fontSize: 10 }}>체크 해제하면 DevicePage 스캔/등록 UI에서 숨김</Typography.Text>}>
+        extra={<Typography.Text type="secondary" style={{ fontSize: 11 }}>체크 해제하면 DevicePage 스캔/등록 UI에서 숨김</Typography.Text>}>
         {modules.length === 0 ? (
           <Empty description="등록된 모듈 없음" />
         ) : (
@@ -306,9 +306,9 @@ export default function AdminPage() {
                 onChange={(e) => setModuleVisible(m.name, e.target.checked)}
               >
                 <Space>
-                  <Typography.Text strong style={{ fontSize: 10 }}>{m.label || m.name}</Typography.Text>
+                  <Typography.Text strong style={{ fontSize: 11 }}>{m.label || m.name}</Typography.Text>
                   {m.label && m.label !== m.name && (
-                    <Typography.Text type="secondary" style={{ fontSize: 9 }}>({m.name})</Typography.Text>
+                    <Typography.Text type="secondary" style={{ fontSize: 10 }}>({m.name})</Typography.Text>
                   )}
                 </Space>
               </Checkbox>
