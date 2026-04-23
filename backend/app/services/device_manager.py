@@ -861,11 +861,15 @@ class DeviceManager:
                                     name: str = "", device_model: str = "",
                                     username: str = "root", password: str = "",
                                     resolution: str = "1560x700",
-                                    private_server_ip: str = "192.168.0.2",
+                                    private_server_ip: str = "",
                                     private_server_password: str = "",
                                     iid_display: str = "10",
-                                    hud_display: str = "11") -> ManagedDevice:
-        """ICAS Agent 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행)."""
+                                    hud_display: str = "11",
+                                    market: str = "") -> ManagedDevice:
+        """ICAS Agent 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행).
+
+        market이 비어있으면 device_model에서 추론 (EU/NAR/CN/GP). 추론 실패 시 "EU" 기본.
+        """
         final_id = device_id or self._generate_device_id("icas_agent", device_model=device_model)
         display_name = name or f"ICAS ({host}:{port})"
         # "WxH" 문자열을 dict으로 파싱 (프론트엔드 deviceRes 호환). 파싱 실패 시 기본값.
@@ -874,16 +878,29 @@ class DeviceManager:
             res_dict = {"width": int(rw_s), "height": int(rh_s)}
         except Exception:
             res_dict = {"width": 1560, "height": 700}
+
+        # market 추론: 명시 > device_model 키워드 매칭 > EU 기본
+        resolved_market = (market or "").strip().upper()
+        if not resolved_market and device_model:
+            dm_upper = device_model.upper()
+            for m in ("EU", "NAR", "CN", "GP"):
+                if m in dm_upper:
+                    resolved_market = m
+                    break
+        if not resolved_market:
+            resolved_market = "EU"
+
         info: dict = {
             "port": int(port),
             "username": username,
             "password": password,
             "resolution": res_dict,         # dict form — HKMC/iSAP/ADB와 동일한 스키마
             "resolution_str": str(resolution),  # ICAS 서비스 생성자용 원본 문자열
-            "private_server_ip": private_server_ip,
+            "private_server_ip": private_server_ip,  # 빈 문자열이면 market 기본값 사용
             "private_server_password": private_server_password,
             "iid_display": str(iid_display),
             "hud_display": str(hud_display),
+            "market": resolved_market,
         }
         if device_model:
             info["device_model"] = device_model
@@ -1901,14 +1918,34 @@ class DeviceManager:
                     res_str = res_val
                 else:
                     res_str = "1560x700"
+            # market 추론: info.market > device_model 키워드 > EU 기본
+            market = (dev.info.get("market") or "").strip().upper()
+            if not market:
+                dm_val = (dev.info.get("device_model") or "").upper()
+                for _m in ("EU", "NAR", "CN", "GP"):
+                    if _m in dm_val:
+                        market = _m
+                        break
+            if not market:
+                market = "EU"
+            dev.info["market"] = market  # 정규화 후 저장
+
+            # 레거시 private_server_ip 치환: EU/NAR/CN인데 IPv4 "192.168.0.2"로 남아있는 경우
+            # (이전 버전 기본값) → 빈 값으로 바꿔 market 기본(IPv6)을 쓰게 함
+            private_ip = dev.info.get("private_server_ip", "") or ""
+            if market in ("EU", "NAR", "CN") and private_ip == "192.168.0.2":
+                private_ip = ""
+                dev.info["private_server_ip"] = ""
             try:
                 svc = ICASAgentService(
                     dev.address, port=port, device_id=dev.id,
                     username=username, password=password, resolution=res_str,
-                    private_server_ip=dev.info.get("private_server_ip", "192.168.0.2") or "192.168.0.2",
+                    # private_server_ip는 빈 문자열이면 market 기본값 사용
+                    private_server_ip=private_ip,
                     private_server_password=dev.info.get("private_server_password", "") or "",
                     iid_display=dev.info.get("iid_display", "10") or "10",
                     hud_display=dev.info.get("hud_display", "11") or "11",
+                    market=market,
                     key_overrides=dev.info.get("icas_keys"),
                 )
                 ok = await svc.async_connect()

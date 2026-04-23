@@ -89,10 +89,11 @@ class ICASAgentService:
     def __init__(self, host: str, port: int = 22, device_id: str = "",
                  username: str = "root", password: str = "",
                  resolution: str = "1560x700",
-                 private_server_ip: str = "192.168.0.2",
+                 private_server_ip: str = "",
                  private_server_password: str = "",
                  iid_display: str = "10",
                  hud_display: str = "11",
+                 market: str = "EU",
                  key_overrides: Optional[dict[str, dict]] = None):
         self.host = host
         self.port = int(port)
@@ -101,14 +102,11 @@ class ICASAgentService:
         self.password = password or ""
         self._resolution = resolution.upper()
         self._parse_resolution()
-        # market 분기: 기본 GP(KR). ref 코드 기준 GP는 "57"/"43", 그 외 "0x200...000"/"0x80...000"
-        # 단일 디폴트로 GP 채택. 필요 시 set_addr()로 변경.
-        self.src_addr = "57"
-        self.dst_addr = "43"
-
-        # IID/HUD 캡처용 private server (ref: RemoteController.PRIVATE_SERVER_*)
-        # 사용자가 config에서 ip/password/display 번호를 override 가능.
-        self.private_server_ip = private_server_ip
+        # market 분기 (RemoteController.py 라인 63-75 참조)
+        # EU/NAR/CN: legacy 주소 + IPv6 private server
+        # GP(KR): 숫자 주소 + IPv4 private server
+        self.market = (market or "EU").upper()
+        self._apply_market_defaults(self.market, private_server_ip)
         self.private_server_password = private_server_password
         self.iid_display = str(iid_display or "10")
         self.hud_display = str(hud_display or "11")
@@ -153,6 +151,30 @@ class ICASAgentService:
         """src/dst ksend 주소 변경 (EU/NAR/CN/GP 분기)."""
         self.src_addr = src
         self.dst_addr = dst
+
+    def _apply_market_defaults(self, market: str, private_server_ip_override: str = "") -> None:
+        """market 값에 따라 ksend src/dst 주소 + private_server_ip 기본값 설정.
+
+        RemoteController.py 라인 63-75 참조:
+          EU/NAR/CN: legacy — src=0x200000000000000, dst=0x80000000000, private=IPv6
+          GP (그 외): src=57, dst=43, private=IPv4 192.168.0.2
+        private_server_ip_override가 비어있지 않으면 그 값을 그대로 사용.
+        """
+        m = (market or "EU").upper()
+        if m in ("EU", "NAR", "CN"):
+            self.src_addr = "0x200000000000000"
+            self.dst_addr = "0x80000000000"
+            default_private = "fd53:7cb8:383:3::73"
+        else:
+            self.src_addr = "57"
+            self.dst_addr = "43"
+            default_private = "192.168.0.2"
+        self.private_server_ip = private_server_ip_override or default_private
+
+    def set_market(self, market: str, private_server_ip_override: str = "") -> None:
+        """런타임 market 전환 (addr + private_server_ip 동시 갱신)."""
+        self.market = (market or "EU").upper()
+        self._apply_market_defaults(self.market, private_server_ip_override)
 
     # ------------------------------------------------------------------
     # Connection (SSH check)

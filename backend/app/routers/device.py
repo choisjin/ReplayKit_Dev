@@ -507,10 +507,12 @@ async def connect_device(req: ConnectRequest):
                 username=ef.get("username", "root") or "root",
                 password=ef.get("password", "") or "",
                 resolution=ef.get("resolution", "1560x700") or "1560x700",
-                private_server_ip=ef.get("private_server_ip", "192.168.0.2") or "192.168.0.2",
+                # private_server_ip는 빈 문자열이면 market 기본값 사용
+                private_server_ip=ef.get("private_server_ip", "") or "",
                 private_server_password=ef.get("private_server_password", "") or "",
                 iid_display=str(ef.get("iid_display", "10") or "10"),
                 hud_display=str(ef.get("hud_display", "11") or "11"),
+                market=str(ef.get("market", "") or ""),
             )
             # 등록 직후 실제 SSH 연결 시도
             try:
