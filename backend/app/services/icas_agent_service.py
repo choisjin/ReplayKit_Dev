@@ -119,6 +119,11 @@ class ICASAgentService:
         self._ssh_shell = None  # 장수명 invoke_shell 채널 — ksend 등 fire-and-forget 명령용
         self._ssh_lock = threading.RLock()
         self._ssh_keepalive_interval = 30  # seconds; transport.set_keepalive로 TCP idle 방지
+        # IID/HUD 캡처 — private_server로의 direct-tcpip 터널 + SSH 클라이언트도 장수명 캐시.
+        # 매 프레임마다 paramiko.connect() 인증(~300-500ms)을 반복하지 않도록.
+        self._ps_ssh = None
+        self._ps_tunnel_chan = None
+        self._ps_lock = threading.RLock()
         self._key_overrides: dict[str, dict] = dict(key_overrides or {})
 
     # ------------------------------------------------------------------
@@ -342,6 +347,70 @@ class ICASAgentService:
                 except Exception:
                     pass
                 self._ssh_client = None
+        self._close_private_server_ssh()
+
+    def _close_private_server_ssh(self) -> None:
+        """private_server 공유 SSH와 터널 채널을 닫는다."""
+        with self._ps_lock:
+            if self._ps_ssh is not None:
+                try:
+                    self._ps_ssh.close()
+                except Exception:
+                    pass
+                self._ps_ssh = None
+            if self._ps_tunnel_chan is not None:
+                try:
+                    self._ps_tunnel_chan.close()
+                except Exception:
+                    pass
+                self._ps_tunnel_chan = None
+
+    def _get_private_server_ssh(self):
+        """IID/HUD용 private_server 공유 SSH 반환 — 죽어있으면 새로 열고 인증.
+
+        매 프레임 새로 paramiko.connect()를 하면 인증만 300-500ms가 들어 FPS가 떨어짐.
+        direct-tcpip 터널 + SSH 클라이언트를 프로세스 수명 동안 재사용.
+        호출자는 `_ps_lock` 잡고 사용 (SFTP/exec_command가 동시에 돌지 않도록).
+        """
+        # 살아있으면 그대로 반환
+        if self._ps_ssh is not None:
+            try:
+                t = self._ps_ssh.get_transport()
+                if t is not None and t.is_active() and t.is_authenticated():
+                    return self._ps_ssh
+            except Exception:
+                pass
+            # 죽었으면 정리
+            self._close_private_server_ssh()
+        # 새로 연결
+        import paramiko
+        shared = self._get_shared_ssh()  # HU shared SSH (락 보호됨 — _ssh_lock)
+        hu_transport = shared.get_transport()
+        if hu_transport is None or not hu_transport.is_active():
+            raise RuntimeError("ICAS shared HU transport not active")
+        chan = hu_transport.open_channel(
+            "direct-tcpip",
+            (self.private_server_ip, 22),
+            ("127.0.0.1", 0),
+            timeout=10,
+        )
+        ps_ssh = paramiko.SSHClient()
+        ps_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ps_ssh.connect(
+            self.private_server_ip, port=22,
+            username="root", password=(self.private_server_password or ""),
+            sock=chan, timeout=15,
+            allow_agent=False, look_for_keys=False,
+        )
+        try:
+            pt = ps_ssh.get_transport()
+            if pt is not None:
+                pt.set_keepalive(self._ssh_keepalive_interval)
+        except Exception:
+            pass
+        self._ps_tunnel_chan = chan
+        self._ps_ssh = ps_ssh
+        return ps_ssh
 
     async def async_connect(self, timeout: float = 10.0) -> bool:
         loop = asyncio.get_event_loop()
@@ -711,35 +780,17 @@ class ICASAgentService:
             #
             # interactive shell-over-shell + scp password expect 방식은
             # 프롬프트 타이밍에 따라 자주 실패 → direct-tcpip으로 기초부터 제거.
-            import paramiko
+            # paramiko SSH 클라이언트/터널은 _get_private_server_ssh에서 캐시하여 재사용.
 
             def _do_capture() -> None:
-                # HU 공유 SSH의 transport를 사용해 HU→private_server:22 TCP 터널 생성
-                with self._ssh_lock:
-                    shared = self._get_shared_ssh()
-                    hu_transport = shared.get_transport()
-                    if hu_transport is None or not hu_transport.is_active():
-                        raise RuntimeError("ICAS shared HU transport not active")
-                    chan = hu_transport.open_channel(
-                        "direct-tcpip",
-                        (self.private_server_ip, 22),
-                        ("127.0.0.1", 0),
-                        timeout=10,
-                    )
-                # 터널 채널 위로 private_server에 paramiko SSH 인증
-                ps_ssh = paramiko.SSHClient()
-                ps_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                ps_ssh.connect(
-                    self.private_server_ip, port=22,
-                    username="root", password=(self.private_server_password or ""),
-                    sock=chan, timeout=15,
-                    allow_agent=False, look_for_keys=False,
-                )
-                try:
-                    # private_server는 busybox 계열이라 bash가 없을 수 있음 → 기본 쉘(sh/busybox)
-                    # 사용. PATH가 최소한이라 `screenshot` 바이너리를 못 찾을 수 있어
-                    # 일반적인 시스템 경로를 명시적으로 prepend.
-                    # 기존 stale bmp 제거 후 실행 → 파일 생성 여부로 성공 판정.
+                # 공유 ps_ssh (direct-tcpip 터널 + SSH 인증 캐시됨) 재사용.
+                # 죽어있으면 _get_private_server_ssh가 알아서 재연결.
+                # _ps_lock으로 동시 호출 직렬화 — SFTP/exec_command 간섭 방지.
+                with self._ps_lock:
+                    with self._ssh_lock:
+                        ps_ssh = self._get_private_server_ssh()
+                    # private_server는 busybox 계열이라 bash가 없을 수 있음 → 기본 쉘 사용.
+                    # PATH를 명시적으로 prepend + stale bmp 제거 + screenshot 실행.
                     cmd = (
                         "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:"
                         "/sbin:/bin:$PATH && "
@@ -758,7 +809,6 @@ class ICASAgentService:
                     exit_status = -1
                     try:
                         stdout.channel.settimeout(30)
-                        # PTY 모드에서는 stdout에 stdout+stderr가 병합되지만 상관없음
                         deadline = time.time() + 30.0
                         while time.time() < deadline:
                             if stdout.channel.exit_status_ready():
@@ -774,8 +824,7 @@ class ICASAgentService:
                                 except Exception:
                                     pass
                             else:
-                                time.sleep(0.1)
-                        # 남은 버퍼 드레인
+                                time.sleep(0.05)
                         while stdout.channel.recv_ready():
                             try:
                                 out_text += stdout.channel.recv(4096).decode("utf-8", errors="replace")
@@ -796,8 +845,9 @@ class ICASAgentService:
                             except Exception:
                                 pass
 
-                    # SFTP로 파일 생성 여부 폴링 → private_server:/tmp/screenshot.bmp → 로컬 pull
-                    with ps_ssh.open_sftp() as sftp:
+                    # SFTP — ps_ssh 공유 transport 위에 subsystem 1개 열어 stat + get + remove
+                    sftp = ps_ssh.open_sftp()
+                    try:
                         st = None
                         file_deadline = time.time() + 5.0
                         while time.time() < file_deadline:
@@ -808,9 +858,8 @@ class ICASAgentService:
                                     break
                             except IOError:
                                 pass
-                            time.sleep(0.3)
+                            time.sleep(0.2)
                         if st is None:
-                            # 진단 정보 포함 — stdout/stderr 앞부분 노출
                             snippet = (out_text + err_text).strip().replace("\r", " ").replace("\n", " | ")
                             if len(snippet) > 240:
                                 snippet = snippet[:240] + "..."
@@ -824,17 +873,19 @@ class ICASAgentService:
                             sftp.remove("/tmp/screenshot.bmp")
                         except Exception:
                             pass
-                finally:
-                    try:
-                        ps_ssh.close()
-                    except Exception:
-                        pass
+                    finally:
+                        try:
+                            sftp.close()
+                        except Exception:
+                            pass
 
-            # 1회 재시도 — transport 죽어있으면 공유 SSH를 리셋 후 재시도
+            # 1회 재시도 — transport 죽어있으면 공유 ps_ssh/HU 모두 리셋 후 재시도
             try:
                 _do_capture()
             except Exception as e:
                 logger.warning("ICAS IID/HUD capture via direct-tcpip failed, retrying: %s", e)
+                # private_server 세션 먼저 버리고, HU 세션도 같이 리셋 (터널이 HU 위에 있음)
+                self._close_private_server_ssh()
                 with self._ssh_lock:
                     if self._ssh_client is not None:
                         try:
