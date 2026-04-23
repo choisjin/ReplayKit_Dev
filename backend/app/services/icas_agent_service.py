@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import threading
 import time
 from typing import Optional
 
@@ -114,7 +115,11 @@ class ICASAgentService:
 
         self._connected = False
         self.agent_version = "ICAS Agent"
-        self._ssh_client = None  # paramiko.SSHClient (idle holder; 액션마다 재연결하는 ref 스타일 유지)
+        # 공유 SSH 세션 — 액션마다 재연결하지 않고 keep-alive로 재사용하여 인증 오버헤드(80ms/call) 제거.
+        # 터치/하드키/스크린샷 등 모든 액션이 동일 클라이언트를 공유하므로 _ssh_lock으로 직렬화.
+        self._ssh_client = None
+        self._ssh_lock = threading.RLock()
+        self._ssh_keepalive_interval = 30  # seconds; transport.set_keepalive로 TCP idle 방지
         self._key_overrides: dict[str, dict] = dict(key_overrides or {})
 
     # ------------------------------------------------------------------
@@ -152,7 +157,10 @@ class ICASAgentService:
     # Connection (SSH check)
     # ------------------------------------------------------------------
     def _new_ssh(self):
-        """새 paramiko SSHClient 생성 및 연결. 사용 후 with로 close."""
+        """새 paramiko SSHClient 생성 및 연결 (IID/HUD hop 등 일회성 용도).
+
+        공유 세션이 필요한 경우는 `_get_shared_ssh()`를 사용할 것.
+        """
         import paramiko
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -160,11 +168,48 @@ class ICASAgentService:
                     password=self.password, timeout=10)
         return ssh
 
-    def connect(self, timeout: float = 10.0) -> bool:
-        """SSH 연결 가능성 확인만 수행 (ref RemoteController.create_ssh_client과 동일)."""
+    def _is_ssh_alive(self, ssh) -> bool:
+        """paramiko SSHClient의 transport 활성 여부 체크."""
+        if ssh is None:
+            return False
         try:
-            ssh = self._new_ssh()
-            ssh.close()
+            t = ssh.get_transport()
+            return bool(t and t.is_active() and t.is_authenticated())
+        except Exception:
+            return False
+
+    def _get_shared_ssh(self):
+        """공유 SSH 세션 반환 — 끊어졌으면 재연결.
+
+        락 안에서 호출해야 함. 최초 호출 시 새로 연결하고,
+        transport가 dead면 닫고 재생성. keep-alive를 설정해 일정 주기마다 NO-OP 프레임을 보내
+        방화벽/NAT TCP idle timeout으로 끊어지는 것을 방지.
+        """
+        if self._is_ssh_alive(self._ssh_client):
+            return self._ssh_client
+        # 죽은 세션 정리
+        if self._ssh_client is not None:
+            try:
+                self._ssh_client.close()
+            except Exception:
+                pass
+            self._ssh_client = None
+        # 새 연결
+        ssh = self._new_ssh()
+        try:
+            t = ssh.get_transport()
+            if t is not None:
+                t.set_keepalive(self._ssh_keepalive_interval)
+        except Exception:
+            pass
+        self._ssh_client = ssh
+        return ssh
+
+    def connect(self, timeout: float = 10.0) -> bool:
+        """공유 SSH 세션을 확보하여 연결 상태를 확인 + 유지."""
+        try:
+            with self._ssh_lock:
+                self._get_shared_ssh()  # 끊어져 있으면 새로 연결
             self._connected = True
             logger.info("ICAS connected to %s:%d", self.host, self.port)
             return True
@@ -175,6 +220,13 @@ class ICASAgentService:
 
     def disconnect(self) -> None:
         self._connected = False
+        with self._ssh_lock:
+            if self._ssh_client is not None:
+                try:
+                    self._ssh_client.close()
+                except Exception:
+                    pass
+                self._ssh_client = None
 
     async def async_connect(self, timeout: float = 10.0) -> bool:
         loop = asyncio.get_event_loop()
@@ -187,20 +239,44 @@ class ICASAgentService:
     # ------------------------------------------------------------------
     # Low-level helpers
     # ------------------------------------------------------------------
+    def _exec_on_shared(self, commands: list[str], interval_s: float = 0.0) -> None:
+        """공유 SSH 세션에서 exec_command들을 순차 실행. transport 에러 시 1회 재연결하여 재시도."""
+        def _run(ssh, cmd_list: list[str]) -> None:
+            for i, c in enumerate(cmd_list):
+                ssh.exec_command(c, timeout=10)
+                if interval_s > 0 and i < len(cmd_list) - 1:
+                    time.sleep(interval_s)
+
+        with self._ssh_lock:
+            try:
+                ssh = self._get_shared_ssh()
+                _run(ssh, commands)
+                return
+            except Exception as e:
+                # transport 끊김/EOF 등 → 세션 리셋 후 1회 재시도
+                logger.warning("ICAS shared SSH exec failed, retrying: %s", e)
+                if self._ssh_client is not None:
+                    try:
+                        self._ssh_client.close()
+                    except Exception:
+                        pass
+                    self._ssh_client = None
+            # retry
+            ssh = self._get_shared_ssh()
+            _run(ssh, commands)
+
     def _ksend(self, data_bytes: str) -> None:
-        """ksend 명령 1회 송신. data_bytes는 공백 구분 hex 문자열."""
+        """ksend 명령 1회 송신 — 공유 SSH 세션 사용."""
         cmd = f'/lge/app_ro/bin/ksend -s {self.src_addr} -d {self.dst_addr} -b "{data_bytes}"'
-        with self._new_ssh() as ssh:
-            ssh.exec_command(cmd, timeout=10)
+        self._exec_on_shared([cmd])
 
     def _ksend_many(self, data_list: list[str], interval_s: float = 0.1) -> None:
-        """ksend 명령 여러 개를 단일 SSH 세션에서 순차 송신."""
-        with self._new_ssh() as ssh:
-            for data in data_list:
-                cmd = f'/lge/app_ro/bin/ksend -s {self.src_addr} -d {self.dst_addr} -b "{data}"'
-                ssh.exec_command(cmd, timeout=10)
-                if interval_s > 0:
-                    time.sleep(interval_s)
+        """ksend 명령 여러 개를 공유 SSH 세션에서 순차 송신."""
+        cmds = [
+            f'/lge/app_ro/bin/ksend -s {self.src_addr} -d {self.dst_addr} -b "{data}"'
+            for data in data_list
+        ]
+        self._exec_on_shared(cmds, interval_s=interval_s)
 
     # ------------------------------------------------------------------
     # Touch (press/drag/release) — ref RemoteController.excutecmdTouch*
@@ -366,27 +442,31 @@ class ICASAgentService:
         from PIL import Image, ImageFile
         ImageFile.LOAD_TRUNCATED_IMAGES = True
 
+        try:
+            from scp import SCPClient
+        except ImportError as e:
+            raise RuntimeError("scp module required: pip install scp") from e
+
         tmp_dir = tempfile.mkdtemp(prefix="icas_cap_")
         try:
-            with self._new_ssh() as ssh:
-                shel = ssh.invoke_shell()
-                commands = [
-                    "export XDG_RUNTIME_DIR=/run/platform/weston; "
-                    "LayerManagerControl dump screen 0 to /tmp/screen1.png\r\n",
-                    "export XDG_RUNTIME_DIR=/run/platform/weston; "
-                    "LayerManagerControl dump screen 2 to /tmp/screen2.png\r\n",
+            # 공유 SSH 세션에서 dump + SCP pull 을 일괄 수행 (매 프레임마다 재인증 방지).
+            # transport 오류 시 1회 재연결 후 재시도.
+            def _do_capture(ssh) -> list[str]:
+                # LayerManagerControl은 exec_command(비대화형)로도 동일 효과. 환경변수 포함 단일 라인으로 호출.
+                dump_cmds = [
+                    "export XDG_RUNTIME_DIR=/run/platform/weston && "
+                    "LayerManagerControl dump screen 0 to /tmp/screen1.png",
+                    "export XDG_RUNTIME_DIR=/run/platform/weston && "
+                    "LayerManagerControl dump screen 2 to /tmp/screen2.png",
                 ]
-                for c in commands:
-                    shel.send(c)
-                    time.sleep(0.3)
-                time.sleep(1.5)  # 파일 생성 대기
-
-                try:
-                    from scp import SCPClient
-                except ImportError as e:
-                    raise RuntimeError("scp module required: pip install scp") from e
-
-                local_files: list[str] = []
+                for c in dump_cmds:
+                    stdin, stdout, stderr = ssh.exec_command(c, timeout=10)
+                    # 덤프 완료 대기 — exit status로 동기화 (sleep 기반 race 제거)
+                    try:
+                        stdout.channel.recv_exit_status()
+                    except Exception:
+                        pass
+                files: list[str] = []
                 with SCPClient(ssh.get_transport()) as scp:
                     for remote, fname in (("/tmp/screen1.png", "screen1.png"),
                                           ("/tmp/screen2.png", "screen2.png")):
@@ -394,9 +474,26 @@ class ICASAgentService:
                         try:
                             scp.get(remote, local)
                             if os.path.exists(local) and os.path.getsize(local) > 0:
-                                local_files.append(local)
-                        except Exception as e:
-                            logger.debug("ICAS HU scp %s failed: %s", remote, e)
+                                files.append(local)
+                        except Exception as ee:
+                            logger.debug("ICAS HU scp %s failed: %s", remote, ee)
+                return files
+
+            local_files: list[str] = []
+            with self._ssh_lock:
+                try:
+                    ssh = self._get_shared_ssh()
+                    local_files = _do_capture(ssh)
+                except Exception as e:
+                    logger.warning("ICAS HU capture failed on shared SSH, retrying: %s", e)
+                    if self._ssh_client is not None:
+                        try:
+                            self._ssh_client.close()
+                        except Exception:
+                            pass
+                        self._ssh_client = None
+                    ssh = self._get_shared_ssh()
+                    local_files = _do_capture(ssh)
 
             if not local_files:
                 raise RuntimeError("No HU screenshot captured")
@@ -431,44 +528,38 @@ class ICASAgentService:
         if not self.private_server_ip:
             raise RuntimeError("ICAS IID/HUD capture: private_server_ip not configured")
 
+        try:
+            from scp import SCPClient
+        except ImportError as e:
+            raise RuntimeError("scp module required: pip install scp") from e
+
         tmp_dir = tempfile.mkdtemp(prefix="icas_iid_")
         try:
-            # 세션 2개 병렬 유지 (ref 동일 패턴)
+            # hop_ssh: private_server로 ssh hop용 (interactive shell이라 공유 불가 — 매회 새로 생성)
+            # scp_ssh: HU → local SCP pull용 — 공유 세션 재사용하여 매 프레임 재인증 제거
             import paramiko
             hop_ssh = paramiko.SSHClient()
             hop_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             hop_ssh.connect(self.host, username=self.username, port=self.port,
-                            password=self.password, timeout=10)
-            scp_ssh = paramiko.SSHClient()
-            scp_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            scp_ssh.connect(self.host, username=self.username, port=self.port,
                             password=self.password, timeout=10)
             try:
                 hop_shel = hop_ssh.invoke_shell()
                 # 1) private server로 ssh hop
                 ps_host = self.private_server_ip
                 is_ipv6 = ":" in ps_host and "." not in ps_host
-                if is_ipv6:
-                    ssh_cmd = (
-                        f'ssh -o "StrictHostKeyChecking=no" '
-                        f'-o "UserKnownHostsFile=/dev/null" root@{ps_host}'
-                    )
-                else:
-                    ssh_cmd = (
-                        f'ssh -o "StrictHostKeyChecking=no" '
-                        f'-o "UserKnownHostsFile=/dev/null" root@{ps_host}'
-                    )
+                ssh_cmd = (
+                    f'ssh -o "StrictHostKeyChecking=no" '
+                    f'-o "UserKnownHostsFile=/dev/null" root@{ps_host}'
+                )
                 msg = self._shell_send_recv(hop_shel, ssh_cmd, delay=1.5)
                 if isinstance(msg, str) and "yes/no" in msg:
                     self._shell_send_recv(hop_shel, "yes", delay=0.5)
-                # 패스워드 프롬프트 응답
                 time.sleep(1.0)
                 self._shell_send_recv(hop_shel, self.private_server_password, delay=0.8)
-                # 작업 디렉토리 + screenshot 실행
                 self._shell_send_recv(hop_shel, "cd /tmp", delay=0.3)
                 self._shell_send_recv(hop_shel, f"screenshot -display={display_number}", delay=2.5)
 
-                # 2) hop 세션에서 scp로 HU의 /tmp로 가져오기
+                # 2) hop 세션에서 scp로 HU의 /tmp로 가져오기 (private_server는 여전히 interactive shell 필요)
                 if is_ipv6:
                     scp_cmd = (
                         f'scp -o "StrictHostKeyChecking=no" '
@@ -477,7 +568,6 @@ class ICASAgentService:
                     )
                 else:
                     scp_cmd = f"scp root@{ps_host}:/tmp/screenshot.bmp /tmp"
-                # iid_shel는 현재 private server에 들어가 있음 → exit 후 HU에서 실행
                 self._shell_send_recv(hop_shel, "exit", delay=0.5)
                 msg = self._shell_send_recv(hop_shel, scp_cmd, delay=1.5)
                 if isinstance(msg, str) and "yes/no" in msg:
@@ -486,33 +576,40 @@ class ICASAgentService:
                     self._shell_send_recv(hop_shel, self.private_server_password, delay=1.0)
                 time.sleep(0.5)
 
-                # 3) local로 SCP pull
-                try:
-                    from scp import SCPClient
-                except ImportError as e:
-                    raise RuntimeError("scp module required: pip install scp") from e
+                # 3) local로 SCP pull + HU에서 정리 — 공유 SSH로 처리
                 local_bmp = os.path.join(tmp_dir, "screenshot.bmp")
-                with SCPClient(scp_ssh.get_transport()) as scp:
-                    scp.get("/tmp/screenshot.bmp", local_bmp)
+
+                def _do_pull(ssh) -> None:
+                    with SCPClient(ssh.get_transport()) as scp:
+                        scp.get("/tmp/screenshot.bmp", local_bmp)
+                    try:
+                        ssh.exec_command("rm -f /tmp/screenshot.bmp", timeout=5)
+                    except Exception:
+                        pass
+
+                with self._ssh_lock:
+                    try:
+                        shared = self._get_shared_ssh()
+                        _do_pull(shared)
+                    except Exception as e:
+                        logger.warning("ICAS IID/HUD pull via shared SSH failed, retrying: %s", e)
+                        if self._ssh_client is not None:
+                            try:
+                                self._ssh_client.close()
+                            except Exception:
+                                pass
+                            self._ssh_client = None
+                        shared = self._get_shared_ssh()
+                        _do_pull(shared)
 
                 if not os.path.exists(local_bmp) or os.path.getsize(local_bmp) == 0:
                     raise RuntimeError("IID/HUD screenshot transfer failed")
-
-                # 4) HU에서 /tmp/screenshot.bmp 정리
-                try:
-                    hop_ssh.exec_command("rm -f /tmp/screenshot.bmp", timeout=5)
-                except Exception:
-                    pass
 
                 img = Image.open(local_bmp).convert("RGBA")
                 return _encode_image(img, fmt)
             finally:
                 try:
                     hop_ssh.close()
-                except Exception:
-                    pass
-                try:
-                    scp_ssh.close()
                 except Exception:
                     pass
         finally:
