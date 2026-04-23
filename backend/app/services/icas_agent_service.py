@@ -118,6 +118,7 @@ class ICASAgentService:
         # 공유 SSH 세션 — 액션마다 재연결하지 않고 keep-alive로 재사용하여 인증 오버헤드(80ms/call) 제거.
         # 터치/하드키/스크린샷 등 모든 액션이 동일 클라이언트를 공유하므로 _ssh_lock으로 직렬화.
         self._ssh_client = None
+        self._ssh_shell = None  # 장수명 invoke_shell 채널 — ksend 등 fire-and-forget 명령용
         self._ssh_lock = threading.RLock()
         self._ssh_keepalive_interval = 30  # seconds; transport.set_keepalive로 TCP idle 방지
         self._key_overrides: dict[str, dict] = dict(key_overrides or {})
@@ -194,6 +195,13 @@ class ICASAgentService:
             except Exception:
                 pass
             self._ssh_client = None
+        # 공유 shell도 dead SSH와 함께 폐기
+        if self._ssh_shell is not None:
+            try:
+                self._ssh_shell.close()
+            except Exception:
+                pass
+            self._ssh_shell = None
         # 새 연결
         ssh = self._new_ssh()
         try:
@@ -204,6 +212,85 @@ class ICASAgentService:
             pass
         self._ssh_client = ssh
         return ssh
+
+    def _get_shared_shell(self):
+        """공유 interactive shell 채널 반환 — 죽었으면 새로 오픈하고 초기 배너를 드레인.
+
+        ksend 등 fire-and-forget 명령은 exec_command(채널 당 open_session=sshd MaxSessions 소모)
+        대신 단일 shell 채널에 `shell.send(cmd + "\\n")` 으로 보낸다.
+        레퍼런스 구현과 동일한 패턴이며, sshd 세션 한도를 소모하지 않아 장기간 안정.
+        """
+        ssh = self._get_shared_ssh()
+        if self._ssh_shell is not None:
+            try:
+                if not self._ssh_shell.closed:
+                    return self._ssh_shell
+            except Exception:
+                pass
+            # 죽은 shell 정리
+            try:
+                self._ssh_shell.close()
+            except Exception:
+                pass
+            self._ssh_shell = None
+        # 새 shell 오픈 + 초기 배너/프롬프트 드레인
+        shell = ssh.invoke_shell()
+        shell.settimeout(0.5)
+        # 초기 프롬프트가 나올 때까지 최대 1s 드레인
+        deadline = time.time() + 1.0
+        while time.time() < deadline:
+            try:
+                if shell.recv_ready():
+                    shell.recv(65536)
+                else:
+                    time.sleep(0.05)
+            except Exception:
+                break
+        self._ssh_shell = shell
+        return shell
+
+    def _drain_shell(self, shell, max_bytes: int = 65536) -> bytes:
+        """공유 shell의 수신 버퍼를 non-blocking으로 비움 (pipe 백프레셔 방지)."""
+        buf = b""
+        try:
+            while shell.recv_ready() and len(buf) < max_bytes:
+                chunk = shell.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+        except Exception:
+            pass
+        return buf
+
+    def _shell_run(self, commands: list[str], post_sleep_s: float = 0.02) -> None:
+        """공유 shell 채널로 명령 여러 개 송신 + drain. transport/shell dead면 1회 리셋 재시도.
+
+        각 명령 후 짧은 post_sleep로 서버가 명령을 소비할 시간을 준 뒤 drain으로 출력을 정리.
+        ksend는 수 ms 안에 끝나므로 20ms 기본값으로 충분.
+        """
+        def _do(shell) -> None:
+            for c in commands:
+                shell.send(c + "\n")
+                if post_sleep_s > 0:
+                    time.sleep(post_sleep_s)
+                self._drain_shell(shell)
+
+        with self._ssh_lock:
+            try:
+                shell = self._get_shared_shell()
+                _do(shell)
+                return
+            except Exception as e:
+                logger.warning("ICAS shared shell exec failed, retrying: %s", e)
+                # shell 리셋 → 다시 시도 (transport가 살아있으면 재사용, 죽었으면 재연결)
+                if self._ssh_shell is not None:
+                    try:
+                        self._ssh_shell.close()
+                    except Exception:
+                        pass
+                    self._ssh_shell = None
+            shell = self._get_shared_shell()
+            _do(shell)
 
     def connect(self, timeout: float = 10.0) -> bool:
         """공유 SSH 세션을 확보하여 연결 상태를 확인 + 유지."""
@@ -221,6 +308,12 @@ class ICASAgentService:
     def disconnect(self) -> None:
         self._connected = False
         with self._ssh_lock:
+            if self._ssh_shell is not None:
+                try:
+                    self._ssh_shell.close()
+                except Exception:
+                    pass
+                self._ssh_shell = None
             if self._ssh_client is not None:
                 try:
                     self._ssh_client.close()
@@ -289,17 +382,18 @@ class ICASAgentService:
             _run_all(ssh, commands)
 
     def _ksend(self, data_bytes: str) -> None:
-        """ksend 명령 1회 송신 — 공유 SSH 세션 사용."""
+        """ksend 명령 1회 송신 — 공유 shell 채널 사용 (레퍼런스 구현 동일 패턴)."""
         cmd = f'/lge/app_ro/bin/ksend -s {self.src_addr} -d {self.dst_addr} -b "{data_bytes}"'
-        self._exec_on_shared([cmd])
+        self._shell_run([cmd])
 
     def _ksend_many(self, data_list: list[str], interval_s: float = 0.1) -> None:
-        """ksend 명령 여러 개를 공유 SSH 세션에서 순차 송신."""
+        """ksend 명령 여러 개를 공유 shell 채널에서 순차 송신."""
         cmds = [
             f'/lge/app_ro/bin/ksend -s {self.src_addr} -d {self.dst_addr} -b "{data}"'
             for data in data_list
         ]
-        self._exec_on_shared(cmds, interval_s=interval_s)
+        # 각 cmd 사이 간격은 shell_run의 post_sleep_s로 들어감 — interval_s 우선
+        self._shell_run(cmds, post_sleep_s=max(0.02, interval_s))
 
     # ------------------------------------------------------------------
     # Touch (press/drag/release) — ref RemoteController.excutecmdTouch*
@@ -570,7 +664,7 @@ class ICASAgentService:
         tmp_dir = tempfile.mkdtemp(prefix="icas_iid_")
         try:
             # hop_ssh: private_server로 ssh hop용 (interactive shell이라 공유 불가 — 매회 새로 생성)
-            # scp_ssh: HU → local SCP pull용 — 공유 세션 재사용하여 매 프레임 재인증 제거
+            # HU → local SCP pull은 공유 세션 재사용하여 매 프레임 재인증 제거
             import paramiko
             hop_ssh = paramiko.SSHClient()
             hop_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -578,37 +672,66 @@ class ICASAgentService:
                             password=self.password, timeout=10)
             try:
                 hop_shel = hop_ssh.invoke_shell()
-                # 1) private server로 ssh hop
+                hop_shel.settimeout(1.0)
+                # 초기 HU 프롬프트 드레인
+                self._drain_until(hop_shel, want=None, max_wait_s=1.5)
+
                 ps_host = self.private_server_ip
                 is_ipv6 = ":" in ps_host and "." not in ps_host
+
+                # 1) HU → private_server ssh hop
                 ssh_cmd = (
                     f'ssh -o "StrictHostKeyChecking=no" '
                     f'-o "UserKnownHostsFile=/dev/null" root@{ps_host}'
                 )
-                msg = self._shell_send_recv(hop_shel, ssh_cmd, delay=1.5)
-                if isinstance(msg, str) and "yes/no" in msg:
-                    self._shell_send_recv(hop_shel, "yes", delay=0.5)
-                time.sleep(1.0)
-                self._shell_send_recv(hop_shel, self.private_server_password, delay=0.8)
-                self._shell_send_recv(hop_shel, "cd /tmp", delay=0.3)
-                self._shell_send_recv(hop_shel, f"screenshot -display={display_number}", delay=2.5)
+                hop_shel.send(ssh_cmd + "\n")
+                buf = self._drain_until(hop_shel, want=("password:", "Password:", "yes/no", "$", "#"),
+                                        max_wait_s=8.0)
+                if "yes/no" in buf:
+                    hop_shel.send("yes\n")
+                    buf = self._drain_until(hop_shel, want=("password:", "Password:"), max_wait_s=5.0)
+                if "password" in buf.lower():
+                    hop_shel.send((self.private_server_password or "") + "\n")
+                    # 로그인 완료까지 프롬프트 대기
+                    self._drain_until(hop_shel, want=("$", "#"), max_wait_s=6.0)
 
-                # 2) hop 세션에서 scp로 HU의 /tmp로 가져오기 (private_server는 여전히 interactive shell 필요)
+                # 2) private_server에서 screenshot 실행 — 파일이 생길 때까지 대기
+                hop_shel.send("cd /tmp\n")
+                self._drain_until(hop_shel, want=("$", "#"), max_wait_s=2.0)
+                hop_shel.send(f"screenshot -display={display_number}\n")
+                # 완료 마커: ls로 파일 크기 확인될 때까지 폴링
+                self._wait_for_remote_file(hop_shel, "/tmp/screenshot.bmp", max_wait_s=8.0)
+
+                # 3) private_server → HU로 scp (private_server는 password 프롬프트 나옴)
+                hop_shel.send("exit\n")
+                self._drain_until(hop_shel, want=("$", "#"), max_wait_s=3.0)
+
                 if is_ipv6:
                     scp_cmd = (
                         f'scp -o "StrictHostKeyChecking=no" '
                         f'-o "UserKnownHostsFile=/dev/null" '
-                        f'root@[{ps_host}]:/tmp/screenshot.bmp /tmp'
+                        f'root@[{ps_host}]:/tmp/screenshot.bmp /tmp/'
                     )
                 else:
-                    scp_cmd = f"scp root@{ps_host}:/tmp/screenshot.bmp /tmp"
-                self._shell_send_recv(hop_shel, "exit", delay=0.5)
-                msg = self._shell_send_recv(hop_shel, scp_cmd, delay=1.5)
-                if isinstance(msg, str) and "yes/no" in msg:
-                    msg = self._shell_send_recv(hop_shel, "yes", delay=0.5)
-                if isinstance(msg, str) and "password" in msg.lower():
-                    self._shell_send_recv(hop_shel, self.private_server_password, delay=1.0)
-                time.sleep(0.5)
+                    scp_cmd = (
+                        f'scp -o "StrictHostKeyChecking=no" '
+                        f'-o "UserKnownHostsFile=/dev/null" '
+                        f'root@{ps_host}:/tmp/screenshot.bmp /tmp/'
+                    )
+                hop_shel.send(scp_cmd + "\n")
+                buf = self._drain_until(hop_shel, want=("password:", "Password:", "yes/no", "$", "#", "100%"),
+                                        max_wait_s=8.0)
+                # yes/no 프롬프트 → 응답 후 password 프롬프트로 이어짐
+                if "yes/no" in buf:
+                    hop_shel.send("yes\n")
+                    buf = self._drain_until(hop_shel, want=("password:", "Password:", "$", "#"),
+                                            max_wait_s=5.0)
+                if "password" in buf.lower():
+                    hop_shel.send((self.private_server_password or "") + "\n")
+                    # 전송 완료까지 프롬프트 대기
+                    self._drain_until(hop_shel, want=("$", "#"), max_wait_s=10.0)
+                # HU 에서 파일 생겼는지 확인 (scp 완료 여부 검증)
+                self._wait_for_remote_file(hop_shel, "/tmp/screenshot.bmp", max_wait_s=8.0)
 
                 # 3) local로 SCP pull + HU에서 정리 — 공유 SSH로 처리
                 local_bmp = os.path.join(tmp_dir, "screenshot.bmp")
@@ -663,6 +786,55 @@ class ICASAgentService:
                     pass
         finally:
             _rm_tree(tmp_dir)
+
+    @staticmethod
+    def _drain_until(shel, want: Optional[tuple[str, ...]] = None,
+                     max_wait_s: float = 5.0, poll_s: float = 0.1) -> str:
+        """shell의 수신 버퍼를 누적하면서 want 문자열 중 하나가 나올 때까지 대기.
+
+        want가 None이면 수신이 조용해질 때(quiet period 0.3s)까지만 읽고 리턴.
+        리턴값: 누적된 문자열 (마지막 4KB 정도). 타임아웃이어도 누적된 버퍼 반환.
+        """
+        deadline = time.time() + max_wait_s
+        last_data = time.time()
+        buf = ""
+        while time.time() < deadline:
+            got_chunk = False
+            try:
+                if shel.recv_ready():
+                    chunk = shel.recv(65536)
+                    if chunk:
+                        buf += chunk.decode("utf-8", errors="replace")
+                        got_chunk = True
+                        last_data = time.time()
+            except Exception:
+                break
+            # want 매칭 체크 — 최근 2KB 만 보면 충분
+            if want:
+                tail = buf[-2048:]
+                for w in want:
+                    if w in tail:
+                        return buf
+            else:
+                # quiet period 기반 종료
+                if not got_chunk and (time.time() - last_data) > 0.3:
+                    return buf
+            if not got_chunk:
+                time.sleep(poll_s)
+        return buf
+
+    @classmethod
+    def _wait_for_remote_file(cls, shel, path: str, max_wait_s: float = 8.0) -> bool:
+        """원격 shell에서 `ls -la path`를 폴링해서 파일 존재 + size>0 을 확인."""
+        deadline = time.time() + max_wait_s
+        marker = "__ICAS_FILE_OK__"
+        while time.time() < deadline:
+            shel.send(f'if [ -s "{path}" ]; then echo {marker}; fi\n')
+            buf = cls._drain_until(shel, want=(marker, "$", "#"), max_wait_s=1.5)
+            if marker in buf:
+                return True
+            time.sleep(0.3)
+        return False
 
     @staticmethod
     def _shell_send_recv(shel, data: str, delay: float = 0.3) -> Optional[str]:
