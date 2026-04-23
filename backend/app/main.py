@@ -414,14 +414,16 @@ async def websocket_screen_mirror(websocket: WebSocket):
     dev = device_manager.get_device(target_device_id) if target_device_id else None
     is_hkmc = dev and dev.type == "hkmc_agent"
     is_isap = dev and dev.type == "isap_agent"
+    is_icas = dev and dev.type == "icas_agent"
     is_vision_camera = dev and dev.type == "vision_camera"
     is_webcam = dev and dev.type == "webcam"
 
     dev_type_label = (
         "hkmc" if is_hkmc else
         ("isap" if is_isap else
-         ("vision_camera" if is_vision_camera else
-          ("webcam" if is_webcam else "adb"))))
+         ("icas" if is_icas else
+          ("vision_camera" if is_vision_camera else
+           ("webcam" if is_webcam else "adb")))))
     logger.debug("Screen mirror: device=%s type=%s", target_device_id, dev_type_label)
 
     # scrcpy 제거 — 항상 JPEG screencap 사용
@@ -453,6 +455,22 @@ async def websocket_screen_mirror(websocket: WebSocket):
                 elif is_isap:
                     await asyncio.sleep(0.3)
                     continue
+                elif is_icas:
+                    icas = device_manager.get_icas_service(target_device_id)
+                    if icas and icas.is_connected:
+                        try:
+                            # ICAS는 SSH+scp 기반이라 캡처가 오래 걸림 → 타임아웃 여유 부여
+                            jpeg_bytes = await icas.async_screencap_bytes(
+                                screen_type=screen_type, fmt="jpeg"
+                            )
+                            await websocket.send_bytes(jpeg_bytes)
+                        except Exception as ce:
+                            logger.debug("ICAS capture error: %s", ce)
+                            await asyncio.sleep(0.5)
+                            continue
+                    else:
+                        await asyncio.sleep(0.3)
+                        continue
                 elif is_vision_camera:
                     cam = device_manager.get_vision_camera(target_device_id)
                     if cam and cam.IsConnected():
