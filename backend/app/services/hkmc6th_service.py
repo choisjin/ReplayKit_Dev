@@ -99,8 +99,8 @@ HKMC_KEYS = {
     "MKBD_MEDIA":       {"cmd": CMD_MKBD, "key": 0x0E},
     "MKBD_CUSTOM":      {"cmd": CMD_MKBD, "key": 0x11},
     "MKBD_SETUP":       {"cmd": CMD_MKBD, "key": 0x12},
-    "MKBD_HOME":        {"cmd": CMD_MKBD, "key": 0x14},   # Non-Navi
-    "MKBD_PHONE":       {"cmd": CMD_MKBD, "key": 0x29},   # Non-Navi
+    "MKBD_HOME":        {"cmd": CMD_MKBD, "key": 0x14, "variant": "non_navi"},
+    "MKBD_PHONE":       {"cmd": CMD_MKBD, "key": 0x29, "variant": "non_navi"},
 
     # ---------- CCP (CMD_CCP=0x80) ----------
     "CCP_ENTER":        {"cmd": CMD_CCP, "key": 0x08},
@@ -120,7 +120,12 @@ HKMC_KEYS = {
     "CCP_TUNE_UP":      {"cmd": CMD_CCP, "key": 0x04, "dial": True, "direction": 0x00},
     "CCP_TUNE_DOWN":    {"cmd": CMD_CCP, "key": 0x04, "dial": True, "direction": 0x01},
 
-    # ---------- RRC (CMD_RRC=0x90) — Navi ----------
+    # ---------- RRC (CMD_RRC=0x90) ----------
+    # 참조 스펙은 Navi/Non-Navi 로 구분하지만 실제로는 RRC Type A / Type B 의
+    # 하드웨어 타입 차이가 더 지배적이며 Navi 여부와 무관하다 (Gen6 Premium 같은
+    # Navi 모델에 Type B RRC 가 탑재되어 RADIO/MEDIA 가 정상 존재할 수 있음).
+    # 일괄 필터는 오히려 유효 키를 숨기는 부작용이 있어 variant 태그 없이 전부
+    # 노출하고, 사용하지 않는 키는 기존 per-device hkmc_keys override 로 숨긴다.
     "RRC_ENTER":        {"cmd": CMD_RRC, "key": 0x08},
     "RRC_UP":           {"cmd": CMD_RRC, "key": 0x00},
     "RRC_DOWN":         {"cmd": CMD_RRC, "key": 0x01},
@@ -136,7 +141,9 @@ HKMC_KEYS = {
     "RRC_JOGDIAL":                  {"cmd": CMD_RRC, "key": 0x00, "dial": True},
     "RRC_VOLUME_LEFT_DIAL":         {"cmd": CMD_RRC, "key": 0x02, "dial": True},
     "RRC_VOLUME_RIGHT_DIAL":        {"cmd": CMD_RRC, "key": 0x03, "dial": True},
-    # ---------- RRC (CMD_RRC=0x90) — Non-Navi 전용 ----------
+    # RRC Type B 전용(추정) — 단독 소스 선택 / 단일 POWER·VOLUME 키 세트.
+    # Type A 장비에선 정의되지 않아 무반응일 수 있음. 필요 시 사용자가 hkmc_keys
+    # override 로 개별 숨김 처리.
     "RRC_RADIO":        {"cmd": CMD_RRC, "key": 0x0D},
     "RRC_MEDIA":        {"cmd": CMD_RRC, "key": 0x0E},
     "RRC_MUTE":         {"cmd": CMD_RRC, "key": 0x24},
@@ -230,6 +237,34 @@ def _parse_int32(data: list[int], offset: int) -> int:
     """Parse a big-endian 32-bit integer from a byte list."""
     return ((data[offset] << 24) | (data[offset + 1] << 16) |
             (data[offset + 2] << 8) | data[offset + 3])
+
+
+# HKMC 6th 디바이스 모델 → Navi / Non-Navi 분류
+# 참조 스펙: RRC_RADIO/MEDIA/MUTE/SEEK_*/PRESET_*/POWER(단일)/VOLUME(단일) 은
+# Non-Navi 전용 키 코드이며, Navi 모델에서는 IVI 가 미정의 키로 처리하여 rear 모니터
+# routing 이 실패하고 front_center 로 fallback 된다.
+_NAVI_MODELS = {
+    "Gen6 Premium",   # HKMC Gen6 Premium — Navi 포함
+    "ccIC",
+    "ccIC27",
+    "CCU2",
+    "Connect Wide",
+}
+_NON_NAVI_MODELS: set[str] = set()  # 아직 알려진 것 없음
+
+
+def resolve_device_variant(device_model: str) -> str:
+    """디바이스 모델명을 'navi' / 'non_navi' / 'unknown' 로 분류.
+
+    미상 모델은 'navi' 기본 — 현행 Premium IVI 들은 대부분 Navi 탑재.
+    """
+    if not device_model:
+        return "navi"
+    if device_model in _NAVI_MODELS:
+        return "navi"
+    if device_model in _NON_NAVI_MODELS:
+        return "non_navi"
+    return "navi"
 
 
 class HKMC6thService:

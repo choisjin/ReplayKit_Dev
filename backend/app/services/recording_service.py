@@ -887,11 +887,11 @@ class RecordingService:
                         await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, direction)
                     else:
                         # screen_type 은 일부러 전달하지 않는다. send_key_by_name 의
-                        # 자동 monitor 보정(rear_left→CCRC_MONITOR_LEFT)이 RRC_RADIO/
-                        # RRC_MEDIA 같은 source 계열 키에서 IVI 가 글로벌 라우팅으로
-                        # 폴백해 front_center 에서 처리되는 증상을 유발한다.
-                        # monitor=0x00(NONE) 으로 두면 IVI 가 현재 포커스(이미 rear_left
-                        # 자동 RRC_LEFT 로 전환됨)를 따라가므로 의도대로 동작.
+                        # 자동 monitor 보정(rear_left→CCRC_MONITOR_LEFT)이 일부 키에서
+                        # IVI 가 글로벌 라우팅으로 폴백하여 front_center 에서 처리되는
+                        # 증상을 유발한다. monitor=0x00(NONE) 으로 두면 IVI 가 현재 화면
+                        # 포커스를 그대로 따라가므로 사용자가 rear 화면을 띄운 상태에서
+                        # 키를 누르면 그 화면에서 의도대로 동작.
                         monitor = params.get("monitor", 0x00)
                         await svc.async_send_key_by_name(key_name, sub_cmd, monitor, direction)
                 else:

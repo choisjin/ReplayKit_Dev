@@ -1166,12 +1166,17 @@ async def list_hkmc_keys(device_id: Optional[str] = None):
     device_id가 지정되면 해당 디바이스의 info["hkmc_keys"] 오버라이드를
     spec default에 병합하여 반환한다.
     """
-    from ..services.hkmc6th_service import HKMC_KEYS, SHORT_KEY, LONG_KEY, PRESS_KEY, RELEASE_KEY, DIAL_ACTION
+    from ..services.hkmc6th_service import (
+        HKMC_KEYS, SHORT_KEY, LONG_KEY, PRESS_KEY, RELEASE_KEY, DIAL_ACTION,
+        resolve_device_variant,
+    )
     overrides: dict[str, dict] = {}
+    device_variant = "navi"  # 미지정/미상 모델 기본
     if device_id:
         dev = dm.get_device(device_id)
         if dev:
             overrides = dev.info.get("hkmc_keys") or {}
+            device_variant = resolve_device_variant(dev.info.get("device_model", ""))
     keys = []
     for name, info in HKMC_KEYS.items():
         ov = overrides.get(name, {})
@@ -1179,7 +1184,15 @@ async def list_hkmc_keys(device_id: Optional[str] = None):
         cmd = ov.get("cmd", info["cmd"])
         key = ov.get("key", info["key"])
         is_dial = ov.get("dial", info.get("dial", False))
-        visible = ov.get("visible", True)
+        key_variant = info.get("variant")  # "navi" | "non_navi" | None(공용)
+        # variant 필터: 디바이스가 Navi 면 non_navi 전용 키 숨김, 그 반대도 동일.
+        # 명시적 override 가 있으면 그 값을 우선 (사용자가 강제로 노출 가능).
+        if "visible" in ov:
+            visible = ov["visible"]
+        elif key_variant and key_variant != device_variant:
+            visible = False
+        else:
+            visible = True
         keys.append({
             "name": name,
             "group": group,
@@ -1187,6 +1200,7 @@ async def list_hkmc_keys(device_id: Optional[str] = None):
             "key": key,
             "is_dial": is_dial,
             "visible": visible,
+            "variant": key_variant,
         })
     return {
         "keys": keys,
