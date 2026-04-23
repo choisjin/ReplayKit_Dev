@@ -899,6 +899,29 @@ class RecordingService:
                             params["cmd"], params["sub_cmd"], params["key_data"],
                             params.get("monitor", 0x00), params.get("direction"),
                         )
+        elif step_type in (StepType.ICAS_TOUCH, StepType.ICAS_SWIPE, StepType.ICAS_KEY):
+            if not device_id:
+                raise ValueError("ICAS step requires a device_id")
+            svc = self.dm.get_icas_service(device_id)
+            if not svc:
+                raise ValueError(f"ICAS device {device_id} not connected")
+            screen_type = params.get("screen_type", "HU")
+            if step_type == StepType.ICAS_TOUCH:
+                await svc.async_tap(params["x"], params["y"], screen_type)
+            elif step_type == StepType.ICAS_SWIPE:
+                await svc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"],
+                                      screen_type, int(params.get("duration_ms", 0)))
+            elif step_type == StepType.ICAS_KEY:
+                key_name = params.get("key_name")
+                if key_name:
+                    sub_cmd = params.get("sub_cmd", 0x43)
+                    direction = params.get("direction")
+                    await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, direction)
+                else:
+                    await svc.async_send_key(
+                        params["cmd"], params["sub_cmd"], params["key_data"],
+                        screen_type, params.get("direction"),
+                    )
         elif step_type == StepType.WAIT:
             await _async_sleep(params.get("duration_ms", 1000) / 1000.0)
         else:

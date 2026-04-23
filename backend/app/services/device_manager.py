@@ -860,7 +860,11 @@ class DeviceManager:
     async def add_icas_agent_device(self, host: str, port: int = 22, device_id: str = "",
                                     name: str = "", device_model: str = "",
                                     username: str = "root", password: str = "",
-                                    resolution: str = "1560x700") -> ManagedDevice:
+                                    resolution: str = "1560x700",
+                                    private_server_ip: str = "192.168.0.2",
+                                    private_server_password: str = "",
+                                    iid_display: str = "10",
+                                    hud_display: str = "11") -> ManagedDevice:
         """ICAS Agent 디바이스 등록만 (연결은 connect_device_by_id로 별도 수행)."""
         final_id = device_id or self._generate_device_id("icas_agent", device_model=device_model)
         display_name = name or f"ICAS ({host}:{port})"
@@ -869,6 +873,10 @@ class DeviceManager:
             "username": username,
             "password": password,
             "resolution": resolution,
+            "private_server_ip": private_server_ip,
+            "private_server_password": private_server_password,
+            "iid_display": str(iid_display),
+            "hud_display": str(hud_display),
         }
         if device_model:
             info["device_model"] = device_model
@@ -1877,6 +1885,10 @@ class DeviceManager:
                 svc = ICASAgentService(
                     dev.address, port=port, device_id=dev.id,
                     username=username, password=password, resolution=resolution,
+                    private_server_ip=dev.info.get("private_server_ip", "192.168.0.2") or "192.168.0.2",
+                    private_server_password=dev.info.get("private_server_password", "") or "",
+                    iid_display=dev.info.get("iid_display", "10") or "10",
+                    hud_display=dev.info.get("hud_display", "11") or "11",
                     key_overrides=dev.info.get("icas_keys"),
                 )
                 ok = await svc.async_connect()

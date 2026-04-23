@@ -938,15 +938,15 @@ class PlaybackService:
         """RAND 스텝의 실제 동작을 사람이 읽기 쉬운 한 줄로 요약."""
         p = step.params or {}
         t = step.type
-        if t == StepType.HKMC_KEY:
+        if t in (StepType.HKMC_KEY, StepType.ICAS_KEY):
             kn = p.get("key_name", "")
             sub = p.get("sub_cmd", 0x43)
             sub_label = "LONG" if sub == 0x44 else "SHORT" if sub == 0x43 else f"sub=0x{int(sub):02X}"
             scr = p.get("screen_type", "")
             return f"HK key={kn} {sub_label} screen={scr}"
-        if t == StepType.HKMC_TOUCH:
+        if t in (StepType.HKMC_TOUCH, StepType.ICAS_TOUCH):
             return f"SK ({p.get('x',0)},{p.get('y',0)}) screen={p.get('screen_type','')}"
-        if t == StepType.HKMC_SWIPE:
+        if t in (StepType.HKMC_SWIPE, StepType.ICAS_SWIPE):
             return f"DRAG ({p.get('x1',0)},{p.get('y1',0)})→({p.get('x2',0)},{p.get('y2',0)}) {p.get('duration_ms',0)}ms screen={p.get('screen_type','')}"
         # 일반 ADB 등도 혹시 RAND 라벨이 붙으면 동일 포맷으로
         return f"{t.value if hasattr(t, 'value') else t} {p}"
@@ -1058,6 +1058,15 @@ class PlaybackService:
         elif step.type == StepType.HKMC_KEY:
             key = p.get("key_name", f"0x{p.get('key_data', 0):02X}")
             return f"hkmc_key {key}"
+        elif step.type == StepType.ICAS_TOUCH:
+            st = step.screen_type or p.get("screen_type", "")
+            return f"icas_touch ({p.get('x', 0)}, {p.get('y', 0)}) [{st}]"
+        elif step.type == StepType.ICAS_SWIPE:
+            st = step.screen_type or p.get("screen_type", "")
+            return f"icas_swipe ({p.get('x1',0)},{p.get('y1',0)})→({p.get('x2',0)},{p.get('y2',0)}) [{st}]"
+        elif step.type == StepType.ICAS_KEY:
+            key = p.get("key_name", f"0x{p.get('key_data', 0):02X}")
+            return f"icas_key {key}"
         elif step.type == StepType.ALL_RANDOM:
             rc = int(p.get("repeat_count", 1))
             iv = int(p.get("interval_ms", 0))
@@ -1181,6 +1190,10 @@ class PlaybackService:
                             username=dev.info.get("username", "root") or "root",
                             password=dev.info.get("password", "") or "",
                             resolution=dev.info.get("resolution", "1560x700") or "1560x700",
+                            private_server_ip=dev.info.get("private_server_ip", "192.168.0.2") or "192.168.0.2",
+                            private_server_password=dev.info.get("private_server_password", "") or "",
+                            iid_display=dev.info.get("iid_display", "10") or "10",
+                            hud_display=dev.info.get("hud_display", "11") or "11",
                             key_overrides=dev.info.get("icas_keys"),
                         )
                         ok = await svc.async_connect()
@@ -1255,11 +1268,21 @@ class PlaybackService:
         return self._resolve_alias(step.device_id, self._device_map)
 
     def _is_hkmc_device(self, device_id: Optional[str]) -> bool:
-        """디바이스가 HKMC/iSAP/ICAS 에이전트 타입인지 확인 (touch/swipe/key 라우팅용)."""
+        """디바이스가 HKMC/iSAP 에이전트 타입인지 확인 (hkmc_* 스텝 라우팅용).
+
+        ICAS는 완전 별도 프로젝트이므로 여기서 제외 — icas_* 전용 스텝으로 처리.
+        """
         if not device_id:
             return False
         dev = self.dm.get_device(device_id)
-        return dev is not None and dev.type in ("hkmc_agent", "isap_agent", "icas_agent")
+        return dev is not None and dev.type in ("hkmc_agent", "isap_agent")
+
+    def _is_icas_device(self, device_id: Optional[str]) -> bool:
+        """디바이스가 ICAS 에이전트 타입인지 확인 (icas_* 스텝 라우팅용)."""
+        if not device_id:
+            return False
+        dev = self.dm.get_device(device_id)
+        return dev is not None and dev.type == "icas_agent"
 
     def _get_agent_service(self, device_id: Optional[str]):
         """Return (svc, kind) where kind ∈ {"hkmc", "isap", "icas", None}.
@@ -1466,18 +1489,19 @@ class PlaybackService:
             )
         elif step.type in (StepType.HKMC_TOUCH, StepType.HKMC_SWIPE, StepType.HKMC_KEY) or (step.type == StepType.REPEAT_TAP and self._is_hkmc_device(real_id)):
             if not real_id:
-                raise ValueError("HKMC/iSAP/ICAS step requires device_id")
+                raise ValueError("HKMC/iSAP step requires device_id")
             # 액션 실행 중 연결 끊김 시 재연결 후 재시도 (최대 2회)
             for _hkmc_attempt in range(2):
                 svc, kind = self._get_agent_service(real_id)
+                if kind == "icas":
+                    raise ValueError(
+                        f"HKMC step on ICAS device {real_id}: ICAS는 icas_* 전용 스텝을 사용해야 함"
+                    )
                 is_isap = kind == "isap"
-                is_icas = kind == "icas"
                 if not svc or not svc.is_connected:
-                    raise ValueError(f"Agent device {real_id} not connected")
+                    raise ValueError(f"HKMC/iSAP device {real_id} not connected")
                 try:
-                    # ICAS 기본 화면은 HU, HKMC/iSAP은 front_center
-                    default_screen = "HU" if is_icas else "front_center"
-                    screen_type = step.screen_type or params.get("screen_type", default_screen)
+                    screen_type = step.screen_type or params.get("screen_type", "front_center")
                     if step.type == StepType.REPEAT_TAP:
                         await svc.async_repeat_tap(params["x"], params["y"],
                                                    int(params.get("count", 5)),
@@ -1485,8 +1509,7 @@ class PlaybackService:
                     elif step.type == StepType.HKMC_TOUCH:
                         await svc.async_tap(params["x"], params["y"], screen_type)
                     elif step.type == StepType.HKMC_SWIPE:
-                        if is_isap or is_icas:
-                            # ICAS/iSAP: duration_ms 포함 시그니처
+                        if is_isap:
                             await svc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"],
                                                   screen_type, int(params.get("duration_ms", 300)))
                         else:
@@ -1496,30 +1519,69 @@ class PlaybackService:
                         direction = params.get("direction")
                         if key_name:
                             sub_cmd = params.get("sub_cmd", 0x43)
-                            if is_isap or is_icas:
-                                # iSAP/ICAS: (key_name, sub_cmd, screen_type, direction)
+                            if is_isap:
                                 await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, direction)
                             else:
                                 monitor = params.get("monitor", 0x00)
                                 await svc.async_send_key_by_name(key_name, sub_cmd, monitor, direction, screen_type)
                         else:
-                            if is_isap or is_icas:
+                            if is_isap:
                                 await svc.async_send_key(
                                     params.get("cmd", 0), params["sub_cmd"], params["key_data"],
-                                    screen_type if is_isap else 0x00, direction,
+                                    screen_type, direction,
                                 )
                             else:
                                 await svc.async_send_key(
                                     params["cmd"], params["sub_cmd"], params["key_data"],
                                     params.get("monitor", 0x00), direction,
                                 )
-                    break  # 성공 시 루프 탈출
+                    break
                 except (ConnectionError, OSError) as ce:
                     if _hkmc_attempt == 0:
-                        logger.warning("Agent action failed (connection lost), reconnecting: %s", ce)
+                        logger.warning("HKMC/iSAP action failed (connection lost), reconnecting: %s", ce)
                         await self._ensure_device_connected(real_id, max_retries=2, retry_interval=2.0)
                     else:
-                        raise  # 재시도 후에도 실패 → 상위 except에서 "error" 처리
+                        raise
+        elif step.type in (StepType.ICAS_TOUCH, StepType.ICAS_SWIPE, StepType.ICAS_KEY) or (step.type == StepType.REPEAT_TAP and self._is_icas_device(real_id)):
+            if not real_id:
+                raise ValueError("ICAS step requires device_id")
+            for _icas_attempt in range(2):
+                svc, kind = self._get_agent_service(real_id)
+                if kind != "icas":
+                    raise ValueError(
+                        f"ICAS step on non-ICAS device {real_id} (kind={kind})"
+                    )
+                if not svc or not svc.is_connected:
+                    raise ValueError(f"ICAS device {real_id} not connected")
+                try:
+                    screen_type = step.screen_type or params.get("screen_type", "HU")
+                    if step.type == StepType.REPEAT_TAP:
+                        await svc.async_repeat_tap(params["x"], params["y"],
+                                                   int(params.get("count", 5)),
+                                                   int(params.get("interval_ms", 100)), screen_type)
+                    elif step.type == StepType.ICAS_TOUCH:
+                        await svc.async_tap(params["x"], params["y"], screen_type)
+                    elif step.type == StepType.ICAS_SWIPE:
+                        await svc.async_swipe(params["x1"], params["y1"], params["x2"], params["y2"],
+                                              screen_type, int(params.get("duration_ms", 300)))
+                    elif step.type == StepType.ICAS_KEY:
+                        key_name = params.get("key_name")
+                        direction = params.get("direction")
+                        if key_name:
+                            sub_cmd = params.get("sub_cmd", 0x43)
+                            await svc.async_send_key_by_name(key_name, sub_cmd, screen_type, direction)
+                        else:
+                            await svc.async_send_key(
+                                params.get("cmd", 0), params["sub_cmd"], params["key_data"],
+                                screen_type, direction,
+                            )
+                    break
+                except (ConnectionError, OSError) as ce:
+                    if _icas_attempt == 0:
+                        logger.warning("ICAS action failed (connection lost), reconnecting: %s", ce)
+                        await self._ensure_device_connected(real_id, max_retries=2, retry_interval=2.0)
+                    else:
+                        raise
         elif step.type == StepType.ALL_RANDOM:
             # 녹화 시 저장된 설정으로 랜덤 스트레스 재현
             # 가중치: HK 20% / SK 70% / DRAG 10% (참조 스크립트 CCIC RAND_ALL 기반)

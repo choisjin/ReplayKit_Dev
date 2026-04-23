@@ -480,7 +480,7 @@ export default function RecordPage() {
     if (screenshotDeviceId) {
       try {
         const dev = primaryDevices.find(d => d.id === screenshotDeviceId);
-        const needsScreenType = (dev?.type === 'hkmc_agent' || dev?.type === 'isap_agent') || (dev?.type === 'adb' && (dev.info?.displays?.length ?? 0) > 1);
+        const needsScreenType = (dev?.type === 'hkmc_agent' || dev?.type === 'isap_agent' || dev?.type === 'icas_agent') || (dev?.type === 'adb' && (dev.info?.displays?.length ?? 0) > 1);
         const res = await deviceApi.screenshot(screenshotDeviceId, needsScreenType ? screenType : undefined);
         if (res.data.image) {
           const fmt = res.data.format || 'jpeg';
@@ -550,6 +550,7 @@ export default function RecordPage() {
   const screenDevice = primaryDevices.find(d => d.id === screenshotDeviceId);
   const isScreenHkmc = screenDevice?.type === 'hkmc_agent' || screenDevice?.type === 'isap_agent';
   const isScreenCCRC = isScreenHkmc && screenDevice?.info?.device_model === 'ccRC';
+  const isScreenICAS = screenDevice?.type === 'icas_agent';
 
   // CCRC: front_center/cluster 비허용 → 자동으로 rear_right로 교정
   useEffect(() => {
@@ -557,6 +558,13 @@ export default function RecordPage() {
       setScreenType('rear_right');
     }
   }, [isScreenCCRC, screenType, setScreenType]);
+
+  // ICAS: HKMC 계열 screenType(front_center/rear_* 등)이 들어오면 HU로 교정
+  useEffect(() => {
+    if (isScreenICAS && !['HU', 'IID', 'HUD'].includes(screenType || '')) {
+      setScreenType('HU');
+    }
+  }, [isScreenICAS, screenType, setScreenType]);
 
   // rear_left / rear_right 전환 시 RRC_LEFT / RRC_RIGHT 하드키 자동 발송.
   //  - HKMC/iSAP 디바이스에서만 동작 (이 키가 실제 존재하는 경우만)
@@ -773,19 +781,35 @@ export default function RecordPage() {
     return { x, y };
   };
 
-  // Map generic gesture actions to HKMC equivalents when target is HKMC device
+  // Map generic gesture actions to agent-specific equivalents based on device type
+  // ICAS와 HKMC는 완전 별도 프로젝트 — 스텝 타입도 분리 (icas_* vs hkmc_*)
   const resolveAction = useCallback((action: string, targetDevice: string): string => {
     const dev = allDevices.find(d => d.id === targetDevice);
-    if (dev?.type !== 'hkmc_agent' && dev?.type !== 'isap_agent') return action;
-    if (action === 'tap') return 'hkmc_touch';
-    if (action === 'swipe') return 'hkmc_swipe';
-    if (action === 'long_press') return 'hkmc_touch'; // Agent has no long_press, treat as touch
+    if (dev?.type === 'icas_agent') {
+      if (action === 'tap') return 'icas_touch';
+      if (action === 'swipe') return 'icas_swipe';
+      if (action === 'long_press') return 'icas_touch';
+      // 이미 icas_* / hkmc_* 로 들어온 경우 hkmc_* → icas_* 로 교정
+      if (action === 'hkmc_touch') return 'icas_touch';
+      if (action === 'hkmc_swipe') return 'icas_swipe';
+      if (action === 'hkmc_key') return 'icas_key';
+      return action;
+    }
+    if (dev?.type === 'hkmc_agent' || dev?.type === 'isap_agent') {
+      if (action === 'tap') return 'hkmc_touch';
+      if (action === 'swipe') return 'hkmc_swipe';
+      if (action === 'long_press') return 'hkmc_touch';
+      return action;
+    }
     return action;
   }, [allDevices]);
 
-  // Inject screen_type into params for HKMC / ADB multi-display actions
+  // Inject screen_type into params for agent / ADB multi-display actions
   const resolveParams = useCallback((action: string, params: Record<string, any>, targetDevice: string): Record<string, any> => {
     const dev = allDevices.find(d => d.id === targetDevice);
+    if (dev?.type === 'icas_agent' && (action === 'icas_touch' || action === 'icas_swipe' || action === 'icas_key' || action === 'repeat_tap')) {
+      return { ...params, screen_type: screenType };
+    }
     if ((dev?.type === 'hkmc_agent' || dev?.type === 'isap_agent') && (action === 'hkmc_touch' || action === 'hkmc_swipe' || action === 'hkmc_key' || action === 'repeat_tap')) {
       return { ...params, screen_type: screenType };
     }
@@ -1278,7 +1302,7 @@ export default function RecordPage() {
     if (!scenarioName || !screenshotDeviceId) return;
     await ensureSavedForImageOp();
     try {
-      const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || hasMultiDisplay) ? screenType : undefined);
+      const res = await scenarioApi.captureExpectedImage(scenarioName, stepIdx, screenshotDeviceId, undefined, undefined, undefined, (isScreenHkmc || isScreenICAS || hasMultiDisplay) ? screenType : undefined);
       setSteps(prev => prev.map((s, i) => i === stepIdx ? { ...s, expected_image: res.data.filename, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now(), roi: null, exclude_rois: [], expected_images: [] } : s));
       message.success(t('record.expectedSaved', { index: stepIdx + 1 }));
     } catch (e: any) {
@@ -1451,9 +1475,9 @@ export default function RecordPage() {
         const res = await scenarioApi.saveExpectedImage(
           scenarioName, captureStepIndex, modalImage, crop,
           undefined, undefined, undefined,
-          (isScreenHkmc || hasMultiDisplay) ? screenType : undefined,
+          (isScreenHkmc || isScreenICAS || hasMultiDisplay) ? screenType : undefined,
         );
-        setSteps(prev => prev.map((s, i) => i === captureStepIndex ? { ...s, expected_image: res.data.filename, roi: crop, screenshot_device_id: screenshotDeviceId, screen_type: (isScreenHkmc || hasMultiDisplay) ? screenType : s.screen_type, _imageVer: Date.now(), exclude_rois: [], expected_images: [] } : s));
+        setSteps(prev => prev.map((s, i) => i === captureStepIndex ? { ...s, expected_image: res.data.filename, roi: crop, screenshot_device_id: screenshotDeviceId, screen_type: (isScreenHkmc || isScreenICAS || hasMultiDisplay) ? screenType : s.screen_type, _imageVer: Date.now(), exclude_rois: [], expected_images: [] } : s));
         message.success(t('record.cropExpectedSaved', { index: captureStepIndex + 1, size: `${rw}×${rh}` }));
         setCaptureModalOpen(false);
         setCaptureStepIndex(null);
@@ -1637,9 +1661,9 @@ export default function RecordPage() {
           const capRes = await scenarioApi.saveExpectedImage(
             scenarioName, excludeRoiEditingIndex, modalImage,
             undefined, undefined, undefined, undefined,
-            (isScreenHkmc || hasMultiDisplay) ? screenType : undefined,
+            (isScreenHkmc || isScreenICAS || hasMultiDisplay) ? screenType : undefined,
           );
-          setSteps(prev => prev.map((s, i) => i === excludeRoiEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, screen_type: (isScreenHkmc || hasMultiDisplay) ? screenType : s.screen_type, _imageVer: Date.now(), roi: null, expected_images: [] } : s));
+          setSteps(prev => prev.map((s, i) => i === excludeRoiEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, screen_type: (isScreenHkmc || isScreenICAS || hasMultiDisplay) ? screenType : s.screen_type, _imageVer: Date.now(), roi: null, expected_images: [] } : s));
         } catch (e: any) {
           message.error(e.response?.data?.detail || t('record.cropSaveFailed'));
           return;
@@ -1790,7 +1814,7 @@ export default function RecordPage() {
         const capRes = await scenarioApi.saveExpectedImage(
           scenarioName, multiCropEditingIndex, modalImage,
           undefined, undefined, undefined, true,
-          (isScreenHkmc || hasMultiDisplay) ? screenType : undefined,
+          (isScreenHkmc || isScreenICAS || hasMultiDisplay) ? screenType : undefined,
         );
         setSteps(prev => prev.map((s, i) => i === multiCropEditingIndex ? { ...s, expected_image: capRes.data.filename, screenshot_device_id: screenshotDeviceId, _imageVer: Date.now(), roi: null, exclude_rois: [] } : s));
         const replaceIdx = multiCropSelectedIdx ?? undefined;
@@ -2661,9 +2685,9 @@ export default function RecordPage() {
     const elapsed = Date.now() - startTime;
     const step = steps[editStepIndex];
 
-    if (step.type === 'swipe' || step.type === 'hkmc_swipe') {
+    if (step.type === 'swipe' || step.type === 'hkmc_swipe' || step.type === 'icas_swipe') {
       const durationMs = Math.max(200, Math.min(elapsed, 3000));
-      const base = step.type === 'hkmc_swipe' ? { screen_type: step.params.screen_type } : {};
+      const base = (step.type === 'hkmc_swipe' || step.type === 'icas_swipe') ? { screen_type: step.params.screen_type } : {};
       const newParams = { ...base, x1: startX, y1: startY, x2: endX, y2: endY, duration_ms: durationMs };
       setEditStepParams(newParams);
       setSteps((prev) => prev.map((s, i) => i === editStepIndex ? { ...s, params: newParams } : s));
@@ -2677,8 +2701,8 @@ export default function RecordPage() {
       setEditStepIndex(null);
       message.success(t('record.longPressUpdated', { index: editStepIndex + 1 }));
     } else {
-      // tap / hkmc_touch — just use start coords
-      const base = step.type === 'hkmc_touch' ? { screen_type: step.params.screen_type } : {};
+      // tap / hkmc_touch / icas_touch — just use start coords
+      const base = (step.type === 'hkmc_touch' || step.type === 'icas_touch') ? { screen_type: step.params.screen_type } : {};
       const newParams = { ...base, x: startX, y: startY };
       setEditStepParams(newParams);
       setSteps((prev) => prev.map((s, i) => i === editStepIndex ? { ...s, params: newParams } : s));
@@ -2941,11 +2965,11 @@ export default function RecordPage() {
                     ? `${s.params.function}(${s.params.args ? Object.entries(s.params.args).map(([, v]) => `"${v}"`).join(', ') : ''})`
                     : s.type === 'serial_command'
                     ? <><Tag color="purple" style={{ margin: 0 }}>Serial</Tag> {s.params.data}</>
-                    : s.type === 'hkmc_touch'
+                    : s.type === 'hkmc_touch' || s.type === 'icas_touch'
                     ? `touch (${s.params.x},${s.params.y})`
-                    : s.type === 'hkmc_swipe'
+                    : s.type === 'hkmc_swipe' || s.type === 'icas_swipe'
                     ? `swipe (${s.params.x1},${s.params.y1})→(${s.params.x2},${s.params.y2})`
-                    : s.type === 'hkmc_key'
+                    : s.type === 'hkmc_key' || s.type === 'icas_key'
                     ? <><Tag color="volcano" style={{ margin: 0 }}>KEY</Tag> {s.params.key_name || `cmd:${s.params.cmd}`}</>
                     : s.type === 'all_random'
                     ? <><Tag color="magenta" style={{ margin: 0 }}>RAND</Tag> ×{s.params.repeat_count ?? 1} @{s.params.interval_ms ?? 0}ms (HK:{(s.params.hk_keys || []).length}{s.params.sk_region ? ' SK▣' : ''}{s.params.drag_region ? ' DRAG▣' : ''})</>
@@ -3211,6 +3235,18 @@ export default function RecordPage() {
                       {adbDisplays.map(d => (
                         <Option key={d.id} value={String(d.id)}>{d.name}{d.width ? ` (${d.width}x${d.height})` : ` (ID:${d.id})`}</Option>
                       ))}
+                    </Select>
+                  )}
+                  {isScreenICAS && (
+                    <Select
+                      size="small"
+                      value={screenType || 'HU'}
+                      onChange={setScreenType}
+                      style={{ minWidth: 120 }}
+                    >
+                      <Option value="HU">HU</Option>
+                      <Option value="IID">IID</Option>
+                      <Option value="HUD">HUD</Option>
                     </Select>
                   )}
                   <Tooltip title={t('record.viewCrop')}>
@@ -3944,10 +3980,10 @@ export default function RecordPage() {
         title={editStepIndex != null ? t('record.editStepTitle', { index: editStepIndex + 1, type: steps[editStepIndex]?.type }) : ''}
         open={editStepIndex != null}
         onCancel={() => setEditStepIndex(null)}
-        width={['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe'].includes(steps[editStepIndex ?? 0]?.type) ? '80vw' : 500}
-        style={['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe'].includes(steps[editStepIndex ?? 0]?.type) ? { top: 20 } : undefined}
+        width={['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe', 'icas_touch', 'icas_swipe'].includes(steps[editStepIndex ?? 0]?.type) ? '80vw' : 500}
+        style={['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe', 'icas_touch', 'icas_swipe'].includes(steps[editStepIndex ?? 0]?.type) ? { top: 20 } : undefined}
         footer={
-          ['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe'].includes(steps[editStepIndex ?? 0]?.type)
+          ['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe', 'icas_touch', 'icas_swipe'].includes(steps[editStepIndex ?? 0]?.type)
             ? <Button onClick={() => setEditStepIndex(null)}>{t('common.cancel')}</Button>
             : (
               <Space>
@@ -3957,7 +3993,7 @@ export default function RecordPage() {
             )
         }
         afterOpenChange={(open) => {
-          if (open && ['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe'].includes(steps[editStepIndex ?? 0]?.type)) {
+          if (open && ['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe', 'icas_touch', 'icas_swipe'].includes(steps[editStepIndex ?? 0]?.type)) {
             setTimeout(drawEditCanvas, 100);
           }
         }}
@@ -3966,13 +4002,13 @@ export default function RecordPage() {
           const step = steps[editStepIndex];
           if (!step) return null;
 
-          if (['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe'].includes(step.type)) {
+          if (['tap', 'long_press', 'swipe', 'hkmc_touch', 'hkmc_swipe', 'icas_touch', 'icas_swipe'].includes(step.type)) {
             return (
               <div>
                 <div style={{ marginBottom: 8, color: subTextColor, fontSize: 12 }}>
-                  {(step.type === 'tap' || step.type === 'hkmc_touch') && t('record.tapHint')}
+                  {(step.type === 'tap' || step.type === 'hkmc_touch' || step.type === 'icas_touch') && t('record.tapHint')}
                   {step.type === 'long_press' && t('record.longPressHint')}
-                  {(step.type === 'swipe' || step.type === 'hkmc_swipe') && t('record.swipeHint')}
+                  {(step.type === 'swipe' || step.type === 'hkmc_swipe' || step.type === 'icas_swipe') && t('record.swipeHint')}
                 </div>
                 <div style={{ marginBottom: 8 }}>
                   <Tag>{t('record.currentParams', { params: JSON.stringify(step.params) })}</Tag>
@@ -4114,7 +4150,7 @@ export default function RecordPage() {
             );
           }
 
-          if (step.type === 'hkmc_key') {
+          if (step.type === 'hkmc_key' || step.type === 'icas_key') {
             return (
               <div>
                 <div style={{ marginBottom: 8, fontWeight: 600 }}>{t('record.hkmcKey')}</div>

@@ -494,6 +494,10 @@ async def connect_device(req: ConnectRequest):
                 username=ef.get("username", "root") or "root",
                 password=ef.get("password", "") or "",
                 resolution=ef.get("resolution", "1560x700") or "1560x700",
+                private_server_ip=ef.get("private_server_ip", "192.168.0.2") or "192.168.0.2",
+                private_server_password=ef.get("private_server_password", "") or "",
+                iid_display=str(ef.get("iid_display", "10") or "10"),
+                hud_display=str(ef.get("hud_display", "11") or "11"),
             )
             # 등록 직후 실제 SSH 연결 시도
             try:
@@ -682,7 +686,7 @@ async def get_device_info(device_id: str):
 
 class InputRequest(BaseModel):
     device_id: str
-    action: str  # "tap" | "swipe" | "input_text" | "key_event" | "adb_command" | "serial_command" | "module_command" | "hkmc_touch" | "hkmc_swipe" | "hkmc_key"
+    action: str  # "tap" | "swipe" | "input_text" | "key_event" | "adb_command" | "serial_command" | "module_command" | "hkmc_touch" | "hkmc_swipe" | "hkmc_key" | "icas_touch" | "icas_swipe" | "icas_key"
     params: dict
 
 
@@ -736,6 +740,34 @@ async def device_input(req: InputRequest):
                     )
                 else:
                     await isap.async_send_key(
+                        p["cmd"], p["sub_cmd"], p["key_data"], screen_type, p.get("direction")
+                    )
+            return {"result": "ok"}
+
+        if req.action in ("icas_touch", "icas_swipe", "icas_key", "repeat_tap") and dev and dev.type == "icas_agent":
+            icas = dm.get_icas_service(req.device_id)
+            if not icas:
+                raise HTTPException(status_code=400, detail=f"ICAS device {req.device_id} not connected")
+            logger.info("[ICAS INPUT] device=%s action=%s params=%s connected=%s",
+                        req.device_id, req.action, req.params, icas.is_connected)
+            p = req.params
+            screen_type = p.get("screen_type", "HU")
+            if req.action == "repeat_tap":
+                await icas.async_repeat_tap(p["x"], p["y"], int(p.get("count", 5)),
+                                            int(p.get("interval_ms", 100)), screen_type)
+            elif req.action == "icas_touch":
+                await icas.async_tap(p["x"], p["y"], screen_type)
+            elif req.action == "icas_swipe":
+                await icas.async_swipe(p["x1"], p["y1"], p["x2"], p["y2"], screen_type,
+                                       int(p.get("duration_ms", 0)))
+            elif req.action == "icas_key":
+                key_name = p.get("key_name")
+                if key_name:
+                    await icas.async_send_key_by_name(
+                        key_name, p.get("sub_cmd", 0x43), screen_type, p.get("direction")
+                    )
+                else:
+                    await icas.async_send_key(
                         p["cmd"], p["sub_cmd"], p["key_data"], screen_type, p.get("direction")
                     )
             return {"result": "ok"}
@@ -1259,6 +1291,15 @@ async def get_screenshot(device_id: str, fmt: str = "jpeg", screen_type: str = "
             img_bytes = await isap.async_screencap_bytes(screen_type=screen_type, fmt=fmt)
             b64 = base64.b64encode(img_bytes).decode("ascii")
             return {"image": b64, "format": fmt}
+        elif dev and dev.type == "icas_agent":
+            icas = dm.get_icas_service(device_id)
+            if not icas:
+                raise HTTPException(status_code=400, detail=f"ICAS device {device_id} not connected")
+            # ICAS 기본 화면은 HU. HKMC 호환으로 기본이 front_center로 들어올 수 있어 변환.
+            st = screen_type if screen_type in ("HU", "IID", "HUD") else "HU"
+            img_bytes = await icas.async_screencap_bytes(screen_type=st, fmt=fmt)
+            b64 = base64.b64encode(img_bytes).decode("ascii")
+            return {"image": b64, "format": fmt}
         elif dev and dev.type == "vision_camera":
             cam = dm.get_vision_camera(device_id)
             if not cam:
@@ -1278,7 +1319,7 @@ async def get_screenshot(device_id: str, fmt: str = "jpeg", screen_type: str = "
             b64 = base64.b64encode(img_bytes).decode("ascii")
             return {"image": b64, "format": fmt}
         elif dev and dev.type not in ("adb",):
-            raise HTTPException(status_code=400, detail="Screenshot only available for ADB, HKMC, iSAP, VisionCamera, or Webcam devices")
+            raise HTTPException(status_code=400, detail="Screenshot only available for ADB, HKMC, iSAP, ICAS, VisionCamera, or Webcam devices")
         else:
             # ADB device
             adb_serial = dev.address if dev else device_id

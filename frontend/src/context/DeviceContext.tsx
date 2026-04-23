@@ -4,7 +4,7 @@ import { deviceApi } from '../services/api';
 
 export interface ManagedDevice {
   id: string;
-  type: string; // "adb" | "serial" | "module" | "hkmc_agent" | "isap_agent" | "vision_camera"
+  type: string; // "adb" | "serial" | "module" | "hkmc_agent" | "isap_agent" | "icas_agent" | "vision_camera"
   category: string; // "primary" | "auxiliary"
   address: string;
   status: string;
@@ -171,6 +171,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     if (!dev) return;
     if (dev.type === 'hkmc_agent' || dev.type === 'isap_agent') {
       setScreenType('front_center');
+    } else if (dev.type === 'icas_agent') {
+      setScreenType('HU');
     } else if (dev.type === 'vision_camera' || dev.type === 'webcam') {
       setScreenType('default');
     } else if (dev.type === 'adb' && (dev.info?.displays?.length ?? 0) > 1) {

@@ -58,6 +58,24 @@ def _encode_touch_xy(x: int, y: int, x_mult: int, y_mult: int) -> tuple[int, int
     return param1, param2, param3
 
 
+def _encode_image(pil_image, fmt: str) -> bytes:
+    """PIL Image → PNG/JPEG 바이트."""
+    buf = io.BytesIO()
+    if (fmt or "png").lower() == "jpeg":
+        pil_image.convert("RGB").save(buf, format="JPEG", quality=85)
+    else:
+        pil_image.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _rm_tree(path: str) -> None:
+    try:
+        import shutil
+        shutil.rmtree(path, ignore_errors=True)
+    except Exception:
+        pass
+
+
 class ICASAgentService:
     """SSH 기반 ICAS HU 제어 서비스.
 
@@ -70,6 +88,10 @@ class ICASAgentService:
     def __init__(self, host: str, port: int = 22, device_id: str = "",
                  username: str = "root", password: str = "",
                  resolution: str = "1560x700",
+                 private_server_ip: str = "192.168.0.2",
+                 private_server_password: str = "",
+                 iid_display: str = "10",
+                 hud_display: str = "11",
                  key_overrides: Optional[dict[str, dict]] = None):
         self.host = host
         self.port = int(port)
@@ -82,6 +104,13 @@ class ICASAgentService:
         # 단일 디폴트로 GP 채택. 필요 시 set_addr()로 변경.
         self.src_addr = "57"
         self.dst_addr = "43"
+
+        # IID/HUD 캡처용 private server (ref: RemoteController.PRIVATE_SERVER_*)
+        # 사용자가 config에서 ip/password/display 번호를 override 가능.
+        self.private_server_ip = private_server_ip
+        self.private_server_password = private_server_password
+        self.iid_display = str(iid_display or "10")
+        self.hud_display = str(hud_display or "11")
 
         self._connected = False
         self.agent_version = "ICAS Agent"
@@ -320,8 +349,18 @@ class ICASAgentService:
     # ------------------------------------------------------------------
     def screencap_bytes(self, screen_type: str = "HU",
                         fmt: str = "png", timeout: float = 15.0) -> bytes:
-        """HU 스크린샷 캡처 — LayerManagerControl dump + SCP pull."""
-        # MVP: HU만. IID/HUD는 향후 private server hop 경로로 확장.
+        """스크린샷 캡처. screen_type: HU | IID | HUD."""
+        st = (screen_type or "HU").upper()
+        if st == "IID":
+            return self._screencap_iid_hud(self.iid_display, fmt=fmt)
+        if st == "HUD":
+            return self._screencap_iid_hud(self.hud_display, fmt=fmt)
+        return self._screencap_hu(fmt=fmt)
+
+    # ------------------------------------------------------------------
+    # HU screenshot — LayerManagerControl dump + SCP pull + composite
+    # ------------------------------------------------------------------
+    def _screencap_hu(self, fmt: str = "png") -> bytes:
         import tempfile
         import os
         from PIL import Image, ImageFile
@@ -330,7 +369,6 @@ class ICASAgentService:
         tmp_dir = tempfile.mkdtemp(prefix="icas_cap_")
         try:
             with self._new_ssh() as ssh:
-                # 1) 디바이스에서 화면 덤프
                 shel = ssh.invoke_shell()
                 commands = [
                     "export XDG_RUNTIME_DIR=/run/platform/weston; "
@@ -343,7 +381,6 @@ class ICASAgentService:
                     time.sleep(0.3)
                 time.sleep(1.5)  # 파일 생성 대기
 
-                # 2) SCP pull
                 try:
                     from scp import SCPClient
                 except ImportError as e:
@@ -359,33 +396,143 @@ class ICASAgentService:
                             if os.path.exists(local) and os.path.getsize(local) > 0:
                                 local_files.append(local)
                         except Exception as e:
-                            logger.debug("ICAS scp %s failed: %s", remote, e)
+                            logger.debug("ICAS HU scp %s failed: %s", remote, e)
 
             if not local_files:
-                raise RuntimeError("No screenshot captured")
+                raise RuntimeError("No HU screenshot captured")
 
-            # 3) 여러 레이어가 있으면 alpha composite로 합성
             images = [Image.open(p).convert("RGBA") for p in local_files]
             base = images[0]
             for over in images[1:]:
                 if over.size != base.size:
                     over = over.resize(base.size)
                 base = Image.alpha_composite(base, over)
-
-            # 4) 요청 포맷으로 변환
-            buf = io.BytesIO()
-            if fmt.lower() == "jpeg":
-                base.convert("RGB").save(buf, format="JPEG", quality=85)
-            else:
-                base.save(buf, format="PNG")
-            return buf.getvalue()
+            return _encode_image(base, fmt)
         finally:
-            # 임시 파일 정리
+            _rm_tree(tmp_dir)
+
+    # ------------------------------------------------------------------
+    # IID/HUD screenshot — HU로 SSH → private server로 ssh hop → screenshot
+    # ------------------------------------------------------------------
+    def _screencap_iid_hud(self, display_number: str, fmt: str = "png") -> bytes:
+        """ref RemoteController.IID_get_capture_path 이식.
+
+        1) HU에 SSH로 2개 세션 연결 (하나는 private_server로 hop, 하나는 SCP 전용)
+        2) hop 세션에서 `screenshot -display=N` 실행 → private server의 /tmp/screenshot.bmp 생성
+        3) hop 세션에서 scp로 HU의 /tmp/screenshot.bmp로 가져옴
+        4) SCP 세션으로 로컬에 pull
+        5) BMP → PNG/JPEG 변환
+        """
+        import tempfile
+        import os
+        from PIL import Image, ImageFile
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+        if not self.private_server_ip:
+            raise RuntimeError("ICAS IID/HUD capture: private_server_ip not configured")
+
+        tmp_dir = tempfile.mkdtemp(prefix="icas_iid_")
+        try:
+            # 세션 2개 병렬 유지 (ref 동일 패턴)
+            import paramiko
+            hop_ssh = paramiko.SSHClient()
+            hop_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            hop_ssh.connect(self.host, username=self.username, port=self.port,
+                            password=self.password, timeout=10)
+            scp_ssh = paramiko.SSHClient()
+            scp_ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            scp_ssh.connect(self.host, username=self.username, port=self.port,
+                            password=self.password, timeout=10)
             try:
-                import shutil
-                shutil.rmtree(tmp_dir, ignore_errors=True)
+                hop_shel = hop_ssh.invoke_shell()
+                # 1) private server로 ssh hop
+                ps_host = self.private_server_ip
+                is_ipv6 = ":" in ps_host and "." not in ps_host
+                if is_ipv6:
+                    ssh_cmd = (
+                        f'ssh -o "StrictHostKeyChecking=no" '
+                        f'-o "UserKnownHostsFile=/dev/null" root@{ps_host}'
+                    )
+                else:
+                    ssh_cmd = (
+                        f'ssh -o "StrictHostKeyChecking=no" '
+                        f'-o "UserKnownHostsFile=/dev/null" root@{ps_host}'
+                    )
+                msg = self._shell_send_recv(hop_shel, ssh_cmd, delay=1.5)
+                if isinstance(msg, str) and "yes/no" in msg:
+                    self._shell_send_recv(hop_shel, "yes", delay=0.5)
+                # 패스워드 프롬프트 응답
+                time.sleep(1.0)
+                self._shell_send_recv(hop_shel, self.private_server_password, delay=0.8)
+                # 작업 디렉토리 + screenshot 실행
+                self._shell_send_recv(hop_shel, "cd /tmp", delay=0.3)
+                self._shell_send_recv(hop_shel, f"screenshot -display={display_number}", delay=2.5)
+
+                # 2) hop 세션에서 scp로 HU의 /tmp로 가져오기
+                if is_ipv6:
+                    scp_cmd = (
+                        f'scp -o "StrictHostKeyChecking=no" '
+                        f'-o "UserKnownHostsFile=/dev/null" '
+                        f'root@[{ps_host}]:/tmp/screenshot.bmp /tmp'
+                    )
+                else:
+                    scp_cmd = f"scp root@{ps_host}:/tmp/screenshot.bmp /tmp"
+                # iid_shel는 현재 private server에 들어가 있음 → exit 후 HU에서 실행
+                self._shell_send_recv(hop_shel, "exit", delay=0.5)
+                msg = self._shell_send_recv(hop_shel, scp_cmd, delay=1.5)
+                if isinstance(msg, str) and "yes/no" in msg:
+                    msg = self._shell_send_recv(hop_shel, "yes", delay=0.5)
+                if isinstance(msg, str) and "password" in msg.lower():
+                    self._shell_send_recv(hop_shel, self.private_server_password, delay=1.0)
+                time.sleep(0.5)
+
+                # 3) local로 SCP pull
+                try:
+                    from scp import SCPClient
+                except ImportError as e:
+                    raise RuntimeError("scp module required: pip install scp") from e
+                local_bmp = os.path.join(tmp_dir, "screenshot.bmp")
+                with SCPClient(scp_ssh.get_transport()) as scp:
+                    scp.get("/tmp/screenshot.bmp", local_bmp)
+
+                if not os.path.exists(local_bmp) or os.path.getsize(local_bmp) == 0:
+                    raise RuntimeError("IID/HUD screenshot transfer failed")
+
+                # 4) HU에서 /tmp/screenshot.bmp 정리
+                try:
+                    hop_ssh.exec_command("rm -f /tmp/screenshot.bmp", timeout=5)
+                except Exception:
+                    pass
+
+                img = Image.open(local_bmp).convert("RGBA")
+                return _encode_image(img, fmt)
+            finally:
+                try:
+                    hop_ssh.close()
+                except Exception:
+                    pass
+                try:
+                    scp_ssh.close()
+                except Exception:
+                    pass
+        finally:
+            _rm_tree(tmp_dir)
+
+    @staticmethod
+    def _shell_send_recv(shel, data: str, delay: float = 0.3) -> Optional[str]:
+        """paramiko invoke_shell에 문자열 1회 송신 후 수신 버퍼를 반환 (ref ssh_send/iid_send)."""
+        try:
+            shel.send(data + "\r\n")
+        except Exception as e:
+            logger.debug("ICAS shell send failed: %s", e)
+            return None
+        time.sleep(delay)
+        if shel.recv_ready():
+            try:
+                return shel.recv(65536).decode("utf-8", errors="replace")
             except Exception:
-                pass
+                return None
+        return None
 
     async def async_screencap_bytes(self, screen_type: str = "HU",
                                     fmt: str = "png", timeout: float = 15.0) -> bytes:
@@ -440,7 +587,9 @@ class ICASAgentService:
     # Meta
     # ------------------------------------------------------------------
     def get_info(self) -> dict:
-        """HKMC6th.get_info()와 동형 — 현재는 HU만 보고, IID/HUD는 0x0."""
+        """HKMC6th.get_info()와 동형. IID/HUD 해상도는 캡처 시 실제 BMP 크기로 확정되므로
+        초기값은 HU 해상도 기반으로 추정 (최초 캡처 전 프레임 렌더링용 기본치).
+        """
         return {
             "host": self.host,
             "port": self.port,
@@ -448,7 +597,7 @@ class ICASAgentService:
             "agent_version": self.agent_version,
             "screens": {
                 "HU":  {"width": self._res_x, "height": self._res_y},
-                "IID": {"width": 0, "height": 0},
-                "HUD": {"width": 0, "height": 0},
+                "IID": {"width": self._res_x, "height": self._res_y},
+                "HUD": {"width": self._res_x, "height": self._res_y},
             },
         }
