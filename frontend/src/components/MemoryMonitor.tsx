@@ -84,24 +84,54 @@ export default function MemoryMonitor({ active }: { active: boolean }) {
     }
   };
 
-  // SVG sparkline
+  // SVG area chart — 0부터 peak*1.15까지 고정 스케일 (노이즈 증폭 방지)
   const renderSparkline = () => {
-    if (history.length < 2) return <div style={{ color: '#888', fontSize: 11 }}>데이터 수집 중...</div>;
+    if (history.length < 2) return <div style={{ color: '#888', fontSize: 11, padding: 20 }}>데이터 수집 중...</div>;
     const w = 600;
-    const h = 80;
-    const max = Math.max(...history, 1);
-    const min = Math.min(...history);
-    const range = max - min || 1;
+    const h = 100;
+    const padTop = 10;
+    const padBottom = 14;
+    const dataMax = Math.max(...history);
+    const dataMin = Math.min(...history);
+    // Y축 상한: sessionPeak 또는 현재 max 중 큰 값의 1.15배 (최소 100MB 확보로 증폭 방지)
+    const yMax = Math.max(sessionPeak, dataMax, 100) * 1.15;
+    const yMin = 0;
+    const range = yMax - yMin;
+    const scaleY = (v: number) => h - padBottom - ((v - yMin) / range) * (h - padTop - padBottom);
+
     const pts = history.map((v, i) => {
       const x = (i / (MAX_SAMPLES - 1)) * w;
-      const y = h - ((v - min) / range) * (h - 4) - 2;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).join(' ');
+      return `${x.toFixed(1)},${scaleY(v).toFixed(1)}`;
+    });
+    const lastX = ((history.length - 1) / (MAX_SAMPLES - 1)) * w;
+    const areaPath = `M 0,${h - padBottom} L ${pts.join(' L ')} L ${lastX.toFixed(1)},${h - padBottom} Z`;
+    const linePath = `M ${pts.join(' L ')}`;
+
+    // 눈금 3개: 25%, 50%, 75%
+    const gridLines = [0.25, 0.5, 0.75].map(frac => {
+      const v = yMin + range * frac;
+      const y = scaleY(v);
+      return { y, label: v.toFixed(0) };
+    });
+
     return (
       <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block' }}>
-        <polyline points={pts} fill="none" stroke="#1677ff" strokeWidth="1.5" />
-        <text x={4} y={12} fontSize="10" fill="#888">max {max.toFixed(0)} MB</text>
-        <text x={4} y={h - 4} fontSize="10" fill="#888">min {min.toFixed(0)} MB</text>
+        {/* 눈금선 */}
+        {gridLines.map((g, i) => (
+          <g key={i}>
+            <line x1={0} x2={w} y1={g.y} y2={g.y} stroke="#ccc" strokeWidth="0.5" strokeDasharray="2 3" />
+            <text x={4} y={g.y - 2} fontSize="9" fill="#999">{g.label} MB</text>
+          </g>
+        ))}
+        {/* 영역 */}
+        <path d={areaPath} fill="rgba(22,119,255,0.15)" />
+        {/* 선 */}
+        <path d={linePath} fill="none" stroke="#1677ff" strokeWidth="1.5" />
+        {/* 상/하한 라벨 */}
+        <text x={w - 4} y={12} fontSize="10" fill="#888" textAnchor="end">{yMax.toFixed(0)} MB</text>
+        <text x={w - 4} y={h - 4} fontSize="10" fill="#888" textAnchor="end">
+          현재 {dataMax.toFixed(1)} / 최저 {dataMin.toFixed(1)} MB
+        </text>
       </svg>
     );
   };
