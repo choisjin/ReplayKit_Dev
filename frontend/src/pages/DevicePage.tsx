@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Button, Card, Checkbox, Input, InputNumber, List, Modal, Select, Space, Table, Tabs, Tag, message } from 'antd';
+import { Button, Card, Checkbox, Input, InputNumber, List, Modal, Select, Space, Table, Tabs, Tag, Typography, message } from 'antd';
 import { ReloadOutlined, PlusOutlined, DisconnectOutlined, DeleteOutlined, WifiOutlined, SearchOutlined, EditOutlined, ApiOutlined, LinkOutlined, SettingOutlined, HolderOutlined } from '@ant-design/icons';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -1060,6 +1060,7 @@ export default function DevicePage() {
                           onChange={(v) => { setDeviceProject(v); setDeviceModel(''); }}
                           style={{ minWidth: 120 }}
                           options={PROJECT_OPTIONS}
+                          status={primaryProjectModelMissing && !deviceProject ? 'warning' : undefined}
                         />
                         <Select
                           allowClear
@@ -1079,7 +1080,13 @@ export default function DevicePage() {
                           style={{ minWidth: 200 }}
                           placeholder="장비 모델 선택"
                           options={DEVICE_MODELS}
+                          status={primaryProjectModelMissing && !deviceModel ? 'warning' : undefined}
                         />
+                        {primaryProjectModelMissing && (
+                          <Typography.Text type="warning" style={{ fontSize: 11 }}>
+                            ← 프로젝트와 모델을 먼저 선택하세요
+                          </Typography.Text>
+                        )}
                       </>
                     )}
                   </Space>
@@ -1566,6 +1573,7 @@ export default function DevicePage() {
                           onChange={(v) => { setDeviceProject(v); setDeviceModel(''); }}
                           style={{ minWidth: 120 }}
                           options={PROJECT_OPTIONS}
+                          status={primaryProjectModelMissing && !deviceProject ? 'warning' : undefined}
                         />
                         <Select
                           allowClear
@@ -1586,7 +1594,13 @@ export default function DevicePage() {
                           style={{ minWidth: 200, flex: 1 }}
                           placeholder="장비 모델 선택"
                           options={DEVICE_MODELS}
+                          status={primaryProjectModelMissing && !deviceModel ? 'warning' : undefined}
                         />
+                        {primaryProjectModelMissing && (
+                          <Typography.Text type="warning" style={{ fontSize: 11 }}>
+                            ← 프로젝트와 모델을 먼저 선택하세요
+                          </Typography.Text>
+                        )}
                       </Space>
                     )}
                     {modalCategory === 'auxiliary' && modules.length > 0 && (
