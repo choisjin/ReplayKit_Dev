@@ -3677,18 +3677,18 @@ export default function RecordPage() {
                           )}
                           {fn.params.length > 0 && fn.params.map(p => (
                             <div key={p.name} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                              <Space size={4} style={{ width: '100%' }}>
-                                <Tag style={{ minWidth: 70, textAlign: 'center', margin: 0 }}>{p.name}{p.required && <span style={{ color: '#ff4d4f' }}>*</span>}</Tag>
+                              <div style={{ display: 'flex', gap: 4, alignItems: 'center', width: '100%' }}>
+                                <Tag style={{ minWidth: 70, textAlign: 'center', margin: 0, flexShrink: 0 }}>{p.name}{p.required && <span style={{ color: '#ff4d4f' }}>*</span>}</Tag>
                                 <Input
                                   size="small"
                                   placeholder={p.required ? t('common.required') : `${t('common.default')}: ${p.default}`}
                                   value={moduleFuncArgs[p.name] ?? ''}
                                   onChange={(e) => setModuleFuncArgs(prev => ({ ...prev, [p.name]: e.target.value }))}
-                                  style={{ flex: 1 }}
+                                  style={{ flex: 1, minWidth: 0 }}
                                 />
-                              </Space>
+                              </div>
                               {p.description && (
-                                <div style={{ marginLeft: 62, fontSize: 10, color: isDark ? '#888' : '#999', lineHeight: 1.4 }}>
+                                <div style={{ marginLeft: 74, fontSize: 10, color: isDark ? '#888' : '#999', lineHeight: 1.4 }}>
                                   {p.description}
                                 </div>
                               )}
@@ -4142,17 +4142,17 @@ export default function RecordPage() {
                       const paramGuide = editFnGuide?.params.find(p => p.name === k);
                       return (
                         <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                          <Space size={4} style={{ width: '100%' }}>
-                            <Tag style={{ minWidth: 70, textAlign: 'center', margin: 0 }}>{k}</Tag>
+                          <div style={{ display: 'flex', gap: 4, alignItems: 'center', width: '100%' }}>
+                            <Tag style={{ minWidth: 70, textAlign: 'center', margin: 0, flexShrink: 0 }}>{k}</Tag>
                             <Input
                               size="small"
                               value={String(v ?? '')}
                               onChange={(e) => setEditStepParams({ ...editStepParams, args: { ...args, [k]: e.target.value } })}
-                              style={{ flex: 1 }}
+                              style={{ flex: 1, minWidth: 0 }}
                             />
-                          </Space>
+                          </div>
                           {paramGuide?.description && (
-                            <div style={{ marginLeft: 62, fontSize: 10, color: isDark ? '#888' : '#999', lineHeight: 1.4 }}>
+                            <div style={{ marginLeft: 74, fontSize: 10, color: isDark ? '#888' : '#999', lineHeight: 1.4 }}>
                               {paramGuide.description}
                             </div>
                           )}
