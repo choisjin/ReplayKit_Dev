@@ -433,6 +433,145 @@ async def git_log(limit: int = 100, fetch: bool = False):
         raise HTTPException(status_code=500, detail="git not found")
 
 
+# ───────────── 메모리 사용량 모니터링 ─────────────
+# Python-side peak 추적 (OS가 추적하는 peak_wset과 별개로 세션 단위 리셋 가능)
+_peak_memory: dict[int, int] = {}
+
+
+def _find_launcher_root():
+    """현재 프로세스에서 부모로 거슬러 올라가 python 런처의 최상위 프로세스를 찾는다.
+    server.py로 시작했다면 최상위 python 런처가 root가 되어 자식(백엔드+프론트엔드)을 모두 감쌈.
+    직접 uvicorn으로 띄웠으면 자기 자신이 root.
+    """
+    import psutil
+    try:
+        me = psutil.Process()
+        root = me
+        while True:
+            try:
+                parent = root.parent()
+                if not parent:
+                    break
+                name = parent.name().lower()
+                if not (name.startswith("python") or name == "py.exe"):
+                    break
+                root = parent
+            except psutil.Error:
+                break
+        return root
+    except Exception:
+        return None
+
+
+def _classify_process(name: str, cmdline: str) -> str:
+    n = name.lower()
+    c = cmdline.lower()
+    if "uvicorn" in c or "backend.app.main" in c:
+        return "backend"
+    if "server.py" in c and (n.startswith("python") or n == "py.exe"):
+        return "launcher"
+    if n in ("node.exe", "node") and ("vite" in c or "npm" in c):
+        return "frontend"
+    if n in ("node.exe", "node"):
+        return "node"
+    if n in ("adb.exe", "adb"):
+        return "adb"
+    if n in ("python.exe", "pythonw.exe", "python", "py.exe"):
+        return "python"
+    return n.replace(".exe", "") or "unknown"
+
+
+@router.get("/memory-usage")
+async def memory_usage():
+    """백엔드 프로세스 + 자손(프론트엔드 dev, ADB 등) 메모리 사용량 조회.
+
+    Peak는 두 가지로 제공:
+      - peak_mb: Python이 세션 동안 관측한 최대 RSS (리셋 가능)
+      - os_peak_mb: Windows OS가 추적하는 프로세스 수명 peak_wset (있을 때만, 참고용)
+    """
+    import psutil
+
+    root = _find_launcher_root()
+    procs: list = []
+    if root is not None:
+        procs.append(root)
+        try:
+            procs.extend(root.children(recursive=True))
+        except psutil.Error:
+            pass
+
+    is_windows = sys.platform == "win32"
+    out: list[dict] = []
+    total_rss = 0
+    total_peak = 0
+
+    # 죽은 프로세스의 peak 기록은 보존 (사라졌어도 세션 최대치에 반영)
+    alive_pids: set[int] = set()
+
+    for p in procs:
+        try:
+            mi = p.memory_info()
+            rss = int(mi.rss)
+            try:
+                cmdline = " ".join(p.cmdline())
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                cmdline = ""
+            try:
+                name = p.name()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                name = "?"
+
+            alive_pids.add(p.pid)
+            prev = _peak_memory.get(p.pid, 0)
+            peak = max(prev, rss)
+            _peak_memory[p.pid] = peak
+
+            os_peak = None
+            if is_windows and hasattr(mi, "peak_wset"):
+                os_peak = int(mi.peak_wset)
+
+            total_rss += rss
+            total_peak += peak
+
+            out.append({
+                "pid": p.pid,
+                "name": name,
+                "role": _classify_process(name, cmdline),
+                "cmdline": cmdline[:200],
+                "rss_mb": round(rss / 1024 / 1024, 1),
+                "peak_mb": round(peak / 1024 / 1024, 1),
+                "os_peak_mb": round(os_peak / 1024 / 1024, 1) if os_peak else None,
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+
+    # 죽은 프로세스의 peak도 합산 (세션 최대치 보존)
+    ghost_peak = sum(v for pid, v in _peak_memory.items() if pid not in alive_pids)
+    total_peak += ghost_peak
+
+    vm = psutil.virtual_memory()
+
+    return {
+        "processes": out,
+        "total": {
+            "rss_mb": round(total_rss / 1024 / 1024, 1),
+            "peak_mb": round(total_peak / 1024 / 1024, 1),
+        },
+        "system": {
+            "total_mb": round(vm.total / 1024 / 1024, 0),
+            "available_mb": round(vm.available / 1024 / 1024, 0),
+            "used_percent": vm.percent,
+        },
+    }
+
+
+@router.post("/memory-usage/reset-peak")
+async def reset_memory_peak():
+    """Peak 메모리 추적값 리셋 (Python-side만; Windows OS peak_wset은 프로세스 재시작 전엔 리셋 불가)."""
+    _peak_memory.clear()
+    return {"status": "ok"}
+
+
 @router.post("/open-results-folder")
 async def open_results_folder():
     """Results 폴더를 파일 탐색기로 열기 (backend/results)."""

@@ -179,6 +179,8 @@ export const serverApi = {
   gitLog: (limit?: number, fetch?: boolean) => api.get('/settings/git-log', { params: { limit: limit || 100, fetch: fetch || false } }),
   launcherLog: (lines?: number, date?: string, source?: string) => api.get('/settings/launcher-log', { params: { lines: lines || 500, date: date || '', source: source || '' } }),
   powerStatus: () => api.get('/settings/power-status'),
+  memoryUsage: () => api.get('/settings/memory-usage'),
+  resetMemoryPeak: () => api.post('/settings/memory-usage/reset-peak'),
 };
 
 export default api;

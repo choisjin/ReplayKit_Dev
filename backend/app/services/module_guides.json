@@ -1941,7 +1941,7 @@
   },
 
   "WoohyunBench": {
-    "_description": "우현벤치 — UDP 통신으로 차량 전원(IGN/ACC/배터리)을 제어하는 테스트 벤치 장비",
+    "_description": "우현벤치 — UDP 통신으로 차량 전원(IGN/ACC/배터리) 제어 + CAN FD 신호 송신을 지원하는 통합 테스트 벤치",
     "functions": {
       "Connect": {
         "description": "벤치 장비에 UDP 네트워크 연결을 수행합니다. 장비 추가 시 자동으로 호출되므로 보통 수동 호출이 필요 없습니다.",
@@ -2018,8 +2018,47 @@
         }
       },
       "GetInfo": {
-        "description": "벤치의 현재 연결 정보(IP, 포트, 연결 상태)를 반환합니다.",
+        "description": "벤치의 현재 연결 정보(IP, 포트, signal_file, 로드된 신호 수, 연결 상태)를 반환합니다.",
         "params": {}
+      },
+      "LoadSignals": {
+        "description": "CAN FD 신호 정의를 Excel(.xls/.xlsx) 또는 XML(.CAN)에서 런타임에 로드합니다.",
+        "params": {
+          "file_path": "신호 정의 파일 절대 경로"
+        }
+      },
+      "SendSignal": {
+        "description": "이름으로 지정한 CAN FD 신호를 physical value로 송신합니다. 200ms 간격으로 5회 반복. 신호 정의 파일이 로드되어 있어야 합니다.",
+        "params": {
+          "signal_name": "신호 이름 (예: 'Warn_DrvDrSwSta')",
+          "physical_value": "물리값 (정수/실수/hex 문자열 '0xAB')"
+        }
+      },
+      "DoorTest": {
+        "description": "운전석 도어 스위치 신호(Warn_DrvDrSwSta)를 ON/OFF 반복 송신하여 도어 동작을 테스트합니다.",
+        "params": {}
+      },
+      "TestAllSignals": {
+        "description": "로드된 모든 CAN FD 신호를 중간값으로 순차 송신합니다. 부하/연결 확인용.",
+        "params": {}
+      },
+      "CheckSignals": {
+        "description": "로드된 CAN FD 신호 정의 목록을 로그로 덤프합니다.",
+        "params": {}
+      },
+      "SendCanFd": {
+        "description": "Raw CAN FD 프레임을 직접 송신합니다 (신호 정의 불필요, 저수준 디버깅용).",
+        "params": {
+          "can_id": "CAN ID (정수, 예: 0x411 → 1041)",
+          "payload_hex": "페이로드 (공백/쉼표 허용 hex 문자열, 예: '01 02 03')"
+        }
+      },
+      "ReinitCanFd": {
+        "description": "CAN FD 버스 재초기화 (baudrate/data bit time 변경 시). 기본 500k/2M.",
+        "params": {
+          "baudrate": "arbitration phase baudrate (2바이트 정수, 기본 0x1F4)",
+          "databit_time": "data phase bit time (2바이트 정수, 기본 0x7D0)"
+        }
       }
     }
   },

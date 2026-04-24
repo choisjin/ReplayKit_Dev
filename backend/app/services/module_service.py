@@ -150,6 +150,7 @@ def list_available_modules() -> list[dict]:
         {"name": "WoohyunBench", "label": "WoohyunBench", "connect_type": "socket",
          "connect_fields": [
              {"name": "udp_port", "label": "UDP Port", "type": "number", "default": "25000"},
+             {"name": "signal_file", "label": "CAN FD 신호 정의 파일 (.xls/.xlsx/.CAN, 선택)", "type": "text", "default": ""},
          ]},
         {"name": "IVIQEBenchIOClient", "label": "IVIQEBenchIOClient", "connect_type": "serial",
          "connect_fields": []},

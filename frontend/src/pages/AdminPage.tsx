@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Card, Checkbox, Collapse, Divider, Empty, Input, message, Modal, Select, Space, Tag, Typography } from 'antd';
 import { DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons';
 import { deviceApi } from '../services/api';
+import MemoryMonitor from '../components/MemoryMonitor';
 
 interface Model {
   value: string;   // 표시 텍스트이자 Device ID prefix로 사용
@@ -45,6 +46,30 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
+
+  // 메모리 모니터 활성 여부 — #admin에 실제로 머물러 있을 때만 폴링
+  const [memoryActive, setMemoryActive] = useState(
+    typeof window !== 'undefined' && window.location.hash === '#admin'
+  );
+  useEffect(() => {
+    const onHash = () => setMemoryActive(window.location.hash === '#admin');
+    const onTab = (e: Event) => {
+      const key = (e as CustomEvent).detail;
+      setMemoryActive(window.location.hash === '#admin' && key === '/admin');
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') setMemoryActive(false);
+      else if (window.location.hash === '#admin') setMemoryActive(true);
+    };
+    window.addEventListener('hashchange', onHash);
+    window.addEventListener('tab-change', onTab);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener('tab-change', onTab);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -184,6 +209,9 @@ export default function AdminPage() {
           접근 경로: URL hash <code>#admin</code>. 메뉴에는 표시되지 않습니다.
         </Typography.Paragraph>
       </Card>
+
+      {/* 메모리 사용량 모니터링 */}
+      <MemoryMonitor active={memoryActive} />
 
       {/* 프로젝트 / 모델 관리 */}
       <Card size="small" title="프로젝트 · 모델 콤보"

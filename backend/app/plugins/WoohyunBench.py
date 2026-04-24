@@ -1,15 +1,23 @@
 # -*- coding: utf-8 -*-
-"""CCIC 우현벤치 UDP control plugin.
+"""CCIC 우현벤치 UDP control plugin — 전원(IGN/ACC/BATTERY) + CAN FD 송신 통합.
 
 UDP 패킷 형식: [0x55, 0xAA, sender(100), seq(0), cmd1, cmd2, len_hi, len_lo, ...data]
 Reference: WoohyunBench_LIBRARY.py, CCIC_DEFINITION_LIBRARY.py (legacy)
 
 벤치 기본값: BENCH_IP = 192.168.1.101, BENCH_PORT = 25000
+
+CAN FD 기능은 공용 UDP_CANFD 라이브러리(backend/app/lib/UDP_CANFD.py)를 composition
+방식으로 내부 보관하며, 단일 UDP 소켓을 공유해 동작한다(원본 라이브러리는 수정하지 않음).
+신호 정의 파일(signal_file, 선택)이 주어지면 Connect 시 자동 로드된다.
 """
+
+from __future__ import annotations
 
 import socket
 import logging
 import time
+from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -18,39 +26,24 @@ START_2 = 0xAA
 SENDER_ID = 100
 DEFAULT_UDP_PORT = 25000
 
-# CAN FD 전송 패킷 헤더 (cmd1=0x04, cmd2=0x30) — 레거시 UDP_CANFD_SEND() 기준
-CANFD_SEND_PACKET_HEADER = [START_1, START_2, SENDER_ID, 0x00, 0x04, 0x30]
-
-
-def get_dlc_from_payload_size(payload_size: int) -> int:
-    """CAN FD 실제 페이로드 바이트 수 → DLC(0~15) 매핑.
-
-    CAN 2.0은 0~8 그대로, CAN FD는 12/16/20/24/32/48/64 가 유효한 크기.
-    매핑에 없는 값은 8로 폴백 (안전한 기본 프레임 크기).
-    """
-    _map = {
-        0: 0, 1: 1, 2: 2, 3: 3,
-        4: 4, 5: 5, 6: 6, 7: 7,
-        8: 8, 12: 9, 16: 10, 20: 11,
-        24: 12, 32: 13, 48: 14, 64: 15,
-    }
-    return _map.get(payload_size, 8)
-
 
 class WoohyunBench:
-    """CCIC 우현벤치 UDP 제어 플러그인."""
+    """CCIC 우현벤치 UDP 제어 플러그인 (전원 + CAN FD)."""
 
-    def __init__(self, host: str = "", udp_port: int = DEFAULT_UDP_PORT):
+    def __init__(self, host: str = "", udp_port: int = DEFAULT_UDP_PORT, signal_file: str = ""):
         self._host = host
-        self._udp_port = int(udp_port)
+        self._udp_port = int(udp_port) if udp_port else DEFAULT_UDP_PORT
+        self._signal_file = (signal_file or "").strip()
         self._sock = None
+        # CAN FD 위임 객체. Connect 시 생성 + 이 플러그인의 _sock을 공유 바인딩.
+        self._canfd = None
 
     # ------------------------------------------------------------------
     # Connection
     # ------------------------------------------------------------------
 
     def Connect(self) -> str:
-        """UDP 소켓 연결. 레거시 UDP_INIT() 동일."""
+        """UDP 소켓 연결 + (signal_file 지정 시) CAN FD 서브시스템 초기화."""
         if self._sock:
             try:
                 self._sock.close()
@@ -63,18 +56,137 @@ class WoohyunBench:
         # 레거시 코드와 동일: connect()로 기본 목적지 설정 (타임아웃 미설정)
         self._sock.connect((self._host, self._udp_port))
         logger.info("WoohyunBench connected to %s:%d", self._host, self._udp_port)
+
+        # CAN FD 서브시스템 (공용 UDP_CANFD와 소켓 공유)
+        # 임포트 실패(pandas/robotframework 미설치)해도 전원 제어는 정상 동작하도록 경고만.
+        try:
+            from ..lib.UDP_CANFD import UDP_CANFD
+        except Exception as e:
+            logger.warning("WoohyunBench: UDP_CANFD 라이브러리 로드 실패 — CAN FD 기능 비활성 (%s)", e)
+            self._canfd = None
+        else:
+            cf = UDP_CANFD()
+            cf.sock = self._sock          # 동일 소켓 공유 (별도 자원 없음)
+            cf.udp_ip = self._host
+            cf.udp_port = self._udp_port
+            self._canfd = cf
+            # signal_file 주어졌다면 신호 정의 로드 + CAN FD 버스 INIT 패킷
+            if self._signal_file:
+                try:
+                    self._load_signals_into(cf, self._signal_file)
+                    cf.UDP_CANFD_INIT_MESSAGE()
+                    logger.info("WoohyunBench CAN FD ready (signals=%d from %s)",
+                                len(cf.signal_defs), self._signal_file)
+                except Exception as e:
+                    logger.warning("WoohyunBench CAN FD 사전 로드 실패 (비치명): %s", e)
+
         return f"Connected to {self._host}:{self._udp_port}"
 
     def Disconnect(self) -> str:
-        """UDP 소켓 해제. 레거시 UDP_DEINIT() 동일."""
+        """UDP 소켓 해제. CAN FD 서브시스템도 함께 정리."""
+        # UDP_CANFD.UDP_DEINIT()가 내부적으로 sock.close() 후 None 처리. 소켓이 공유이므로
+        # 이 경로로 닫으면 self._sock도 같은 객체가 닫힌 상태가 된다.
+        if self._canfd is not None:
+            try:
+                self._canfd.UDP_DEINIT()
+            except Exception:
+                pass
+            self._canfd = None
         if self._sock:
-            self._sock.close()
+            try:
+                self._sock.close()
+            except Exception:
+                pass
             self._sock = None
         return "Disconnected"
 
     def IsConnected(self) -> bool:
         """연결 상태 확인."""
         return self._sock is not None
+
+    # ------------------------------------------------------------------
+    # CAN FD — 공용 UDP_CANFD 라이브러리 위임
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _load_signals_into(canfd_impl, file_path: str) -> None:
+        """파일 확장자에 따라 UDP_CANFD에 신호 정의를 로드."""
+        p = Path(file_path)
+        if not p.is_file():
+            raise FileNotFoundError(f"signal file not found: {file_path}")
+        if file_path.lower().endswith('.can'):
+            canfd_impl.load_signal_definitions_from_xml(file_path)
+        else:
+            canfd_impl.load_signal_definitions_from_excel(file_path)
+
+    def LoadSignals(self, file_path: str) -> str:
+        """런타임에 CAN FD 신호 정의를 Excel/XML에서 다시 로드."""
+        if self._canfd is None:
+            return "FAIL: CAN FD 비활성 (UDP_CANFD 라이브러리 미설치 또는 연결 전)"
+        try:
+            self._load_signals_into(self._canfd, file_path)
+            try:
+                self._canfd.UDP_CANFD_INIT_MESSAGE()
+            except Exception as e:
+                logger.warning("WoohyunBench CAN FD INIT 재전송 실패: %s", e)
+            return f"OK: {len(self._canfd.signal_defs)} signals loaded from {file_path}"
+        except Exception as e:
+            logger.error("WoohyunBench LoadSignals failed: %s", e)
+            return f"FAIL: LoadSignals: {e}"
+
+    def SendSignal(self, signal_name: str, physical_value) -> str:
+        """이름으로 지정한 CAN 신호를 physical_value로 전송 (200ms × 5회 반복)."""
+        if self._canfd is None:
+            return "FAIL: CAN FD 비활성"
+        if not self._canfd.signal_defs:
+            return "FAIL: 신호 정의 미로드 — signal_file 설정 또는 LoadSignals 호출 필요"
+        ok = self._canfd.SEND_CANEthernetData(signal_name, physical_value)
+        return f"{'OK' if ok else 'FAIL'}: SendSignal {signal_name}={physical_value}"
+
+    def DoorTest(self) -> str:
+        """운전석 도어 스위치 신호(Warn_DrvDrSwSta)를 ON/OFF 반복 송신."""
+        if self._canfd is None:
+            return "FAIL: CAN FD 비활성"
+        ok = self._canfd.door_test()
+        return f"{'OK' if ok else 'FAIL'}: DoorTest"
+
+    def TestAllSignals(self) -> str:
+        """로드된 모든 신호를 중간값으로 순차 송신 (부하/연결 확인용)."""
+        if self._canfd is None:
+            return "FAIL: CAN FD 비활성"
+        ok = self._canfd.test_all_canfd_signals()
+        return f"{'OK' if ok else 'FAIL'}: TestAllSignals"
+
+    def CheckSignals(self) -> str:
+        """로드된 CAN 신호 정의를 로그로 덤프."""
+        if self._canfd is None:
+            return "FAIL: CAN FD 비활성"
+        self._canfd.CHECK_CAN_SIGNAL()
+        return f"OK: {len(self._canfd.signal_defs)} signals"
+
+    def SendCanFd(self, can_id: int, payload_hex: str = "") -> str:
+        """Raw CAN FD 프레임 직접 송신 (신호 정의 불필요)."""
+        if self._canfd is None:
+            return "FAIL: CAN FD 비활성"
+        try:
+            cleaned = (payload_hex or "").replace(" ", "").replace(",", "")
+            payload = bytearray.fromhex(cleaned) if cleaned else bytearray()
+            self._canfd.UDP_CANFD_SEND(int(can_id), payload)
+            return f"OK: SendCanFd ID=0x{int(can_id):X} ({len(payload)}B)"
+        except Exception as e:
+            logger.error("WoohyunBench SendCanFd failed: %s", e)
+            return f"FAIL: SendCanFd: {e}"
+
+    def ReinitCanFd(self, baudrate: int = 0x1F4, databit_time: int = 0x7D0) -> str:
+        """CAN FD 버스 재초기화 (기본 500k/2M)."""
+        if self._canfd is None:
+            return "FAIL: CAN FD 비활성"
+        try:
+            self._canfd.UDP_CANFD_INIT_MESSAGE(int(baudrate), int(databit_time))
+            return f"OK: ReinitCanFd baudrate=0x{int(baudrate):X} databit=0x{int(databit_time):X}"
+        except Exception as e:
+            logger.error("WoohyunBench ReinitCanFd failed: %s", e)
+            return f"FAIL: ReinitCanFd: {e}"
 
     # ------------------------------------------------------------------
     # Internal — 레거시 UDP_SEND()와 동일한 로직
@@ -182,101 +294,6 @@ class WoohyunBench:
         return True
 
     # ------------------------------------------------------------------
-    # CAN FD — 레거시 UDP_CANFD_SEND() 동일
-    # ------------------------------------------------------------------
-
-    def _canfd_send(self, canid: int, payload: list | bytearray, fd_mode: bool = True) -> bool:
-        """CAN FD 프레임을 UDP로 전송 (fire-and-forget, 응답 수신 없음).
-
-        패킷 구조:
-          [0x55, 0xAA, sender, seq,
-           0x04, 0x30,                       # cmd1, cmd2 (CAN FD send)
-           len_hi, len_lo,                   # payload+header 전체 길이
-           can_id(4B, big-endian),
-           can_frame(1B: FD플래그 0x80 | DLC),
-           reserved(1B, 0x00),
-           payload...]
-
-        Args:
-            canid:    CAN ID (int).
-            payload:  전송할 데이터 바이트 배열 (0~64 바이트, CAN FD 유효 크기).
-            fd_mode:  True이면 FD 플래그(0x80) + DLC 매핑 적용, False면 클래식 CAN.
-
-        Returns:
-            True=송신 성공 (서버 응답 확인 없음), False=소켓 오류.
-        """
-        if not self._sock:
-            raise RuntimeError("Not connected — call Connect() first")
-
-        payload = list(payload)
-        dlc = get_dlc_from_payload_size(len(payload)) if fd_mode else len(payload)
-
-        # CAN ID → 4바이트 big-endian
-        can_id_bytes = [
-            (canid >> 24) & 0xFF,
-            (canid >> 16) & 0xFF,
-            (canid >>  8) & 0xFF,
-             canid        & 0xFF,
-        ]
-
-        # CAN 프레임 바이트: FD 플래그(0x80) | DLC
-        can_frame = (0x80 if fd_mode else 0x00) | dlc
-
-        data = can_id_bytes + [can_frame, 0x00] + payload
-
-        packet = CANFD_SEND_PACKET_HEADER + [
-            (len(data) >> 8) & 0xFF,
-             len(data)       & 0xFF,
-        ] + data
-
-        encoded = bytearray(packet)
-        hex_str = " ".join(f"0x{b:02X}" for b in packet)
-
-        try:
-            self._sock.sendto(encoded, (self._host, self._udp_port))
-        except Exception as e:
-            logger.error("WoohyunBench CANFD send failed: %s", e)
-            return False
-
-        logger.info("WoohyunBench CANFD TX (ID=0x%X, DLC=%d): %s", canid, dlc, hex_str)
-        return True
-
-    # ------------------------------------------------------------------
-    # Door Control — 레거시 DRIVER_DOOR() 동일
-    # ------------------------------------------------------------------
-
-    def DRIVER_DOOR(self, open_close: int = 1) -> str:
-        """운전석 도어 열림/닫힘 CAN FD 명령 전송. 레거시 DRIVER_DOOR() 동일.
-
-        CAN FD ID 0x411 (ICU_02) payload를 200ms 간격으로 **5회 반복** 송신
-        (차량 ICU 수신 주기 200ms에 맞춤). payload[3]이 1=OPEN, 0=CLOSE.
-
-        Args:
-            open_close: 1=OPEN, 0=CLOSE.
-
-        Returns:
-            "DRIVER_DOOR OPEN: OK" / "DRIVER_DOOR CLOSE: OK" 등 결과 문자열.
-            소켓 오류로 송신이 하나라도 실패하면 "FAIL"로 마킹.
-        """
-        if open_close:
-            payload = [0, 0, 0, 1, 0, 0, 0, 0]  # open
-            status = "OPEN"
-        else:
-            payload = [0, 0, 0, 0, 0, 0, 0, 0]  # close
-            status = "CLOSE"
-
-        all_ok = True
-        for _ in range(5):
-            ok = self._canfd_send(0x411, payload)
-            if not ok:
-                all_ok = False
-                break
-            time.sleep(0.2)  # ICU_02 200ms 주기
-
-        logger.info("WoohyunBench DRIVER_DOOR %s: %s", status, "OK" if all_ok else "FAIL")
-        return f"DRIVER_DOOR {status}: {'OK' if all_ok else 'FAIL'}"
-
-    # ------------------------------------------------------------------
     # Power Control — 레거시 WOOHYUN_* 함수 동일
     # ------------------------------------------------------------------
 
@@ -377,5 +394,9 @@ class WoohyunBench:
         return str(res)
 
     def GetInfo(self) -> str:
-        """연결 정보."""
-        return f"host={self._host}, port={self._udp_port}, connected={self.IsConnected()}"
+        """연결 정보 (host/port + CAN FD 신호 수 포함)."""
+        sig_count = len(self._canfd.signal_defs) if self._canfd is not None else 0
+        return (f"host={self._host}, port={self._udp_port}, "
+                f"signal_file={self._signal_file}, signals={sig_count}, "
+                f"canfd={'on' if self._canfd is not None else 'off'}, "
+                f"connected={self.IsConnected()}")
