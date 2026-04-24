@@ -484,6 +484,19 @@ def _classify_process(name: str, cmdline: str) -> str:
     return n.replace(".exe", "") or "unknown"
 
 
+# ReplayKit 프로세스 트리에 자식으로 등록되지만 실제 프로그램 메모리와 무관한 프로세스.
+# (런처가 webbrowser.open() 으로 브라우저를 띄우면 브라우저가 자식으로 묶임 — Chromium은 멀티프로세스라 수십 개)
+_EXCLUDED_PROC_NAMES = {
+    "msedge.exe", "msedgewebview2.exe",
+    "chrome.exe", "chromedriver.exe",
+    "firefox.exe",
+    "brave.exe",
+    "opera.exe",
+    "iexplore.exe",
+    "safari.exe",
+}
+
+
 @router.get("/memory-usage")
 async def memory_usage():
     """백엔드 프로세스 + 자손(프론트엔드 dev, ADB 등) 메모리 사용량 조회.
@@ -510,16 +523,21 @@ async def memory_usage():
 
     for p in procs:
         try:
+            try:
+                name = p.name()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                name = "?"
+            # 브라우저 등 ReplayKit 프로그램 메모리와 무관한 프로세스는 스킵.
+            # (런처가 webbrowser.open()으로 띄운 Edge/Chrome이 자식으로 묶이는 문제)
+            if name.lower() in _EXCLUDED_PROC_NAMES:
+                continue
+
             mi = p.memory_info()
             rss = int(mi.rss)
             try:
                 cmdline = " ".join(p.cmdline())
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 cmdline = ""
-            try:
-                name = p.name()
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                name = "?"
 
             alive_pids.add(p.pid)
             prev = _peak_memory.get(p.pid, 0)
