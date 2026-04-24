@@ -111,6 +111,9 @@ class ADBService:
         self._display_size_cache: dict[str, tuple[int, int]] = {}  # serial → (width, height)
         self._sendevent_mode: dict[str, str] = {}  # serial → "direct" | "su" | "none"
         self._gvm_container: dict[str, str | None] = {}  # serial → container name or None
+        # 장기 screencap 세션 (serial|sf_display_id → streamer) — 연결 시 선제 생성
+        self._streamers: dict[str, "AdbScreencapStreamer"] = {}
+        self._streamer_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
     # Device management
@@ -720,3 +723,218 @@ class ADBService:
         if rc != 0:
             logger.error("ADB error (device %s): %s", serial, stderr)
         return stdout
+
+    # ------------------------------------------------------------------
+    # Long-lived screencap streamer (화면 미러링용)
+    # ------------------------------------------------------------------
+
+    async def ensure_streamer(self, serial: str,
+                              sf_display_id: Optional[str] = None) -> "AdbScreencapStreamer":
+        """해당 (serial, display) 조합의 streamer가 없으면 생성 + 세션 시작.
+        이미 있고 살아있으면 재사용. 죽어있으면 재시작.
+        """
+        key = f"{serial}|{sf_display_id or ''}"
+        async with self._streamer_lock:
+            s = self._streamers.get(key)
+            if s is None:
+                container = await self._detect_gvm_container(serial)
+                s = AdbScreencapStreamer(serial, sf_display_id, container)
+                self._streamers[key] = s
+        if not s.is_alive():
+            await s.start()
+        return s
+
+    async def streaming_screencap_bytes(self, serial: str, fmt: str = "jpeg",
+                                        sf_display_id: Optional[str] = None) -> bytes:
+        """장기 adb shell 세션 기반 screencap.
+
+        - capture + 네트워크 전송이 끝날 때까지 다음 capture가 호출되지 않도록 streamer 내부 lock으로 직렬화
+          (여러 WebSocket이 동시에 호출해도 하나씩 처리 — "무턱대고" 발사 방지)
+        - 실패 시 세션 재시작 1회 → 그래도 실패하면 기존 spawn 방식(screencap_bytes)으로 폴백
+        """
+        s = await self.ensure_streamer(serial, sf_display_id)
+        png: Optional[bytes] = None
+        for attempt in range(2):
+            try:
+                png = await s.capture_png()
+                break
+            except IOError as e:
+                logger.warning("ADB streamer %s attempt %d failed: %s", serial, attempt + 1, e)
+                await s.close()
+                if attempt == 1:
+                    key = f"{serial}|{sf_display_id or ''}"
+                    async with self._streamer_lock:
+                        self._streamers.pop(key, None)
+                    logger.warning("ADB streamer 복구 실패 → spawn 방식 폴백: %s", serial)
+                    return await self.screencap_bytes(serial=serial, fmt=fmt, sf_display_id=sf_display_id)
+                try:
+                    await s.start()
+                except Exception:
+                    pass
+
+        if fmt == "jpeg" and png:
+            try:
+                import cv2
+                import numpy as np
+                arr = np.frombuffer(png, dtype=np.uint8)
+                img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+                if img is not None:
+                    _, jpeg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                    return jpeg.tobytes()
+            except Exception as e:
+                logger.warning("JPEG encode failed, returning PNG: %s", e)
+        return png or b""
+
+    async def close_streamer(self, serial: str) -> None:
+        """해당 serial의 모든 display streamer를 닫고 pool에서 제거."""
+        async with self._streamer_lock:
+            keys = [k for k in self._streamers if k.split("|", 1)[0] == serial]
+            streamers = [self._streamers.pop(k) for k in keys]
+        for s in streamers:
+            try:
+                await s.close()
+                logger.info("ADB screen streamer closed: %s", serial)
+            except Exception as e:
+                logger.debug("streamer close error: %s", e)
+
+    async def close_all_streamers(self) -> None:
+        """셧다운용 — 모든 streamer 정리."""
+        async with self._streamer_lock:
+            streamers = list(self._streamers.values())
+            self._streamers.clear()
+        for s in streamers:
+            try:
+                await s.close()
+            except Exception:
+                pass
+
+
+class AdbScreencapStreamer:
+    """하나의 `adb shell` 프로세스를 장기 유지하며 screencap을 반복 수행.
+
+    - 기존: 프레임마다 `adb.exe exec-out screencap -p` → 프로세스 spawn/kill 수십 회/초
+    - 개선: adb shell 1회 실행 → stdin으로 명령 반복 전송, stdout으로 PNG base64 수신
+
+    TTY 변환(\\r\\n) 문제를 회피하기 위해 **base64 인코딩**으로 전송하고, 프레임 경계는
+    고유 마커(START/END)로 구분. 중복 요청은 asyncio.Lock으로 직렬화되어
+    "현재 capture + 다운로드가 끝나기 전에는 다음 명령을 보내지 않음".
+    """
+
+    START = b"__RK_FRAME_START__"
+    END = b"__RK_FRAME_END__"
+
+    def __init__(self, serial: str, sf_display_id: Optional[str] = None,
+                 container: Optional[str] = None):
+        self.serial = serial
+        self.sf_display_id = sf_display_id
+        self.container = container
+        self._proc: Optional[subprocess.Popen] = None
+        self._lock = asyncio.Lock()
+
+    def is_alive(self) -> bool:
+        return self._proc is not None and self._proc.poll() is None
+
+    def _start_sync(self) -> None:
+        cmd_list = [ADB_PATH, "-s", self.serial, "shell"]
+        self._proc = subprocess.Popen(
+            cmd_list,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            creationflags=_NO_WINDOW,
+            bufsize=0,
+        )
+
+    async def start(self) -> None:
+        """adb shell 세션 개시 (이미 살아있으면 no-op)."""
+        if self.is_alive():
+            return
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._start_sync)
+        logger.info(
+            "ADB screen streamer started: serial=%s sf_id=%s pid=%s",
+            self.serial, self.sf_display_id or "default",
+            self._proc.pid if self._proc else "?",
+        )
+
+    def _build_cmd(self) -> bytes:
+        dflag = f"-d {self.sf_display_id} " if self.sf_display_id else ""
+        base = f"screencap -p {dflag}".rstrip()
+        if self.container:
+            base = f"lxc-attach -n {self.container} -- {base}"
+        # base64 로 인코딩 → TTY CRLF 변환 문제 회피
+        return (
+            f"echo {self.START.decode()}; {base} | base64; "
+            f"echo {self.END.decode()}\n"
+        ).encode()
+
+    def _read_frame_sync(self) -> bytes:
+        """stdin에 명령 쓰고 stdout에서 end marker까지 수집 (blocking)."""
+        if not self.is_alive():
+            self._start_sync()
+        assert self._proc is not None
+        try:
+            self._proc.stdin.write(self._build_cmd())
+            self._proc.stdin.flush()
+        except (BrokenPipeError, OSError) as e:
+            raise IOError(f"adb stdin write failed: {e}")
+
+        collecting = False
+        buf = bytearray()
+        while True:
+            line = self._proc.stdout.readline()
+            if not line:
+                raise IOError("adb shell closed unexpectedly")
+            stripped = line.rstrip(b"\r\n")
+            if not collecting:
+                # 세션 초기 쓰레기(모티드 등)는 START 마커 전까지 모두 버림
+                if stripped == self.START:
+                    collecting = True
+                continue
+            if stripped == self.END:
+                break
+            buf.extend(stripped)
+
+        import base64 as _b64
+        try:
+            png = _b64.b64decode(bytes(buf), validate=False)
+        except Exception as e:
+            raise IOError(f"base64 decode failed: {e}")
+        if len(png) < 8 or png[:4] != b"\x89PNG":
+            raise IOError("captured data is not a valid PNG")
+        return png
+
+    async def capture_png(self) -> bytes:
+        """한 프레임 PNG 캡처. lock으로 중복 호출 직렬화."""
+        async with self._lock:
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, self._read_frame_sync)
+
+    async def close(self) -> None:
+        async with self._lock:
+            if not self._proc:
+                return
+            proc = self._proc
+            self._proc = None
+
+            def _sync_close():
+                try:
+                    try:
+                        proc.stdin.write(b"exit\n")
+                        proc.stdin.flush()
+                        proc.stdin.close()
+                    except Exception:
+                        pass
+                    try:
+                        proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        try:
+                            proc.wait(timeout=1)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, _sync_close)

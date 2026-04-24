@@ -435,7 +435,10 @@ async def git_log(limit: int = 100, fetch: bool = False):
 
 # ───────────── 메모리 사용량 모니터링 ─────────────
 # Python-side peak 추적 (OS가 추적하는 peak_wset과 별개로 세션 단위 리셋 가능)
+# - _peak_memory: 현재 살아있는 프로세스의 관측 peak (죽으면 제거)
+# - _session_total_peak: 전체 합계(total RSS)의 세션 최대 스냅샷 — 이것이 사용자에게 보이는 "Session Peak"
 _peak_memory: dict[int, int] = {}
+_session_total_peak: int = 0
 
 
 def _find_launcher_root():
@@ -503,9 +506,6 @@ async def memory_usage():
     is_windows = sys.platform == "win32"
     out: list[dict] = []
     total_rss = 0
-    total_peak = 0
-
-    # 죽은 프로세스의 peak 기록은 보존 (사라졌어도 세션 최대치에 반영)
     alive_pids: set[int] = set()
 
     for p in procs:
@@ -531,7 +531,6 @@ async def memory_usage():
                 os_peak = int(mi.peak_wset)
 
             total_rss += rss
-            total_peak += peak
 
             out.append({
                 "pid": p.pid,
@@ -545,9 +544,15 @@ async def memory_usage():
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
 
-    # 죽은 프로세스의 peak도 합산 (세션 최대치 보존)
-    ghost_peak = sum(v for pid, v in _peak_memory.items() if pid not in alive_pids)
-    total_peak += ghost_peak
+    # 죽은 PID 제거 (ADB 단명 자식 프로세스가 계속 dict에 쌓이는 것 방지)
+    for pid in list(_peak_memory.keys()):
+        if pid not in alive_pids:
+            _peak_memory.pop(pid, None)
+
+    # 전체 합계 기준 Session Peak 갱신 (단일 스냅샷 최대치)
+    global _session_total_peak
+    if total_rss > _session_total_peak:
+        _session_total_peak = total_rss
 
     vm = psutil.virtual_memory()
 
@@ -555,7 +560,7 @@ async def memory_usage():
         "processes": out,
         "total": {
             "rss_mb": round(total_rss / 1024 / 1024, 1),
-            "peak_mb": round(total_peak / 1024 / 1024, 1),
+            "peak_mb": round(_session_total_peak / 1024 / 1024, 1),
         },
         "system": {
             "total_mb": round(vm.total / 1024 / 1024, 0),
@@ -568,7 +573,9 @@ async def memory_usage():
 @router.post("/memory-usage/reset-peak")
 async def reset_memory_peak():
     """Peak 메모리 추적값 리셋 (Python-side만; Windows OS peak_wset은 프로세스 재시작 전엔 리셋 불가)."""
+    global _session_total_peak
     _peak_memory.clear()
+    _session_total_peak = 0
     return {"status": "ok"}
 
 

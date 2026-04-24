@@ -1137,8 +1137,15 @@ class DeviceManager:
 
                 if current_adb_status == "device":
                     # 정상 연결 — 카운터 리셋 + 상태 갱신
-                    if dev.status != "device":
+                    was_offline = dev.status != "device"
+                    if was_offline:
                         logger.info("ADB device back online: %s", dev.id)
+                        # 재연결 시 이전 streamer 세션은 끊겼을 것 → 재생성
+                        try:
+                            await self.adb.close_streamer(dev.address)
+                            await self.adb.ensure_streamer(dev.address)
+                        except Exception as se:
+                            logger.debug("ADB streamer restart on reconnect %s: %s", dev.id, se)
                     self._adb_reconnect_attempts.pop(dev.id, None)
                     dev.status = "device"
                     continue
@@ -1638,6 +1645,13 @@ class DeviceManager:
 
         if self.is_protected_device(dev.id):
             raise ValueError(f"Device '{dev.id}' is a protected system default and cannot be removed")
+
+        # 장기 screencap 세션 정리 (ADB 디바이스 제거 시)
+        if dev.type == "adb":
+            try:
+                await self.adb.close_streamer(dev.address)
+            except Exception as se:
+                logger.debug("ADB streamer close on remove failed for %s: %s", dev.id, se)
 
         if dev.type == "adb" and ":" in dev.address:
             result = await self.adb.disconnect_device(dev.address)
@@ -2175,6 +2189,11 @@ class DeviceManager:
                         dev.status = "device"
                         _mark_connected()
                         self._adb_reconnect_attempts.pop(dev.id, None)
+                        # 화면 미러링용 장기 adb shell 세션 선제 시작 (프레임당 spawn 회피)
+                        try:
+                            await self.adb.ensure_streamer(dev.address)
+                        except Exception as se:
+                            logger.debug("ADB streamer pre-start failed for %s: %s", dev.id, se)
                         return f"ADB connected: {dev.id} ({dev.address})"
                     if attempt < 2:
                         await asyncio.sleep(1)
@@ -2260,6 +2279,11 @@ class DeviceManager:
             return f"Disconnected: {dev.id}"
 
         elif dev.type == "adb":
+            # 장기 화면 streamer 세션 먼저 닫기
+            try:
+                await self.adb.close_streamer(dev.address)
+            except Exception as se:
+                logger.debug("ADB streamer close failed for %s: %s", dev.id, se)
             if ":" in dev.address:
                 try:
                     await self.adb._run(f"disconnect {dev.address}")

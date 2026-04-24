@@ -291,6 +291,12 @@ async def lifespan(app: FastAPI):
     reconnect_task.cancel()
     logger.info("Closing all serial connections...")
     device_manager.close_all_serial_connections()
+    # ADB 서버 kill 전에 장기 adb shell 화면 세션부터 정리
+    logger.info("Closing ADB screen streamers...")
+    try:
+        await adb_service.close_all_streamers()
+    except Exception as e:
+        logger.debug("close_all_streamers: %s", e)
     logger.info("Killing ADB server...")
     try:
         await adb_service._run("kill-server")
@@ -513,7 +519,8 @@ async def websocket_screen_mirror(websocket: WebSocket):
                         await asyncio.sleep(0.3)
                         continue
                 else:
-                    # ADB screencap 폴백 — binary JPEG로 전송
+                    # ADB — 장기 adb shell 세션 streamer 사용 (프레임당 adb.exe spawn 방지)
+                    # capture + WebSocket 전송이 완료되어야 다음 capture 시작 (자연 backpressure)
                     adb_display_id = None
                     try:
                         adb_display_id = int(screen_type)
@@ -523,27 +530,14 @@ async def websocket_screen_mirror(websocket: WebSocket):
                         dev.info if dev else None, adb_display_id
                     )
                     adb_serial = dev.address if dev else target_device_id
-                    png_bytes = await adb_service.screencap_bytes(
-                        serial=adb_serial or None, sf_display_id=sf_did
+                    if not adb_serial:
+                        await asyncio.sleep(0.3)
+                        continue
+                    jpeg_bytes = await adb_service.streaming_screencap_bytes(
+                        serial=adb_serial, fmt="jpeg", sf_display_id=sf_did,
                     )
-                    # PNG → JPEG 변환하여 binary 전송 (프론트엔드 Blob 핸들러 통합)
-                    try:
-                        from PIL import Image as _PILImage
-                        import io as _io
-                        img = _PILImage.open(_io.BytesIO(png_bytes))
-                        if img.mode == "RGBA":
-                            img = img.convert("RGB")
-                        buf = _io.BytesIO()
-                        img.save(buf, format="JPEG", quality=85)
-                        await websocket.send_bytes(buf.getvalue())
-                    except Exception:
-                        # PIL 없으면 기존 JSON base64 방식 폴백
-                        b64 = base64.b64encode(png_bytes).decode("ascii")
-                        await websocket.send_json({
-                            "type": "frame",
-                            "image": b64,
-                            "format": "png",
-                        })
+                    if jpeg_bytes:
+                        await websocket.send_bytes(jpeg_bytes)
             except WebSocketDisconnect:
                 raise
             except Exception as e:
