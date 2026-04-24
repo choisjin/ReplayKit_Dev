@@ -751,6 +751,9 @@ async def _run_play_job(data: dict):
     _is_multi_cycle = False
     result_path: Optional[str] = None
     webcam_session: Optional[_WebcamPlaybackSession] = None
+    # 종료 이벤트는 finally에서 모든 리소스 정리(웹캠 finalize 등) 후에만 발행.
+    # 프론트가 결과 상세에 진입했을 때 녹화 파일·결과 파일이 모두 최종 위치에 있어야 404/깨짐을 방지.
+    terminal_event: Optional[dict] = None
     try:
         playback_service._should_stop = False
         playback_service._pause_event.set()
@@ -871,7 +874,7 @@ async def _run_play_job(data: dict):
         # 중단 처리
         if playback_service._should_stop:
             if last_completed_iteration == 0:
-                publish_event({"type": "playback_stopped", "result_filename": ""})
+                terminal_event = {"type": "playback_stopped", "result_filename": ""}
             else:
                 if _is_multi_cycle:
                     result.total_steps = global_step_seq
@@ -886,23 +889,31 @@ async def _run_play_job(data: dict):
                 result.finished_at = datetime.now(timezone.utc).isoformat()
                 result.status = "fail" if (result.failed_steps > 0 or result.error_steps > 0) else "pass"
                 result_path = await playback_service._save_result(result)
-                publish_event({"type": "playback_stopped", "result_filename": _result_filename(result_path)})
+                terminal_event = {"type": "playback_stopped", "result_filename": _result_filename(result_path)}
         else:
             if _is_multi_cycle:
                 result.total_steps = global_step_seq
             result.finished_at = datetime.now(timezone.utc).isoformat()
             result.status = "fail" if (result.failed_steps > 0 or result.error_steps > 0) else "pass"
             result_path = await playback_service._save_result(result)
-            publish_event({"type": "playback_complete", "result_filename": _result_filename(result_path)})
+            terminal_event = {"type": "playback_complete", "result_filename": _result_filename(result_path)}
     except Exception as e:
         logger.exception("Play job failed")
-        publish_event({"type": "error", "message": str(e)})
+        terminal_event = {"type": "error", "message": str(e)}
     finally:
-        await _webcam_session_finalize(webcam_session, result_path)
+        # 웹캠 녹화 finalize (blocking할 수 있어 수 초 소요) — 완료 후에야 결과 폴더가 최종 상태
+        try:
+            await _webcam_session_finalize(webcam_session, result_path)
+        except Exception as e:
+            logger.warning("webcam finalize error: %s", e)
         if _is_multi_cycle:
             playback_service._cleanup_run_output_dir()
             playback_service._running = False
         mark_playback_active(False)
+        # 모든 리소스 정리가 끝난 뒤에야 프론트에 종료 이벤트 전파
+        # (이전 순서에선 publish가 먼저 나가 프론트가 결과 상세에 진입 → 파일이 아직 없어 404 발생)
+        if terminal_event is not None:
+            publish_event(terminal_event)
 
 
 async def _run_play_group_job(data: dict):
@@ -922,6 +933,8 @@ async def _run_play_group_job(data: dict):
 
     result_path: Optional[str] = None
     webcam_session: Optional[_WebcamPlaybackSession] = None
+    # 종료 이벤트는 finally에서 모든 리소스 정리 후에만 발행 (_run_play_job 참고)
+    terminal_event: Optional[dict] = None
     try:
         playback_service._should_stop = False
         playback_service._pause_event.set()
@@ -1103,17 +1116,23 @@ async def _run_play_group_job(data: dict):
         rf = _result_filename(result_path)
 
         if playback_service._should_stop:
-            publish_event({"type": "playback_stopped", "result_filename": rf})
+            terminal_event = {"type": "playback_stopped", "result_filename": rf}
         else:
-            publish_event({"type": "playback_complete", "result_filename": rf})
+            terminal_event = {"type": "playback_complete", "result_filename": rf}
     except Exception as e:
         logger.exception("Play group job failed")
-        publish_event({"type": "error", "message": str(e)})
+        terminal_event = {"type": "error", "message": str(e)}
     finally:
-        await _webcam_session_finalize(webcam_session, result_path)
+        try:
+            await _webcam_session_finalize(webcam_session, result_path)
+        except Exception as e:
+            logger.warning("webcam finalize error (group): %s", e)
         playback_service._cleanup_run_output_dir()
         playback_service._running = False
         mark_playback_active(False)
+        # 리소스 정리 완료 후에 프론트에 알림 — 결과 상세 진입 시 파일이 모두 제자리에 있도록
+        if terminal_event is not None:
+            publish_event(terminal_event)
 
 
 @app.websocket("/ws/webcam")
