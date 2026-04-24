@@ -1941,7 +1941,7 @@
   },
 
   "WoohyunBench": {
-    "_description": "Woohyun Bench — Test bench equipment that controls vehicle power (IGN/ACC/Battery) via UDP communication",
+    "_description": "Woohyun Bench — Integrated UDP test bench: vehicle power control (IGN/ACC/Battery) + CAN FD signal transmission",
     "functions": {
       "Connect": {
         "description": "Establishes a UDP network connection to the bench equipment. Automatically called when adding the device, so manual invocation is usually unnecessary.",
@@ -2018,8 +2018,47 @@
         }
       },
       "GetInfo": {
-        "description": "Returns the bench's current connection information (IP, port, connection state).",
+        "description": "Returns the bench's current connection information (IP, port, signal_file, loaded signal count, connection state).",
         "params": {}
+      },
+      "LoadSignals": {
+        "description": "Loads CAN FD signal definitions from an Excel (.xls/.xlsx) or XML (.CAN) file at runtime.",
+        "params": {
+          "file_path": "Absolute path to the signal definition file"
+        }
+      },
+      "SendSignal": {
+        "description": "Sends a named CAN FD signal with the given physical value. Repeats 5 times at 200ms interval. Requires signal definitions to be loaded.",
+        "params": {
+          "signal_name": "Signal name (e.g. 'Warn_DrvDrSwSta')",
+          "physical_value": "Physical value (int/float/hex string like '0xAB')"
+        }
+      },
+      "DoorTest": {
+        "description": "Cycles the driver door switch signal (Warn_DrvDrSwSta) ON/OFF to verify door handling.",
+        "params": {}
+      },
+      "TestAllSignals": {
+        "description": "Sends every loaded CAN FD signal with its midpoint value. Useful for load/sanity testing.",
+        "params": {}
+      },
+      "CheckSignals": {
+        "description": "Dumps the loaded CAN FD signal definitions to the log.",
+        "params": {}
+      },
+      "SendCanFd": {
+        "description": "Sends a raw CAN FD frame directly (no signal definition needed). For low-level debugging.",
+        "params": {
+          "can_id": "CAN ID (integer, e.g. 0x411 = 1041)",
+          "payload_hex": "Payload (hex string, spaces/commas allowed; e.g. '01 02 03')"
+        }
+      },
+      "ReinitCanFd": {
+        "description": "Re-initialises the CAN FD bus (when baudrate / data bit time needs to change). Defaults 500k/2M.",
+        "params": {
+          "baudrate": "Arbitration phase baudrate (2-byte integer, default 0x1F4)",
+          "databit_time": "Data phase bit time (2-byte integer, default 0x7D0)"
+        }
       }
     }
   },

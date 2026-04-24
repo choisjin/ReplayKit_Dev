@@ -22,8 +22,9 @@ _instances: dict[str, Any] = {}
 # Tracks modules that went through auto-connect successfully
 _auto_connected: set[str] = set()
 
-# Cache: module_name -> list of function info
-_module_functions_cache: dict[str, list[dict]] = {}
+# Cache: module_name -> (plugin_file_mtime, guides_mtime, list of function info).
+# mtime 기반 무효화로 플러그인 .py 또는 가이드 JSON 변경 시 자동 재스캔.
+_module_functions_cache: dict[str, tuple[float, float, list[dict]]] = {}
 
 # Plugins directory
 _PLUGINS_DIR = Path(__file__).resolve().parent.parent / "plugins"
@@ -272,10 +273,34 @@ def _import_module_class(module_name: str):
     return None
 
 
+def _plugin_file_mtime(module_name: str) -> float:
+    """플러그인 .py(없으면 .pyd)의 mtime. 찾지 못하면 0."""
+    py_file = _PLUGINS_DIR / f"{module_name}.py"
+    if py_file.is_file():
+        try:
+            return py_file.stat().st_mtime
+        except OSError:
+            return 0.0
+    for pyd in _PLUGINS_DIR.glob(f"{module_name}.*.pyd"):
+        try:
+            return pyd.stat().st_mtime
+        except OSError:
+            return 0.0
+    return 0.0
+
+
 def get_module_functions(module_name: str) -> list[dict]:
-    """Get all public callable methods of a module's main class."""
-    if module_name in _module_functions_cache:
-        return _module_functions_cache[module_name]
+    """Get all public callable methods of a module's main class.
+
+    플러그인 파일 또는 가이드 JSON이 변경되면 캐시가 자동 무효화된다.
+    """
+    plugin_mtime = _plugin_file_mtime(module_name)
+    guides_mtime = _GUIDES_FILE.stat().st_mtime if _GUIDES_FILE.is_file() else 0.0
+    cached = _module_functions_cache.get(module_name)
+    if cached is not None:
+        cpm, cgm, cfuncs = cached
+        if cpm == plugin_mtime and cgm == guides_mtime:
+            return cfuncs
 
     cls = _import_module_class(module_name)
     if cls is None:
@@ -340,7 +365,7 @@ def get_module_functions(module_name: str) -> list[dict]:
         for p in fn["params"]:
             p["description"] = param_guides.get(p["name"], "")
 
-    _module_functions_cache[module_name] = functions
+    _module_functions_cache[module_name] = (plugin_mtime, guides_mtime, functions)
     return functions
 
 
