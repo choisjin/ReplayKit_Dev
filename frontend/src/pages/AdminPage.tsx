@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Checkbox, Collapse, Divider, Empty, Input, message, Modal, Select, Space, Tag, Typography } from 'antd';
-import { DeleteOutlined, PlusOutlined, ReloadOutlined, SaveOutlined } from '@ant-design/icons';
+import { DeleteOutlined, LockOutlined, LogoutOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, UserOutlined } from '@ant-design/icons';
 import { deviceApi } from '../services/api';
 import MemoryMonitor from '../components/MemoryMonitor';
+
+// 하드코딩된 관리자 자격증명 — 실수 방지 목적의 게이트
+// (클라이언트 측 검증이므로 기술적 엄격 보안 아님; 소스 확인 가능 유저 대상이 아님을 전제)
+const ADMIN_ID = 'admin';
+const ADMIN_PW = 'replaykitadmin';
+const ADMIN_AUTH_KEY = 'rk_admin_authed';
 
 interface Model {
   value: string;   // 표시 텍스트이자 Device ID prefix로 사용
@@ -41,6 +47,32 @@ interface ModuleInfo {
  * 접근 경로: URL hash `#admin` (메뉴에 노출되지 않음).
  */
 export default function AdminPage() {
+  // 로그인 게이트 — sessionStorage 기반 (탭 닫으면 재인증)
+  const [authed, setAuthed] = useState(() => {
+    try { return sessionStorage.getItem(ADMIN_AUTH_KEY) === '1'; } catch { return false; }
+  });
+  const [loginId, setLoginId] = useState('');
+  const [loginPw, setLoginPw] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  const handleLogin = () => {
+    if (loginId.trim() === ADMIN_ID && loginPw === ADMIN_PW) {
+      try { sessionStorage.setItem(ADMIN_AUTH_KEY, '1'); } catch { /* ignore */ }
+      setAuthed(true);
+      setLoginError('');
+      setLoginPw('');
+    } else {
+      setLoginError('ID 또는 비밀번호가 올바르지 않습니다.');
+    }
+  };
+
+  const handleLogout = () => {
+    try { sessionStorage.removeItem(ADMIN_AUTH_KEY); } catch { /* ignore */ }
+    setAuthed(false);
+    setLoginId('');
+    setLoginPw('');
+  };
+
   const [catalog, setCatalog] = useState<Catalog>({ projects: [], module_visibility: {}, agents: [] });
   const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,7 +125,8 @@ export default function AdminPage() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  // 인증된 후에만 카탈로그 로드 (로그인 전 API 호출 방지)
+  useEffect(() => { if (authed) load(); }, [authed]);
 
   const markDirty = () => setDirty(true);
 
@@ -192,6 +225,40 @@ export default function AdminPage() {
     .filter(a => a.enabled !== false)
     .map(a => ({ label: a.name, value: a.name }));
 
+  // ───── 로그인 화면 (인증 전) ─────
+  if (!authed) {
+    return (
+      <div style={{ maxWidth: 340, margin: '80px auto' }}>
+        <Card size="small" title={<Space><LockOutlined /><Typography.Text strong>Admin 로그인</Typography.Text></Space>}>
+          <Space direction="vertical" style={{ width: '100%' }} size={10}>
+            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+              관리자 전용 페이지입니다. ID와 비밀번호를 입력하세요.
+            </Typography.Text>
+            <Input
+              prefix={<UserOutlined />}
+              placeholder="ID"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
+              onPressEnter={handleLogin}
+              autoFocus
+            />
+            <Input.Password
+              prefix={<LockOutlined />}
+              placeholder="비밀번호"
+              value={loginPw}
+              onChange={(e) => setLoginPw(e.target.value)}
+              onPressEnter={handleLogin}
+            />
+            {loginError && (
+              <Typography.Text type="danger" style={{ fontSize: 12 }}>{loginError}</Typography.Text>
+            )}
+            <Button type="primary" block onClick={handleLogin}>로그인</Button>
+          </Space>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
       <Card
@@ -201,6 +268,7 @@ export default function AdminPage() {
           <Space>
             <Button icon={<ReloadOutlined />} onClick={load} disabled={loading}>새로고침</Button>
             <Button type="primary" icon={<SaveOutlined />} onClick={save} loading={saving} disabled={!dirty}>저장</Button>
+            <Button icon={<LogoutOutlined />} onClick={handleLogout} danger>로그아웃</Button>
           </Space>
         }
       >
