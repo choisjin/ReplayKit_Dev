@@ -23,13 +23,22 @@ export function useDLTSessions() {
       if (closed) return;
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = `${protocol}//${window.location.host}/ws/dlt-lifecycle`;
+      // eslint-disable-next-line no-console
+      console.log('[DLT WS] connecting:', url);
       const ws = new WebSocket(url);
       wsRef.current = ws;
+
+      ws.onopen = () => {
+        // eslint-disable-next-line no-console
+        console.log('[DLT WS] OPEN');
+      };
 
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
           if (msg.type === 'ping') return;
+          // eslint-disable-next-line no-console
+          console.log('[DLT WS] msg:', msg.type, msg.session_id ?? '');
           setLastEvent(msg);
           if (msg.type === 'session_started' && msg.session_id) {
             setSessions((prev) => {
@@ -49,12 +58,17 @@ export function useDLTSessions() {
         } catch { /* ignore */ }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[DLT WS] CLOSE code=', e.code, 'reason=', e.reason, 'wasClean=', e.wasClean);
         if (closed) return;
         // 2초 후 재연결
         reconnectTimerRef.current = window.setTimeout(connect, 2000);
       };
-      ws.onerror = () => { /* onclose에서 재연결 처리 */ };
+      ws.onerror = (e) => {
+        // eslint-disable-next-line no-console
+        console.warn('[DLT WS] ERROR', e);
+      };
     };
 
     connect();

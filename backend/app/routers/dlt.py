@@ -167,31 +167,60 @@ async def ws_dlt_stream(websocket: WebSocket, session_id: str):
 
 
 async def ws_dlt_lifecycle(websocket: WebSocket):
-    """세션 시작/종료 이벤트 스트림. 접속 시 현재 활성 세션들을 즉시 전달."""
+    """세션 시작/종료 이벤트 스트림. 접속 시 현재 활성 세션들을 즉시 전달.
+
+    recv 루프를 함께 돌려 클라이언트 close 프레임을 즉시 감지한다 (없으면 최대 ping 주기만큼 지연).
+    """
     await websocket.accept()
     q: queue.Queue = DLT_HUB.register_lifecycle()
-    logger.info("[DLT WS] lifecycle subscriber connected (total queues)")
+    client = f"{websocket.client.host}:{websocket.client.port}" if websocket.client else "?"
+    logger.info("[DLT WS] lifecycle subscriber connected: %s (subs now ≥ 1)", client)
     loop = asyncio.get_event_loop()
+
+    async def _recv_drain():
+        """클라이언트 close 프레임을 감지하기 위한 recv 루프. 보낼 수 있는 메시지는 없음."""
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            return
+        except Exception:
+            return
+
+    recv_task = asyncio.create_task(_recv_drain())
+    disconnect_reason = "normal"
     try:
         while True:
+            if recv_task.done():
+                disconnect_reason = "client_close_detected"
+                break
             try:
-                event = await loop.run_in_executor(None, functools.partial(q.get, True, 5.0))
+                event = await loop.run_in_executor(None, functools.partial(q.get, True, 2.0))
             except queue.Empty:
                 try:
                     await websocket.send_json({"type": "ping"})
-                except Exception:
+                except Exception as e:
+                    disconnect_reason = f"ping_send_fail: {e}"
                     break
                 continue
             try:
                 await websocket.send_json(event)
-            except Exception:
+            except Exception as e:
+                disconnect_reason = f"event_send_fail: {e}"
                 break
     except WebSocketDisconnect:
-        pass
+        disconnect_reason = "WebSocketDisconnect"
     except Exception as e:
-        logger.warning("DLT lifecycle WS error: %s", e)
+        logger.warning("[DLT WS] lifecycle error: %s", e)
+        disconnect_reason = f"exception: {e}"
     finally:
+        recv_task.cancel()
+        try:
+            await recv_task
+        except (asyncio.CancelledError, Exception):
+            pass
         DLT_HUB.unregister_lifecycle(q)
+        logger.info("[DLT WS] lifecycle subscriber disconnected: %s (reason=%s)", client, disconnect_reason)
         try:
             await websocket.close()
         except Exception:
